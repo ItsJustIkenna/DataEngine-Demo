@@ -54,6 +54,11 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
+      # Install Azure CLI
+      - name: Install Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          
       # Checks out the repository this file is in
       - uses: actions/checkout@v4
 
