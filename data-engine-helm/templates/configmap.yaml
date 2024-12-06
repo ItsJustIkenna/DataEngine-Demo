@@ -10,7 +10,7 @@ data:
     data_engine_server_configuration:
       data_engine_server_settings:
         address: '127.0.0.1'
-        port: 8000
+        port: 8002
     
     message_broker_server_configuration:
       message_broker_server_settings:
