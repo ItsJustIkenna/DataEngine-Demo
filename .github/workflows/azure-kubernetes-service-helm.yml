@@ -42,7 +42,7 @@ on:
 env:
   AZURE_CONTAINER_REGISTRY: "ProdTradingBotRegistry"
   CONTAINER_NAME: "DataEngine"
-  RESOURCE_GROUP: "prod-aks-trading-bot-cluster_group"
+  RESOURCE_GROUP: "prod-aks-trading-bot-rg"
   CLUSTER_NAME: "prod-trading-bot-cluster"
   CHART_PATH: "./DataEngine/values-prod.yaml"
   CHART_OVERRIDE_PATH: "./DataEngine/values-dev.yaml"
