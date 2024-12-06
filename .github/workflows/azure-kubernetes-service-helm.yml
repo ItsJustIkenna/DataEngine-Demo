@@ -54,6 +54,12 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout DatabaseEngine
+        uses: actions/checkout@v4
+        with:
+          repository: ItsJustIkenna/DatabaseEngine
+          path: DatabaseEngine
+        
       # Install Azure CLI
       - name: Install Azure CLI
         run: |
