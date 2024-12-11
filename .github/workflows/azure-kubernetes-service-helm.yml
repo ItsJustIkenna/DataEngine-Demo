@@ -53,13 +53,7 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout DatabaseEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/DatabaseEngine
-          path: DatabaseEngine
-        
+    steps:        
       # Install Azure CLI
       - name: Install Azure CLI
         run: |
@@ -67,6 +61,12 @@ jobs:
           
       # Checks out the repository this file is in
       - uses: actions/checkout@v4
+
+      - name: Checkout DatabaseEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/DatabaseEngine
+          path: DatabaseEngine
 
       # Logs in with your Azure credentials
       - name: Azure login
