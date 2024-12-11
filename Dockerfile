@@ -15,6 +15,8 @@ WORKDIR /usr/src/app/DataEngine
 # Copy the entire project
 COPY . .
 
+# Copy the DatabaseEngine
+COPY DatabaseEngine .
 # Build the entire workspace
 RUN cargo build --workspace
 
