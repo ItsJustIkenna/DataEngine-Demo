@@ -27,5 +27,5 @@ RUN cargo build
 # Run tests
 RUN cargo test
 
-# Run the main application binary
-RUN cargo run
+# Set the default command to run the application
+CMD ["cargo", "run"]
