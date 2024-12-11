@@ -57,7 +57,7 @@ jobs:
       - name: Checkout DatabaseEngine
         uses: actions/checkout@v4
         with:
-          repository: ItsJustIkenna/DatabaseEngine
+          repository: Nwagbara-Group-LLC/DatabaseEngine
           path: DatabaseEngine
         
       # Install Azure CLI
