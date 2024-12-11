@@ -5,6 +5,7 @@ metadata:
   labels:
     app: data-engine
 spec:
+  type: LoadBalancer
   selector:
     app: data-engine
   ports:

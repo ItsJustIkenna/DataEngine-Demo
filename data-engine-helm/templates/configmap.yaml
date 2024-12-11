@@ -6,6 +6,9 @@ data:
   POSTGRES_DB: "tsdb"
   POSTGRES_HOST: "a7rc4ub9o7.yd4ed8gjcp.tsdb.cloud.timescale.com"
   POSTGRES_PORT: "32935"
+  REDIS_DB: "cache-LW5CEFX0"
+  REDIS_HOST: "redis-19298.c91.us-east-1-3.ec2.redns.redis-cloud.com"
+  REDIS_PORT: "19298"
   config.yaml: |
     data_engine_server_configuration:
       data_engine_server_settings:
