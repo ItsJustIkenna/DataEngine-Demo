@@ -18,6 +18,9 @@ COPY . .
 # Copy the DatabaseEngine directory
 COPY DatabaseEngine .
 
+# Set the working directory to the program sub-directory
+WORKDIR /usr/src/app/DataEngine/program
+
 # Build the project
 RUN cargo build
 
