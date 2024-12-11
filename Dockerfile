@@ -12,20 +12,14 @@ ENV OPENSSL_INCLUDE_DIR=$OPENSSL_DIR/include
 # Set the working directory to DataEngine
 WORKDIR /usr/src/app/DataEngine
 
-# Copy the DataEngine files
+# Copy the entire project
 COPY . .
 
-# Copy the DatabaseEngine directory
-COPY DatabaseEngine .
+# Build the entire workspace
+RUN cargo build --workspace
 
-# Set the working directory to the program sub-directory
-WORKDIR /usr/src/app/DataEngine/program
-
-# Build the project
-RUN cargo build
-
-# Run tests
-RUN cargo test
+# Run tests for the entire workspace
+RUN cargo test --workspace
 
 # Set the default command to run the application
-CMD ["cargo", "run"]
+CMD ["cargo", "run", "--workspace"]
