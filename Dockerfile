@@ -17,6 +17,7 @@ COPY . .
 
 # Copy the DatabaseEngine
 COPY DatabaseEngine .
+
 # Build the entire workspace
 RUN cargo build --workspace
 
