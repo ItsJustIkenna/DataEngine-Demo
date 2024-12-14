@@ -1,29 +1,29 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: data-engine-deployment
+  name: {{ .Values.AppName }}-deployment
   labels:
-    app: data-engine
+    app: {{ .Values.AppName }}
 spec:
-  replicas: 3
+  replicas: {{ .Values.replicaCount}}
   selector:
     matchLabels:
-      app: data-engine
+      app: {{ .Values.AppName }}
   template:
     metadata:
       labels:
-        app: data-engine
+        app: {{ .Values.AppName }}
     spec:
       containers:
-      - name: data-engine
-        image: data-engine:latest
+      - name: {{ .Values.AppName }}
+        image: {{ .Values.AppName }}:latest
         ports:
         - containerPort: 8080
         env:
         - name: CONFIG_PATH
           value: "/etc/config/config.yaml"
         volumeMounts:
-        - name: config-volume
+        - name: {{ .Values.VolumeName }}
           mountPath: /etc/config
         resources:
           requests:
@@ -46,9 +46,9 @@ spec:
           periodSeconds: 10
         imagePullPolicy: IfNotPresent
       volumes:
-      - name: config-volume
+      - name: {{ .Values.VolumeName }}
         configMap:
-          name: data-engine-configmap
+          name: {{ .Values.AppName }}-configmap
           items:
             - key: config.yaml
               path: config.yaml

@@ -1,57 +1,57 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: redis
+  name: {{ .Values.Cache }}
 spec:
   selector:
     matchLabels:
-      app: data-engine
-  serviceName: "redis"
-  replicas: 3
+      app: {{ .Values.AppName }}
+  serviceName: "{{ .Values.Cache }}"
+  replicas: {{ .Values.replicaCount}}
   template:
     metadata:
       labels:
-        app: data-engine
+        app: {{ .Values.AppName }}
     spec:
       terminationGracePeriodSeconds: 10
       containers:
-      - name: redis
-        image: redis:latest
+      - name: {{ .Values.Cache }}
+        image: {{ .Values.Cache }}:latest
         ports:
         - containerPort: 19298
-          name: redis
+          name: {{ .Values.Cache }}
         volumeMounts:
-        - name: redis-storage
-          mountPath: /var/lib/redis/data
+        - name: {{ .Values.Cache }}-storage
+          mountPath: /var/lib/{{ .Values.Cache }}/data
         env:
         - name: REDIS_USER
           valueFrom:
             secretKeyRef:
-              name: data-engine-secret
-              key: redis-root-username
+              name: {{ .Values.AppName }}-secret
+              key: {{ .Values.Cache }}-root-username
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: data-engine-secret
-              key: redis-root-password
+              name: {{ .Values.AppName }}-secret
+              key: {{ .Values.Cache }}-root-password
         - name: REDIS_DB
           valueFrom:
             configMapKeyRef:
-              name: data-engine-configmap
+              name: {{ .Values.AppName }}-configmap
               key: REDIS_DB
         - name: REDIS_HOST
           valueFrom:
             configMapKeyRef:
-              name: data-engine-configmap
+              name: {{ .Values.AppName }}-configmap
               key: REDIS_HOST
         - name: REDIS_PORT
           valueFrom:
             configMapKeyRef:
-              name: data-engine-configmap
+              name: {{ .Values.AppName }}-configmap
               key: REDIS_PORT
   volumeClaimTemplates:
   - metadata:
-      name: redis-storage
+      name: {{ .Values.Cache }}-storage
     spec:
       accessModes: [ "ReadWriteOnce" ]
       storageClassName: "standard"

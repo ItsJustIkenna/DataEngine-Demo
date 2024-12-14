@@ -1,22 +1,22 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: data-engine-ingress
+  name: {{ .Values.AppName }}-ingress
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
   tls:
   - hosts:
-    - localhost
+    - {{ .Values.Host }}
     secretName: tls-secret
   rules:
-  - host: localhost
+  - host: {{ .Values.Host }}
     http:
       paths:
       - path: /
         pathType: Prefix
         backend:
           service:
-            name: data-engine-service
+            name: {{ .Values.AppName }}-service
             port:
               number: 8080

@@ -1,57 +1,57 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: timescale
+  name: {{ .Values.Database }}
 spec:
   selector:
     matchLabels:
-      app: data-engine
-  serviceName: "timescale"
-  replicas: 3
+      app: {{ .Values.AppName }}
+  serviceName: "{{ .Values.Database }}"
+  replicas: {{ .Values.replicaCount}}
   template:
     metadata:
       labels:
-        app: data-engine
+        app: {{ .Values.AppName }}
     spec:
       terminationGracePeriodSeconds: 10
       containers:
-      - name: timescale
-        image: timescale/timescaledb:latest-pg16
+      - name: {{ .Values.Database }}
+        image: {{ .Values.Database }}/{{ .Values.Database }}db:latest-pg16
         ports:
         - containerPort: 32935
-          name: timescale
+          name: {{ .Values.Database }}
         volumeMounts:
-        - name: timescale-storage
+        - name: {{ .Values.Database }}-storage
           mountPath: /var/lib/postgresql/data
         env:
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
-              name: data-engine-secret
-              key: timescale-root-username
+              name: {{ .Values.AppName }}-secret
+              key: {{ .Values.Database }}-root-username
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: data-engine-secret
-              key: timescale-root-password
+              name: {{ .Values.AppName }}-secret
+              key: {{ .Values.Database }}-root-password
         - name: POSTGRES_DB
           valueFrom:
             configMapKeyRef:
-              name: data-engine-configmap
+              name: {{ .Values.AppName }}-configmap
               key: POSTGRES_DB
         - name: POSTGRES_HOST
           valueFrom:
             configMapKeyRef:
-              name: data-engine-configmap
+              name: {{ .Values.AppName }}-configmap
               key: POSTGRES_HOST
         - name: POSTGRES_PORT
           valueFrom:
             configMapKeyRef:
-              name: data-engine-configmap
+              name: {{ .Values.AppName }}-configmap
               key: POSTGRES_PORT
   volumeClaimTemplates:
   - metadata:
-      name: timescale-storage
+      name: {{ .Values.Database }}-storage
     spec:
       accessModes: [ "ReadWriteOnce" ]
       storageClassName: "standard"

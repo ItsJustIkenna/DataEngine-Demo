@@ -1,0 +1,5 @@
+AppName: data-engine
+Host: localhost
+Database: timescale
+Cache: redis
+VolumeName: config-volume

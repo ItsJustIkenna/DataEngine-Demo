@@ -1,14 +1,15 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: data-engine-service
+  name: {{ .Values.AppName }}-service
   labels:
-    app: data-engine
+    app: {{ .Values.AppName }}
 spec:
   type: LoadBalancer
   selector:
-    app: data-engine
+    app: {{ .Values.AppName }}
   ports:
     - protocol: TCP
       port: 80
       targetPort: 8080
+      NodePort: 30001
