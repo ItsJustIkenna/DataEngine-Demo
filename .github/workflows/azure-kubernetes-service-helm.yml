@@ -44,8 +44,8 @@ env:
   CONTAINER_NAME: "dataengine"
   RESOURCE_GROUP: "prod-aks-trading-bot-rg"
   CLUSTER_NAME: "prod-trading-bot-cluster"
-  CHART_PATH: "./DataEngine/values-prod.yaml"
-  CHART_OVERRIDE_PATH: "./DataEngine/values-dev.yaml"
+  CHART_PATH: "./data-engine-helm"
+  CHART_OVERRIDE_PATH: "./data-engine-helm/values.yaml"
 
 jobs:
   buildImage:
