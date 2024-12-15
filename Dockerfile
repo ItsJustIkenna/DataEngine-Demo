@@ -28,4 +28,4 @@ RUN cargo test
 WORKDIR /usr/src/app/DataEngine/program
 
 # Set the default command to run the application
-CMD ["cargo", "run"]
+CMD ["cargo", "run", "--bin", "program"]
