@@ -24,5 +24,8 @@ RUN cargo build
 # Run tests
 RUN cargo test
 
+# Set the working directory to the program directory
+WORKDIR /usr/src/app/DataEngine/program
+
 # Set the default command to run the application
-CMD ["cargo", "run", "--bin", "program"]
+CMD ["cargo", "run"]
