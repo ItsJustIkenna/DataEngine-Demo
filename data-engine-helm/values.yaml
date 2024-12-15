@@ -3,5 +3,6 @@ Host: localhost
 Database: timescale
 Cache: redis
 VolumeName: config-volume
-AzureContainerRegistry: prodtradingbotregistry
-ContainerName: dataengine
+image:
+  repository: prodtradingbotregistry.azurecr.io/dataengine
+  tag: latest

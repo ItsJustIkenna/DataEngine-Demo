@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: {{ .Values.AppName }}
-        image: {{ .Values.AzureContainerRegistry }}.azurecr.io/{{ .Values.ContainerName }}:latest
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
         ports:
         - containerPort: 8080
         env:
