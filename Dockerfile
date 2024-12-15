@@ -25,4 +25,4 @@ RUN cargo build
 RUN cargo test
 
 # Set the default command to run the application
-CMD ["cargo", "run"]
+CMD ["cargo", "run", "--bin", "program"]
