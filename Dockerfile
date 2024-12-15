@@ -18,11 +18,11 @@ COPY . .
 # Copy the DatabaseEngine
 COPY DatabaseEngine .
 
-# Build the entire workspace
-RUN cargo build --workspace
+# Build the workspace
+RUN cargo build
 
-# Run tests for the entire workspace
-RUN cargo test --workspace
+# Run tests
+RUN cargo test
 
 # Set the default command to run the application
-CMD ["cargo", "run", "--workspace"]
+CMD ["cargo", "run"]
