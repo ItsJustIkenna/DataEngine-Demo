@@ -115,11 +115,6 @@ jobs:
           admin: 'false'
           use-kubelogin: 'true'
 
-      # Add step to refresh token
-      - name: Refresh Azure token
-        run: |
-          az account get-access-token --resource https://management.azure.com/
-
       # Runs Helm to create manifest files
       - name: Bake deployment
         uses: azure/k8s-bake@v2
