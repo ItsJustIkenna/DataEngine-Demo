@@ -1,11 +1,11 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.AppName }}-deployment
+  name: "{{ .Values.AppName }}-deployment"
   labels:
     app: {{ .Values.AppName }}
 spec:
-  replicas: {{ .Values.replicaCount}}
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: {{ .Values.AppName }}
@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: {{ .Values.AppName }}
-        image: {{ .Values.AzureContainerRegistry }}.azurecr.io/{{ .Values.ContainerName }}:latest
+        image: "{{ .Values.AzureContainerRegistry }}.azurecr.io/{{ .Values.AppName }}:latest"
         ports:
         - containerPort: 8080
         env:
@@ -48,7 +48,7 @@ spec:
       volumes:
       - name: {{ .Values.VolumeName }}
         configMap:
-          name: {{ .Values.AppName }}-configmap
+          name: "{{ .Values.AppName }}-configmap"
           items:
             - key: config.yaml
               path: config.yaml
