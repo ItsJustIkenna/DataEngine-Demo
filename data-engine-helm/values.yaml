@@ -3,6 +3,6 @@ Host: localhost
 Database: timescale
 Cache: redis
 VolumeName: config-volume
-image:
-  repository: prodtradingbotregistry.azurecr.io/dataengine
-  tag: latest
+Image:
+  Repository: prodtradingbotregistry.azurecr.io/dataengine
+  Tag: latest
