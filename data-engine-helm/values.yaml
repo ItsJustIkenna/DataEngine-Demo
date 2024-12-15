@@ -5,4 +5,4 @@ cache: redis
 volumeName: config-volume
 image:
   repository: prodtradingbotregistry.azurecr.io/dataengine
-  tag: 8ba74619aec2cfda242fe133e74026b75f172bc8
+  tag: latest
