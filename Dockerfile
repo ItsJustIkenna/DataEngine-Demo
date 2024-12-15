@@ -19,13 +19,10 @@ COPY . .
 COPY DatabaseEngine .
 
 # Build the workspace
-RUN cargo build
+RUN cargo build --workspace
 
 # Run tests
-RUN cargo test
-
-# Set the working directory to the program directory
-WORKDIR /usr/src/app/DataEngine/program
+RUN cargo test --workspace
 
 # Set the default command to run the application
 CMD ["cargo", "run", "--bin", "program"]
