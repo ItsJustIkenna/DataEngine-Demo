@@ -1,57 +1,57 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ .Values.Cache }}
+  name: {{ .Values.cache }}
 spec:
   selector:
     matchLabels:
-      app: {{ .Values.AppName }}
-  serviceName: "{{ .Values.Cache }}"
+      app: {{ .Values.appName }}
+  serviceName: "{{ .Values.cache }}"
   replicas: {{ .Values.replicaCount}}
   template:
     metadata:
       labels:
-        app: {{ .Values.AppName }}
+        app: {{ .Values.appName }}
     spec:
       terminationGracePeriodSeconds: 10
       containers:
-      - name: {{ .Values.Cache }}
-        image: {{ .Values.Cache }}:latest
+      - name: {{ .Values.cache }}
+        image: {{ .Values.cache }}:latest
         ports:
         - containerPort: 19298
-          name: {{ .Values.Cache }}
+          name: {{ .Values.cache }}
         volumeMounts:
-        - name: {{ .Values.Cache }}-storage
-          mountPath: /var/lib/{{ .Values.Cache }}/data
+        - name: {{ .Values.cache }}-storage
+          mountPath: /var/lib/{{ .Values.cache }}/data
         env:
         - name: REDIS_USER
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.AppName }}-secret
-              key: {{ .Values.Cache }}-root-username
+              name: {{ .Values.appName }}-secret
+              key: {{ .Values.cache }}-root-username
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: {{ .Values.AppName }}-secret
-              key: {{ .Values.Cache }}-root-password
+              name: {{ .Values.appName }}-secret
+              key: {{ .Values.cache }}-root-password
         - name: REDIS_DB
           valueFrom:
             configMapKeyRef:
-              name: {{ .Values.AppName }}-configmap
+              name: {{ .Values.appName }}-configmap
               key: REDIS_DB
         - name: REDIS_HOST
           valueFrom:
             configMapKeyRef:
-              name: {{ .Values.AppName }}-configmap
+              name: {{ .Values.appName }}-configmap
               key: REDIS_HOST
         - name: REDIS_PORT
           valueFrom:
             configMapKeyRef:
-              name: {{ .Values.AppName }}-configmap
+              name: {{ .Values.appName }}-configmap
               key: REDIS_PORT
   volumeClaimTemplates:
   - metadata:
-      name: {{ .Values.Cache }}-storage
+      name: {{ .Values.cache }}-storage
     spec:
       accessModes: [ "ReadWriteOnce" ]
       storageClassName: "standard"

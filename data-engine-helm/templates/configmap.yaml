@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Values.AppName }}-configmap
+  name: {{ .Values.appName }}-configmap
 data:
   POSTGRES_DB: "tsdb"
   POSTGRES_HOST: "a7rc4ub9o7.yd4ed8gjcp.tsdb.cloud.timescale.com"

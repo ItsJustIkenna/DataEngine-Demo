@@ -1,29 +1,29 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Values.AppName }}-deployment
+  name: {{ .Values.appName }}-deployment
   labels:
-    app: {{ .Values.AppName }}
+    app: {{ .Values.appName }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ .Values.AppName }}
+      app: {{ .Values.appName }}
   template:
     metadata:
       labels:
-        app: {{ .Values.AppName }}
+        app: {{ .Values.appName }}
     spec:
       containers:
-      - name: {{ .Values.AppName }}
-        image: {{ .Values.Image.Repository }}:{{ .Values.Image.Tag }}
+      - name: {{ .Values.appName }}
+        image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
         ports:
         - containerPort: 8080
         env:
         - name: CONFIG_PATH
           value: "/etc/config/config.yaml"
         volumeMounts:
-        - name: {{ .Values.VolumeName }}
+        - name: {{ .Values.volumeName }}
           mountPath: /etc/config
         resources:
           requests:
@@ -46,9 +46,9 @@ spec:
           periodSeconds: 10
         imagePullPolicy: IfNotPresent
       volumes:
-      - name: {{ .Values.VolumeName }}
+      - name: {{ .Values.volumeName }}
         configMap:
-          name: {{ .Values.AppName }}-configmap
+          name: {{ .Values.appName }}-configmap
           items:
             - key: config.yaml
               path: config.yaml

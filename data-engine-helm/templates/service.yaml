@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Values.AppName }}-service
+  name: {{ .Values.appName }}-service
   labels:
-    app: {{ .Values.AppName }}
+    app: {{ .Values.appName }}
 spec:
   type: LoadBalancer
   selector:
-    app: {{ .Values.AppName }}
+    app: {{ .Values.appName }}
   ports:
     - protocol: TCP
       port: 80

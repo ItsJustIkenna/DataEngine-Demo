@@ -1,8 +1,8 @@
-AppName: data-engine
-Host: localhost
-Database: timescale
-Cache: redis
-VolumeName: config-volume
-Image:
-  Repository: prodtradingbotregistry.azurecr.io/dataengine
-  Tag: latest
+appName: data-engine
+host: localhost
+database: timescale
+cache: redis
+volumeName: config-volume
+image:
+  repository: prodtradingbotregistry.azurecr.io/dataengine
+  tag: latest
