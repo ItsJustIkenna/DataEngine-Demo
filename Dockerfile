@@ -19,10 +19,10 @@ COPY . .
 COPY DatabaseEngine .
 
 # Build the workspace
-RUN cargo build --workspace
+RUN cargo build --release
 
 # Run tests
-RUN cargo test --workspace
+RUN cargo test --release
 
 # Set the default command to run the application
-CMD ["cargo", "run", "--bin", "program"]
+CMD ["./target/release/program"]
