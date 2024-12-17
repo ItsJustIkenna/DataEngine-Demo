@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.3
 
 # Use the official Rust image
-FROM rust:alpine
+FROM rust:alpine AS builder
 
 # Install necessary build dependencies
 RUN apk update && apk add --no-cache pkgconfig openssl-dev build-base
@@ -21,44 +21,28 @@ COPY . .
 COPY DatabaseEngine .
 
 # Build and test the application.
-RUN --mount=type=bind,source=.,target=/app/DataEngine \
-    --mount=type=cache,target=/app/target/ \
-    --mount=type=cache,target=/usr/local/cargo/git/db \
-    --mount=type=cache,target=/usr/local/cargo/registry/ \
-    cargo build --locked --release && \
-    cargo test --locked --release --workspace && \
-    cp ./target/release/program.exe /bin/server
+RUN cargo build --locked --release --workspace && \
+    cargo test --locked --release --workspace
 
-################################################################################
 # Create a new stage for running the application that contains the minimal
-# runtime dependencies for the application. This often uses a different base
-# image from the build stage where the necessary files are copied from the build
-# stage.
-#
-# The example below uses the alpine image as the foundation for running the app.
-# By specifying the "3.18" tag, it will use version 3.18 of alpine. If
-# reproducibility is important, consider using a digest
-# (e.g., alpine@sha256:664888ac9cfd28068e062c991ebcff4b4c7307dc8dd4df9e728bedde5c449d91).
+# runtime dependencies for the application.
 FROM alpine:3.18 AS final
 
 # Create a non-privileged user that the app will run under.
-# See https://docs.docker.com/go/dockerfile-user-best-practices/
 ARG UID=10001
 RUN adduser \
     --disabled-password \
     --gecos "" \
     --home "/nonexistent" \
     --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}" \
-    appuser
+    --uid "$UID" \
+    "appuser"
+
+# Copy the built binary from the builder stage
+COPY --from=builder /usr/src/app/DataEngine/target/release/program.exe /bin/server
+
+# Set the user to the non-privileged user
 USER appuser
 
-# Copy the executable from the "build" stage.
-COPY --from=build /bin/server /bin/
-
-# Expose the port that the application listens on.
-EXPOSE 8080
-
-# What the container should run when it is started.
-CMD ["/bin/server"]
+# Set the entrypoint to the binary
+ENTRYPOINT ["/bin/server"]
