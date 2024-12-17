@@ -21,7 +21,7 @@ COPY . .
 COPY DatabaseEngine .
 
 # Build and test the application.
-RUN cargo build --locked --release --workspace && \
+RUN cargo build --locked --release --workspace --bin program && \
     cargo test --locked --release --workspace
 
 # Debug step: List the contents of the target/release directory

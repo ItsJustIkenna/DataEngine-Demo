@@ -9,3 +9,7 @@ edition = "2021"
 anyhow = "1.0.86"
 hostbuilder = { path = "../hostbuilder" }
 tokio = { version = "1.38.0", features = ["full"] }
+
+[[bin]]
+name = "program"
+path = "src/main.rs"
