@@ -24,6 +24,9 @@ COPY DatabaseEngine .
 RUN cargo build --locked --release --workspace && \
     cargo test --locked --release --workspace
 
+# Debug step: List the contents of the target/release directory
+RUN ls -la /usr/src/app/DataEngine/target/release
+
 # Create a new stage for running the application that contains the minimal
 # runtime dependencies for the application.
 FROM alpine:3.18 AS final
