@@ -19,9 +19,13 @@ COPY . .
 COPY DatabaseEngine .
 
 # Build and test the application.
-RUN cargo build --locked --release --workspace && \
+RUN --mount=type=bind,source=.,target=/app/DataEngine \
+    --mount=type=cache,target=/app/target/ \
+    --mount=type=cache,target=/usr/local/cargo/git/db \
+    --mount=type=cache,target=/usr/local/cargo/registry/ \
+    cargo build --locked --release && \
     cargo test --locked --release --workspace && \
-    cp ./target/release/program /bin/server
+    cp ./target/release/program.exe /bin/server
 
 ################################################################################
 # Create a new stage for running the application that contains the minimal
