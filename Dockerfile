@@ -1,5 +1,3 @@
-ARG APP_NAME=DataEngine
-
 # Use the official Rust image
 FROM rust:alpine
 
@@ -23,7 +21,7 @@ COPY DatabaseEngine .
 # Build and test the application.
 RUN cargo build --locked --release --workspace && \
     cargo test --locked --release --workspace && \
-    cp ./target/release/$APP_NAME /bin/server
+    cp ./target/release/program /bin/server
 
 ################################################################################
 # Create a new stage for running the application that contains the minimal
