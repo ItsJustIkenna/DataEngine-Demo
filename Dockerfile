@@ -1,3 +1,5 @@
+ARG APP_NAME=DataEngine
+
 # Use the official Rust image
 FROM rust:alpine
 
