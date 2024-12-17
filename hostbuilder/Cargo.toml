@@ -10,7 +10,7 @@ base64 = "0.22.1"
 bigdecimal = { version = "0.4.5", features = ["serde"] }
 config = "0.14.0"
 chrono = { version = "0.4.19", features = ["serde"] }
-databaseschema = { path = "../../DatabaseEngine/databaseschema" }
+databaseschema = { path = "../../databaseschema" }
 deadpool = "0.12.1"
 deadpool-redis = { version = "0.15.1", features = ["serde"] }
 diesel = { version = "2.2.2", features = ["chrono", "uuid", "numeric"] }
@@ -19,9 +19,6 @@ dotenv = "0.15.0"
 futures-util = "0.3.30"
 hmac = "0.12.1"
 mockall = "0.12.1"
-prost = "0.13.1"
-protocol = { path = "../../MessageBrokerEngine/protocol" }
-publisher = { path = "../../MessageBrokerEngine/publisher" }
 redis = { version = "0.25.4", features = ["tokio-native-tls-comp"] }
 redis_utils = { path = "../../RedisUtils" }
 reqwest = { version = "0.12", features = ["json"] }

@@ -793,10 +793,7 @@ dependencies = [
  "futures-util",
  "hmac",
  "mockall",
- "prost",
  "prost-build",
- "protocol",
- "publisher",
  "redis",
  "redis_utils",
  "reqwest",
@@ -1572,32 +1569,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4759aa0d3a6232fb8dbdb97b61de2c20047c68aca932c7ed76da9d788508d670"
 dependencies = [
  "prost",
-]
-
-[[package]]
-name = "protocol"
-version = "0.1.0"
-dependencies = [
- "prost",
- "prost-build",
- "prost-types",
-]
-
-[[package]]
-name = "publisher"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "mockall",
- "prost",
- "prost-build",
- "protocol",
- "serde",
- "serde_json",
- "tokio",
- "tokio-tungstenite",
- "tracing",
 ]
 
 [[package]]
