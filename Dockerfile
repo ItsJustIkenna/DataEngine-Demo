@@ -39,7 +39,7 @@ RUN adduser \
     "appuser"
 
 # Copy the built binary from the builder stage
-COPY --from=builder /usr/src/app/DataEngine/target/release/program.exe /bin/server
+COPY --from=builder /usr/src/app/DataEngine/target/release/program /bin/server
 
 # Set the user to the non-privileged user
 USER appuser
