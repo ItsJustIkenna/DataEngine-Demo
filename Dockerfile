@@ -24,4 +24,4 @@ COPY DatabaseEngine .
 RUN cargo build --locked --release --workspace && \
     cargo test --locked --release --workspace
 
-CMD ["cargo", "run", "--release"]
+CMD ["cargo", "run", "--release", "--bin", "program"]
