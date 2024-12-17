@@ -1,28 +1,21 @@
-# syntax=docker/dockerfile:1
+# Use the official Rust image
+FROM rust:alpine
 
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Dockerfile reference guide at
-# https://docs.docker.com/go/dockerfile-reference/
+# Install necessary build dependencies
+RUN apk update && apk add --no-cache pkgconfig openssl-dev build-base
 
-# Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
+ENV PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
+ENV OPENSSL_DIR=/usr
+ENV OPENSSL_LIB_DIR=$OPENSSL_DIR/lib
+ENV OPENSSL_INCLUDE_DIR=$OPENSSL_DIR/include
 
-ARG RUST_VERSION=1.82.0
-ARG APP_NAME=Data-Engine
-
-################################################################################
-# Create a stage for building the application.
-
-FROM rust:${RUST_VERSION}-alpine AS build
-ARG APP_NAME
-WORKDIR /app
-
-# Install host build dependencies.
-RUN apk add --no-cache clang lld musl-dev git
+# Set the working directory to DataEngine
+WORKDIR /usr/src/app/DataEngine
 
 # Copy the entire project
 COPY . .
 
-# Copy DatabaseEngine
+# Copy the DatabaseEngine
 COPY DatabaseEngine .
 
 # Build and test the application.
