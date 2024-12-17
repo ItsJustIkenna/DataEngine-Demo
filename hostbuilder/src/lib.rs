@@ -9,10 +9,11 @@ use config::{Config, DataEngineServerConfiguration};
 use databaseschema::{establish_connection_pool, CustomAsyncPgConnectionManager};
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
+use dotenv::dotenv;
 use get_info::{get_exchange, get_orderbooks, get_securities};
 use handlers::{
-    rest::kraken_rest_api::KrakenRestHandler,
-    websockets::kraken_websocket_handler::KrakenWebSocketHandler,
+    rest_apis::kraken::kraken_rest_api::KrakenRestHandler,
+    websockets::kraken::kraken_websocket_handler::KrakenWebSocketHandler,
 };
 use mockall::automock;
 use redis::cmd;
@@ -42,6 +43,7 @@ impl HostedObject {
     }
 
     pub async fn new() -> Result<Self> {
+        dotenv().ok();
         let config_path = env::var("CONFIG_PATH").expect("CONFIG_PATH must be set");
         let config = Config::new(&config_path)?;
         let redis_pool = Arc::new(create_redis_pool().expect("Failed to create Redis pool"));

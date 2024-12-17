@@ -20,7 +20,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, Web
 use crate::{
     endpoint::EndpointHandler,
     handlers::
-        structs::responses::{parse_message, Response}
+        structs::kraken::responses::{parse_message, Response}
     ,
 };
 //-------------------------------------------------------------------------

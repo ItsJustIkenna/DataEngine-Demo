@@ -12,7 +12,7 @@ use std::{
 };
 use url::Url;
 
-use crate::handlers::structs::responses::{parse_message, Response, TokenResponse};
+use crate::handlers::structs::kraken::{responses::{parse_message, Response}, token_response::TokenResponse};
 
 pub struct KrakenRestHandler;
 
@@ -27,11 +27,11 @@ impl KrakenRestHandler {
 
         let url = Url::parse(endpoint).expect("Failed to parse URL");
 
-        let api_secret = env::var("SECRET_KEY").expect("SECRET_KEY must be set");
+        let api_secret = env::var("KRAKEN_SECRET_KEY").expect("KRAKEN_SECRET_KEY must be set");
 
         let signature = generate_kraken_signature(url.path(), nonce, &post_data, &api_secret);
         let client = Client::new();
-        let api_key = env::var("API_KEY").expect("API_KEY must be set");
+        let api_key = env::var("KRAKEN_API_KEY").expect("KRAKEN_API_KEY must be set");
 
         let body = post_data;
         // Create the headers

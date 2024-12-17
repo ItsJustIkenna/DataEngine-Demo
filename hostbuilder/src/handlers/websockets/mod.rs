@@ -1,1 +1,1 @@
-pub mod kraken_websocket_handler;
+pub mod kraken;

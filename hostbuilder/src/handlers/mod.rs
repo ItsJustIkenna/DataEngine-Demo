@@ -1,3 +1,3 @@
 pub mod websockets;
-pub mod rest;
+pub mod rest_apis;
 pub mod structs;
