@@ -28,20 +28,14 @@ COPY ./DataEngine /app/DataEngine
 COPY ./databaseschema /app/databaseschema
 COPY ./RedisUtils /app/RedisUtils
 
-# Build the application.
-# Leverage a cache mount to /usr/local/cargo/registry/
-# for downloaded dependencies, a cache mount to /usr/local/cargo/git/db
-# for git repository dependencies, and a cache mount to /app/target/ for
-# compiled dependencies which will speed up subsequent builds.
-# Leverage a bind mount to the src directory to avoid having to copy the
-# source code into the container. Once built, copy the executable to an
-# output directory before the cache mounted /app/target is unmounted.
-RUN --mount=type=cache,target=/app/DataEngine/target \
-    --mount=type=cache,target=/usr/local/cargo/git/db \
-    --mount=type=cache,target=/usr/local/cargo/registry/ \
-cargo build --locked --release && \
-cargo test --locked --release && \
-cp ./target/release/$APP_NAME /bin/server
+# Build the application
+RUN cargo build --locked --release
+
+# Run tests
+RUN cargo test --locked --release
+
+# Copy the built application to /bin/server
+RUN cp ./target/release/$APP_NAME /bin/server
 
 
 
