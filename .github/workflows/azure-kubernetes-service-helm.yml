@@ -65,7 +65,7 @@ jobs:
       - name: Checkout DatabaseEngine
         uses: actions/checkout@v4
         with:
-          repository: Nwagbara-Group-LLC/DatabaseEngine
+          repository: Nwagbara-Group-LLC/databaseschema
           path: DatabaseEngine
 
       # Logs in with your Azure credentials
