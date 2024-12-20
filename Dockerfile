@@ -10,15 +10,11 @@ ARG RUST_VERSION=1.82.0
 ARG APP_NAME=program
 
 ################################################################################
-# Create a stage for pulling the databaseschema application.
-FROM databaseschema:latest AS databaseschema
-
-################################################################################
 # Create a stage for building the application.
 
 FROM rust:${RUST_VERSION}-alpine AS build
 ARG APP_NAME
-WORKDIR /app
+WORKDIR /app/DataEngine
 
 # Install necessary build dependencies
 RUN apk update && apk add --no-cache pkgconfig openssl-dev build-base
@@ -28,10 +24,9 @@ ENV OPENSSL_DIR=/usr
 ENV OPENSSL_LIB_DIR=$OPENSSL_DIR/lib
 ENV OPENSSL_INCLUDE_DIR=$OPENSSL_DIR/include
 
-# Copy the necessary files from the databaseschema image
-COPY --from=databaseschema /usr/src/myapp /app/databaseschema
-
-COPY . .
+COPY ./DataEngine /app/DataEngine
+COPY ./databaseschema /app/databaseschema
+COPY ./RedisUtils /app/RedisUtils
 
 # Build the application.
 # Leverage a cache mount to /usr/local/cargo/registry/
@@ -41,12 +36,14 @@ COPY . .
 # Leverage a bind mount to the src directory to avoid having to copy the
 # source code into the container. Once built, copy the executable to an
 # output directory before the cache mounted /app/target is unmounted.
-RUN --mount=type=cache,target=/app/target \
+RUN --mount=type=cache,target=/app/DataEngine/target \
     --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
 cargo build --locked --release && \
 cargo test --locked --release && \
 cp ./target/release/$APP_NAME /bin/server
+
+
 
 ################################################################################
 # Create a new stage for running the application that contains the minimal
@@ -74,10 +71,7 @@ RUN adduser \
 USER appuser
 
 # Copy the executable from the "build" stage.
-COPY --from=build /bin/server /bin/
-
-# Expose the port that the application listens on.
-EXPOSE 8080
+COPY --from=build /bin/server /bin/server
 
 # What the container should run when it is started.
 CMD ["/bin/server"]
