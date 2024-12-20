@@ -67,7 +67,6 @@ jobs:
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       # Logs in with your Azure credentials
       - name: Azure login
