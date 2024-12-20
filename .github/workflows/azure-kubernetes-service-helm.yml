@@ -53,6 +53,8 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
+    env:
+      DOCKER_BUILDKIT: 1
     steps:        
       # Install Azure CLI
       - name: Install Azure CLI
@@ -62,11 +64,17 @@ jobs:
       # Checks out the repository this file is in
       - uses: actions/checkout@v4
 
-      - name: Checkout DatabaseEngine
+      - name: Checkout databaseschema
         uses: actions/checkout@v4
         with:
-          repository: Nwagbara-Group-LLC/DatabaseEngine
-          path: DatabaseEngine
+          repository: Nwagbara-Group-LLC/databaseschema
+          path: databaseschema
+
+      - name: Checkout RedisUtils
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/RedisUtils
+          path: RedisUtils
 
       # Logs in with your Azure credentials
       - name: Azure login
@@ -76,6 +84,9 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Set up Docker BuildKit
+        run: echo "DOCKER_BUILDKIT=1" >> $GITHUB_ENV
+        
       # Builds and pushes an image up to your Azure Container Registry
       - name: Build and push image to ACR
         run: |
