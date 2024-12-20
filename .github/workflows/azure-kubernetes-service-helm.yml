@@ -62,11 +62,11 @@ jobs:
       # Checks out the repository this file is in
       - uses: actions/checkout@v4
 
-      - name: Checkout DatabaseEngine
+      - name: Checkout databaseschema
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
-          path: DatabaseEngine
+          path: databaseschema
 
       # Logs in with your Azure credentials
       - name: Azure login
