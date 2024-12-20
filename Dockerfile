@@ -24,9 +24,9 @@ ENV OPENSSL_DIR=/usr
 ENV OPENSSL_LIB_DIR=$OPENSSL_DIR/lib
 ENV OPENSSL_INCLUDE_DIR=$OPENSSL_DIR/include
 
-COPY ./DataEngine /app/DataEngine
-COPY ./databaseschema /app/databaseschema
-COPY ./RedisUtils /app/RedisUtils
+COPY . /app/DataEngine
+COPY databaseschema /app/databaseschema
+COPY RedisUtils /app/RedisUtils
 
 # Build the application.
 # Leverage a cache mount to /usr/local/cargo/registry/
