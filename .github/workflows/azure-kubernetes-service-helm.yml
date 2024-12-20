@@ -53,6 +53,8 @@ jobs:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
+    env:
+      DOCKER_BUILDKIT: 1
     steps:        
       # Install Azure CLI
       - name: Install Azure CLI
