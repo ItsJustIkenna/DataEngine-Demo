@@ -1,71 +1,62 @@
 # syntax=docker/dockerfile:1
 
-# Comments are provided throughout this file to help you get started.
-# If you need more help, visit the Dockerfile reference guide at
-# https://docs.docker.com/go/dockerfile-reference/
-
-# Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
-
 ARG RUST_VERSION=1.82.0
 ARG APP_NAME=program
 
 ################################################################################
-# Create a stage for building the application.
-
-FROM rust:${RUST_VERSION}-alpine AS build
+# Stage 1: Build the application
+FROM rust:${RUST_VERSION}-slim-bullseye AS build
 ARG APP_NAME
-WORKDIR /app/DataEngine
 
 # Install necessary build dependencies
-RUN apk update && apk add --no-cache pkgconfig openssl-dev build-base
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-ENV PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig
-ENV OPENSSL_DIR=/usr
-ENV OPENSSL_LIB_DIR=$OPENSSL_DIR/lib
-ENV OPENSSL_INCLUDE_DIR=$OPENSSL_DIR/include
+# Set the working directory inside the container
+WORKDIR /app
 
-COPY . /app/DataEngine
+# Copy the source code into the container
+COPY DataEngine /app/DataEngine
+
 COPY databaseschema /app/databaseschema
+
 COPY RedisUtils /app/RedisUtils
 
-# Build the application
-RUN cargo build --locked --release
+# Ensure the program builds correctly from the workspace
+WORKDIR /app/DataEngine
 
-# Run tests
+# Test the application in release mode
 RUN cargo test --locked --release
 
-# Copy the built application to /bin/server
-RUN cp ./target/release/$APP_NAME /bin/server
-
-
+# Build the application in release mode
+RUN cargo build --locked --release
 
 ################################################################################
-# Create a new stage for running the application that contains the minimal
-# runtime dependencies for the application. This often uses a different base
-# image from the build stage where the necessary files are copied from the build
-# stage.
-#
-# The example below uses the alpine image as the foundation for running the app.
-# By specifying the "3.18" tag, it will use version 3.18 of alpine. If
-# reproducibility is important, consider using a digest
-# (e.g., alpine@sha256:664888ac9cfd28068e062c991ebcff4b4c7307dc8dd4df9e728bedde5c449d91).
-FROM alpine:3.18 AS final
+# Stage 2: Create a smaller runtime image
+FROM debian:bullseye-slim AS runtime
 
-# Create a non-privileged user that the app will run under.
-# See https://docs.docker.com/go/dockerfile-user-best-practices/
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libc6 \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-privileged user to run the app
 ARG UID=10001
-RUN adduser \
-    --disabled-password \
-    --gecos "" \
-    --home "/nonexistent" \
-    --shell "/sbin/nologin" \
-    --no-create-home \
-    --uid "${UID}" \
-    appuser
+RUN adduser --disabled-password --gecos "" --home "/nonexistent" --shell "/sbin/nologin" --no-create-home --uid "${UID}" appuser
+
+# Copy the built application from the build stage
+COPY --from=build /app/DataEngine/target/release/$APP_NAME /bin/server
+
+# Ensure the binary is executable
+RUN chmod +x /bin/server
+
+# Switch to non-privileged user
 USER appuser
 
-# Copy the executable from the "build" stage.
-COPY --from=build /bin/server /bin/server
-
-# What the container should run when it is started.
+# Set the command to run the application
 CMD ["/bin/server"]
