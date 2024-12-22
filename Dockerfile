@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy the source code into the container
-COPY DataEngine /app/DataEngine
+COPY . /app/DataEngine
 
 COPY databaseschema /app/databaseschema
 
