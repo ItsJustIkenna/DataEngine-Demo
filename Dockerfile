@@ -28,11 +28,11 @@ COPY RedisUtils /app/RedisUtils
 # Ensure the program builds correctly from the workspace
 WORKDIR /app/DataEngine
 
-# Test the application in release mode
-RUN cargo test --locked --release
-
-# Build the application in release mode
-RUN cargo build --locked --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/DataEngine/target \
+    cargo test --locked --release && \
+    cargo build --locked --release && \
+    cp target/release/$APP_NAME /bin/server
 
 ################################################################################
 # Stage 2: Create a smaller runtime image
@@ -50,7 +50,7 @@ ARG UID=10001
 RUN adduser --disabled-password --gecos "" --home "/nonexistent" --shell "/sbin/nologin" --no-create-home --uid "${UID}" appuser
 
 # Copy the built application from the build stage
-COPY --from=build /app/DataEngine/target/release/$APP_NAME /bin/server
+COPY --from=build /bin/server /bin/server
 
 # Ensure the binary is executable
 RUN chmod +x /bin/server
