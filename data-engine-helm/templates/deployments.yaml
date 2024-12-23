@@ -78,11 +78,11 @@ spec:
             secretKeyRef:
               name: {{ .Values.appName }}-secret
               key: kraken-api-key
-        - name: KRAKEN_API_SECRET
+        - name: KRAKEN_SECRET_KEY
           valueFrom:
             secretKeyRef:
               name: {{ .Values.appName }}-secret
-              key: kraken-api-secret
+              key: kraken-secret-key
         volumeMounts:
         - name: {{ .Values.volumeName }}
           mountPath: /etc/config
