@@ -28,9 +28,7 @@ COPY RedisUtils /app/RedisUtils
 # Ensure the program builds correctly from the workspace
 WORKDIR /app/DataEngine
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/app/DataEngine/target \
-    cargo test --locked --release && \
+RUN cargo test --locked --release && \
     cargo build --locked --release && \
     cp target/release/$APP_NAME /bin/server
 
