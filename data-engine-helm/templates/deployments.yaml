@@ -46,7 +46,7 @@ spec:
               key: REDIS_PORT
         - name: REDIS_URL
           value: "redis://$(REDIS_USER):$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)"
-        - name: POSTGRES_USER
+        - name: POSTGRES_USERNAME
           valueFrom:
             secretKeyRef:
               name: {{ .Values.appName }}-secret
@@ -72,7 +72,7 @@ spec:
               name: {{ .Values.appName }}-configmap
               key: POSTGRES_PORT
         - name: DATABASE_URL
-          value: "postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/tsdb?sslmode=require"
+          value: "postgres://$(POSTGRES_USERNAME):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/tsdb?sslmode=require"
         - name: KRAKEN_API_KEY
           valueFrom:
             secretKeyRef:

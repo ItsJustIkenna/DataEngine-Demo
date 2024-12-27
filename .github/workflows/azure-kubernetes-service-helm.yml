@@ -41,7 +41,7 @@ on:
 
 env:
   AZURE_CONTAINER_REGISTRY: "prodtradingbotregistry"
-  CONTAINER_NAME: "dataengine"
+  CONTAINER_NAME: "data-engine"
   RESOURCE_GROUP: "prod-aks-trading-bot-rg"
   CLUSTER_NAME: "prod-trading-bot-cluster"
   CHART_PATH: "./data-engine-helm"
