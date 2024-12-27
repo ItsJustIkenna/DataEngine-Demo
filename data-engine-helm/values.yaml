@@ -4,5 +4,5 @@ database: timescale
 cache: redis
 volumeName: config-volume
 image:
-  repository: prodtradingbotregistry.azurecr.io/dataengine
+  repository: prodtradingbotregistry.azurecr.io/data-engine
   tag: default
