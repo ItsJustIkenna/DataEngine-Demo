@@ -3,9 +3,11 @@ use std::{str::FromStr, sync::Arc};
 use anyhow::Result;
 use bigdecimal::{BigDecimal, Zero};
 use databaseschema::{
-    models::{
-        NewModifiedBuyOrder, NewModifiedSellOrder, NewOpenBuyOrder, NewOpenSellOrder, OrderBook
-    },
+    models::orderbook::OrderBook,
+    models::open_buy_order::NewOpenBuyOrder,
+    models::open_sell_order::NewOpenSellOrder,
+    models::modified_buy_order::NewModifiedBuyOrder,
+    models::modified_sell_order::NewModifiedSellOrder,
     ops::{
         modified_buy_order_ops::{create_modified_buy_orders, delete_modified_buy_orders}, modified_sell_order_ops::{create_modified_sell_orders, delete_modified_sell_orders}, open_buy_order_ops::{
             create_open_buy_orders, delete_open_buy_orders}, open_sell_order_ops::{

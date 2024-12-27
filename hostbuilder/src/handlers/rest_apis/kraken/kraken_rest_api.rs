@@ -12,7 +12,7 @@ use std::{
 };
 use url::Url;
 
-use crate::handlers::structs::kraken::{responses::{parse_message, Response}, token_response::TokenResponse};
+use crate::handlers::models::kraken::{responses::{parse_message, Response}, token_response::TokenResponse};
 
 pub struct KrakenRestHandler;
 

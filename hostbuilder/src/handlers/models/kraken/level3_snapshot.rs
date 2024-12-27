@@ -3,9 +3,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use bigdecimal::{BigDecimal, Zero};
 use databaseschema::{
-    models::{
-        NewOpenBuyOrder, NewOpenSellOrder, OrderBook
-    },
+    models::orderbook::OrderBook,
+    models::open_buy_order::NewOpenBuyOrder,
+    models::open_sell_order::NewOpenSellOrder,
     ops::{
         open_buy_order_ops::
             create_open_buy_orders

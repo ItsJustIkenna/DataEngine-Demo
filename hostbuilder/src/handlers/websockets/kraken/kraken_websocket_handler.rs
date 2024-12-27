@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use databaseschema::{
-    models::OrderBook, CustomAsyncPgConnectionManager,
+    models::orderbook::OrderBook, CustomAsyncPgConnectionManager,
 };
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
@@ -20,7 +20,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, Web
 use crate::{
     endpoint::EndpointHandler,
     handlers::
-        structs::kraken::responses::{parse_message, Response}
+        models::kraken::responses::{parse_message, Response}
     ,
 };
 //-------------------------------------------------------------------------

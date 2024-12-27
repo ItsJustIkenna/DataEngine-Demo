@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use databaseschema::{
-    models::{
-        NewTrade, OrderBook
-    },
+    models::trade::NewTrade,
+    models::orderbook::OrderBook,
     ops::
         trades_ops::create_trades
     ,
@@ -18,19 +17,19 @@ use serde::{Deserialize, Serialize};
 use super::trade_data::TradeData;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TradeUpdate {
+pub struct TradeSnapshot {
     channel: String,
     r#type: String,
     data: Vec<TradeData>,
 }
 
-impl TradeUpdate {
-    pub fn from_json(json: &serde_json::Value) -> Result<TradeUpdate> {
-        let update: TradeUpdate = serde_json::from_value(json.clone())?;
-        Ok(update)
+impl TradeSnapshot {
+    pub fn from_json(json: &serde_json::Value) -> Result<TradeSnapshot> {
+        let snapshot: TradeSnapshot = serde_json::from_value(json.clone())?;
+        Ok(snapshot)
     }
 
-    pub async fn process_update(
+    pub async fn process_snapshot(
         &self,
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,

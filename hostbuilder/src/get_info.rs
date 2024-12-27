@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use databaseschema::{
-    models::{Exchange, NewExchange, NewOrderBook, NewSecurity, OrderBook, Security},
+    models::exchange::{Exchange, NewExchange},
+    models::orderbook::{OrderBook, NewOrderBook},
+    models::security::{Security, NewSecurity},
     ops::{
         exchanges_ops::{create_exchange, exchange_exists, get_exchanges_by_name},
         order_book_ops::{create_orderbook, get_orderbook_by_exchange_id, orderbook_exists},
