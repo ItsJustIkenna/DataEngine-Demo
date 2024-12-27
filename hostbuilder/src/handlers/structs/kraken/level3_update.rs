@@ -257,8 +257,8 @@ impl Level3Update {
                         let unique_id = &ask.order_id;
 
                         let ask_quantity = cmd("HGET")
-                            .arg(format!("ask_order:{}", unique_id))
-                            .arg("ask_quantity")
+                            .arg(format!("sell_order:{}", unique_id))
+                            .arg("sell_quantity")
                             .query_async::<_, String>(&mut ask_connection).await.expect("Failed to get total volume");
 
                         let ask_quantity = BigDecimal::from_str(&ask_quantity).expect("Failed to convert total volume to BigDecimal");

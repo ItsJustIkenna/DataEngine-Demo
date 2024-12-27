@@ -39,6 +39,8 @@ FROM debian:bullseye-slim AS runtime
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     libc6 \
+    net-tools \
+    procps \
     libssl-dev \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -52,6 +54,8 @@ COPY --from=build /bin/server /bin/server
 
 # Ensure the binary is executable
 RUN chmod +x /bin/server
+
+EXPOSE 443
 
 # Switch to non-privileged user
 USER appuser

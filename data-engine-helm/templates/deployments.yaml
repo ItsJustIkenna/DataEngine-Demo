@@ -14,13 +14,13 @@ spec:
       labels:
         app: {{ .Values.appName }}
     spec:
-      imagePullSecrets:
-        - name: acr-secret
+      # imagePullSecrets:
+      #   - name: acr-secret
       containers:
       - name: {{ .Values.appName }}
         image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
         ports:
-        - containerPort: 8080
+        - containerPort: 443
         env:
         - name: CONFIG_PATH
           value: "/etc/config/config.yaml"
@@ -94,15 +94,19 @@ spec:
             memory: "256Mi"
             cpu: "1"
         livenessProbe:
-          httpGet:
-            path: /healthz
-            port: 8080
+          exec:
+            command:
+            - sh
+            - -c
+            - "ps aux | grep -q '[s]erver' || exit 1"
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
+          exec:
+            command:
+            - sh
+            - -c
+            - "ps aux | grep -q '[s]erver' || exit 1"
           initialDelaySeconds: 30
           periodSeconds: 10
         imagePullPolicy: IfNotPresent

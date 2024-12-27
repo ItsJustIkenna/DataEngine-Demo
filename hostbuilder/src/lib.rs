@@ -5,7 +5,7 @@ pub mod handlers;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use config::{Config, DataEngineServerConfiguration};
+use config::Config;
 use databaseschema::{establish_connection_pool, CustomAsyncPgConnectionManager};
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
@@ -38,10 +38,6 @@ pub struct HostedObject {
 }
 
 impl HostedObject {
-    pub fn host(&self) -> &DataEngineServerConfiguration {
-        &self.config.data_engine_server_configuration
-    }
-
     pub async fn new() -> Result<Self> {
         dotenv().ok();
         let config_path = env::var("CONFIG_PATH").expect("CONFIG_PATH must be set");

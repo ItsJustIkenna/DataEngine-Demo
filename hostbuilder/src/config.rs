@@ -5,26 +5,8 @@ use anyhow::{Context, Result};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Config {
-    pub data_engine_server_configuration: DataEngineServerConfiguration,
-    pub message_broker_server_configuration: MessageBrokerServerConfiguration,
     pub topics: Vec<String>,
     pub exchanges: Vec<Exchange>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct DataEngineServerConfiguration {
-    pub data_engine_server_settings: ServerSettings,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct MessageBrokerServerConfiguration {
-    pub message_broker_server_settings: ServerSettings,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct ServerSettings {
-    pub address: String,
-    pub port: u16,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
