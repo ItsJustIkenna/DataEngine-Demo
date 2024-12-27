@@ -129,8 +129,8 @@ jobs:
           helmChart: ${{ env.CHART_PATH }}
           overrideFiles: ${{ env.CHART_OVERRIDE_PATH }}
           overrides: |
-            Image:
-              Tag: ${{ github.sha }}
+            image:
+              tag: ${{ github.sha }}
           helm-version: "latest"
         id: bake
 
