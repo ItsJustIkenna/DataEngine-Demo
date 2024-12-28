@@ -132,7 +132,7 @@ jobs:
             ${{ env.BASE_CHART_OVERRIDE_PATH }}
             ${{ env.ENV_CHART_OVERRIDE_PATH }}
           overrides: |
-            image.tag: ${{ github.sha }}
+            tag: ${{ github.sha }}
           helm-version: "latest"
         id: bake
 
