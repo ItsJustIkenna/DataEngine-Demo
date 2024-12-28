@@ -88,11 +88,11 @@ spec:
           mountPath: /etc/config
         resources:
           requests:
-            memory: "128Mi"
+            memory: "256Mi"
             cpu: "500m"
           limits:
-            memory: "256Mi"
-            cpu: "1"
+            memory: "512Mi"
+            cpu: "1000m"
         livenessProbe:
           exec:
             command:
@@ -100,7 +100,7 @@ spec:
             - -c
             - "ps aux | grep -q '[s]erver' || exit 1"
           initialDelaySeconds: 15
-          periodSeconds: 1
+          periodSeconds: 10
         readinessProbe:
           exec:
             command:
@@ -108,7 +108,7 @@ spec:
             - -c
             - "ps aux | grep -q '[s]erver' || exit 1"
           initialDelaySeconds: 15
-          periodSeconds: 1
+          periodSeconds: 10
         imagePullPolicy: IfNotPresent
       volumes:
       - name: {{ .Values.volumeName }}

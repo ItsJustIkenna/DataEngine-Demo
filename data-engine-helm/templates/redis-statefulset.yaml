@@ -23,6 +23,22 @@ spec:
         volumeMounts:
         - name: {{ .Values.cache }}-storage
           mountPath: /var/lib/{{ .Values.cache }}/data
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "redis-cli -h $REDIS_HOST -p $REDIS_PORT ping | grep PONG"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "redis-cli -h $REDIS_HOST -p $REDIS_PORT ping | grep PONG"
+          initialDelaySeconds: 30
+          periodSeconds: 10
         env:
         - name: REDIS_USER
           valueFrom:

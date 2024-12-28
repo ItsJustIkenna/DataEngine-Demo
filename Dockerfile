@@ -43,6 +43,8 @@ RUN apt-get update && apt-get install -y \
     procps \
     libssl-dev \
     ca-certificates \
+    postgresql-client \
+    redis-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-privileged user to run the app
