@@ -46,7 +46,7 @@ env:
   CLUSTER_NAME: "prod-trading-bot-cluster"
   CHART_PATH: "./data-engine-helm"
   BASE_CHART_OVERRIDE_PATH: "./data-engine-helm/values.yaml"
-  ENV_CHART_OVERRIDE_PATH: "./data-engine-helm/values-prod.yaml"
+  ENV_CHART_OVERRIDE_PATH: "./data-engine-helm/values-dev.yaml"
 
 jobs:
   buildImage:
