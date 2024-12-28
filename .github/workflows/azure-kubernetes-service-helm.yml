@@ -121,11 +121,6 @@ jobs:
           cluster-name: ${{ env.CLUSTER_NAME }}
           admin: 'false'
           use-kubelogin: 'true'
-
-      # Reconcile acr-secret to avoid conflict errors
-      - name: Reconcile acr-secret
-        run: |
-          kubectl get secret acr-secret -o yaml | kubectl apply -f -
             
       # Runs Helm to create manifest files
       - name: Bake deployment
