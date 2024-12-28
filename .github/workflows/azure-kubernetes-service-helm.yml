@@ -46,7 +46,7 @@ env:
   CLUSTER_NAME: "prod-trading-bot-cluster"
   CHART_PATH: "./data-engine-helm"
   BASE_CHART_OVERRIDE_PATH: "./data-engine-helm/values.yaml"
-  ENV_CHART_OVERRIDE_PATH: "./data-engine-helm/values-prod.yaml"
+  ENV_CHART_OVERRIDE_PATH: "./data-engine-helm/values-dev.yaml"
 
 jobs:
   buildImage:
@@ -132,7 +132,6 @@ jobs:
             ${{ env.BASE_CHART_OVERRIDE_PATH }}
             ${{ env.ENV_CHART_OVERRIDE_PATH }}
           overrides: |
-            repository: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }} 
             tag: ${{ github.sha }}
           helm-version: "latest"
         id: bake
