@@ -45,7 +45,8 @@ env:
   RESOURCE_GROUP: "prod-aks-trading-bot-rg"
   CLUSTER_NAME: "prod-trading-bot-cluster"
   CHART_PATH: "./data-engine-helm"
-  CHART_OVERRIDE_PATH: "./data-engine-helm/values.yaml"
+  BASE_CHART_OVERRIDE_PATH: "./data-engine-helm/values.yaml"
+  ENV_CHART_OVERRIDE_PATH: "./data-engine-helm/values-prod.yaml"
 
 jobs:
   buildImage:
@@ -132,7 +133,9 @@ jobs:
         with:
           renderEngine: "helm"
           helmChart: ${{ env.CHART_PATH }}
-          overrideFiles: ${{ env.CHART_OVERRIDE_PATH }}
+          overrideFiles: |
+            ${{ env.BASE_CHART_OVERRIDE_PATH }}
+            ${{ env.ENV_CHART_OVERRIDE_PATH }}
           overrides: |
             repository: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }} 
             tag: ${{ github.sha }}
