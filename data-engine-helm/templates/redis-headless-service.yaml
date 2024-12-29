@@ -5,7 +5,7 @@ metadata:
 spec:
   clusterIP: None
   selector:
-    app: {{ .Values.appName }}
+    app: {{ .Values.cache }}
   ports:
   - port: 30980
     targetPort: 30980

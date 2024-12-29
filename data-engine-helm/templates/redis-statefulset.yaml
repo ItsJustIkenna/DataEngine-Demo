@@ -16,6 +16,16 @@ spec:
       terminationGracePeriodSeconds: 10
       imagePullSecrets:
       - name: acr-secret
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - {{ .Values.appName }}
+            topologyKey: "kubernetes.io/hostname"
       containers:
       - name: {{ .Values.cache }}
         image: {{ .Values.cache }}:latest
