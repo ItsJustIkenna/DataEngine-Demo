@@ -26,19 +26,13 @@ spec:
         - name: {{ .Values.cache }}-storage
           mountPath: /var/lib/{{ .Values.cache }}/data
         livenessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "redis-cli -h $REDIS_HOST -p $REDIS_PORT ping | grep PONG"
+          tcpSocket:
+            port: 19298
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "redis-cli -h $REDIS_HOST -p $REDIS_PORT ping | grep PONG"
+          tcpSocket:
+            port: 19298
           initialDelaySeconds: 30
           periodSeconds: 10
         resources:

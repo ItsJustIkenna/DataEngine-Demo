@@ -26,19 +26,13 @@ spec:
         - name: {{ .Values.database }}-storage
           mountPath: /var/lib/postgresql/data
         livenessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h $POSTGRES_HOST -p $POSTGRES_PORT"
+          tcpSocket:
+            port: 30980
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h $POSTGRES_HOST -p $POSTGRES_PORT"
+          tcpSocket:
+            port: 30980
           initialDelaySeconds: 30
           periodSeconds: 10
         resources:
