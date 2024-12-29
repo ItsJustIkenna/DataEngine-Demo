@@ -101,7 +101,6 @@ spec:
             - "ps aux | grep -q '[s]erver' || exit 1"
           initialDelaySeconds: 15
           timeoutSeconds: 10
-          periodSeconds: 10
         readinessProbe:
           exec:
             command:
@@ -110,7 +109,6 @@ spec:
             - "ps aux | grep -q '[s]erver' || exit 1"
           initialDelaySeconds: 15
           timeoutSeconds: 10
-          periodSeconds: 10
         imagePullPolicy: IfNotPresent
       volumes:
       - name: {{ .Values.volumeName }}
