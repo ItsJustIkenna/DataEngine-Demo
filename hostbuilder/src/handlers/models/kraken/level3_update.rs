@@ -3,17 +3,17 @@ use std::{str::FromStr, sync::Arc};
 use anyhow::Result;
 use bigdecimal::{BigDecimal, Zero};
 use databaseschema::{
-    models::orderbook::OrderBook,
-    models::open_buy_order::NewOpenBuyOrder,
-    models::open_sell_order::NewOpenSellOrder,
-    models::modified_buy_order::NewModifiedBuyOrder,
-    models::modified_sell_order::NewModifiedSellOrder,
-    ops::{
-        modified_buy_order_ops::{create_modified_buy_orders, delete_modified_buy_orders}, modified_sell_order_ops::{create_modified_sell_orders, delete_modified_sell_orders}, open_buy_order_ops::{
-            create_open_buy_orders, delete_open_buy_orders}, open_sell_order_ops::{
-            create_open_sell_orders, delete_open_sell_orders}, order_book_ops::update_orderbook
-    },
-    CustomAsyncPgConnectionManager,
+    models::{modified_buy_order::NewModifiedBuyOrder,
+        modified_sell_order::NewModifiedSellOrder,
+        open_buy_order::NewOpenBuyOrder,
+        open_sell_order::NewOpenSellOrder,
+        orderbook::OrderBook},
+        ops::{modified_buy_order_ops::{create_modified_buy_orders, delete_modified_buy_orders},
+        modified_sell_order_ops::{create_modified_sell_orders, delete_modified_sell_orders},
+        open_buy_order_ops::{create_open_buy_orders, delete_open_buy_orders},
+        open_sell_order_ops::{create_open_sell_orders, delete_open_sell_orders},
+        order_book_ops::update_orderbook},
+        CustomAsyncPgConnectionManager
 };
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
@@ -129,6 +129,8 @@ impl Level3Update {
 
                         let buy_quantity = BigDecimal::from_str(&buy_quantity).expect("Failed to convert total volume to BigDecimal");
 
+                        bid_volume -= buy_quantity.clone();
+
                         let buy_quantity = (new_buy_quantity - buy_quantity).abs();
 
                         bid_volume += buy_quantity;
@@ -203,8 +205,8 @@ impl Level3Update {
                 }
                 create_open_buy_orders(postgres_pool.clone(), buy_orders).await;
                 create_modified_buy_orders(postgres_pool.clone(), modified_orders).await;
-                delete_open_buy_orders(postgres_pool.clone(), delete_orders.clone()).await;
-                delete_modified_buy_orders(postgres_pool.clone(), delete_orders.clone()).await;
+                delete_open_buy_orders(postgres_pool.clone(), &delete_orders).await;
+                delete_modified_buy_orders(postgres_pool.clone(), &delete_orders).await;
             };
 
             let ask_futures = async {
@@ -264,6 +266,8 @@ impl Level3Update {
                             .query_async::<_, String>(&mut ask_connection).await.expect("Failed to get total volume");
 
                         let ask_quantity = BigDecimal::from_str(&ask_quantity).expect("Failed to convert total volume to BigDecimal");
+
+                        ask_volume -= ask_quantity.clone();
 
                         let ask_quantity = (new_sell_quantity - ask_quantity).abs();
 
@@ -339,8 +343,8 @@ impl Level3Update {
                 }
                 create_open_sell_orders(postgres_pool.clone(), sell_orders).await;
                 create_modified_sell_orders(postgres_pool.clone(), modified_orders).await;
-                delete_open_sell_orders(postgres_pool.clone(), delete_orders.clone()).await;
-                delete_modified_sell_orders(postgres_pool.clone(), delete_orders.clone()).await;
+                delete_open_sell_orders(postgres_pool.clone(), &delete_orders).await;
+                delete_modified_sell_orders(postgres_pool.clone(), &delete_orders).await;
             };
 
             tokio::join!(bid_futures, ask_futures);
