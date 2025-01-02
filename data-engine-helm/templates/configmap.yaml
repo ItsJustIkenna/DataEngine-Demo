@@ -3,9 +3,9 @@ kind: ConfigMap
 metadata:
   name: {{ .Values.appName }}-configmap
 data:
-  POSTGRES_DB: "tsdb"
+  POSTGRES_DB: "tsdb_transaction"
   POSTGRES_HOST: "fq80eimsaz.yd4ed8gjcp.tsdb.cloud.timescale.com"
-  POSTGRES_PORT: "30980"
+  POSTGRES_PORT: "39673"
   REDIS_DB: "cache-LW5CEFX0"
   REDIS_HOST: "redis-19298.c91.us-east-1-3.ec2.redns.redis-cloud.com"
   REDIS_PORT: "19298"
