@@ -6,7 +6,7 @@ pub mod handlers;
 use anyhow::Result;
 use async_trait::async_trait;
 use config::Config;
-use databaseschema::{establish_connection_pool, CustomAsyncPgConnectionManager};
+use databaseschema::{create_timescale_connection_pool, CustomAsyncPgConnectionManager};
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
 use dotenv::dotenv;
@@ -17,7 +17,7 @@ use handlers::{
 };
 use mockall::automock;
 use redis::cmd;
-use redis_utils::{create_redis_connection, create_redis_pool};
+use redis_utils::{create_redis_connection_pool, get_redis_connection};
 use serde_json::json;
 use std::{env, sync::Arc};
 use tokio::{signal, sync::broadcast::channel};
@@ -42,8 +42,8 @@ impl HostedObject {
         dotenv().ok();
         let config_path = env::var("CONFIG_PATH").expect("CONFIG_PATH must be set");
         let config = Config::new(&config_path)?;
-        let redis_pool = Arc::new(create_redis_pool().expect("Failed to create Redis pool"));
-        let postgres_pool = Arc::new(establish_connection_pool());
+        let redis_pool = Arc::new(create_redis_connection_pool().expect("Failed to create Redis pool"));
+        let postgres_pool = Arc::new(create_timescale_connection_pool());
 
         Ok(Self {
             config,
@@ -106,7 +106,7 @@ impl HostedObjectTrait for HostedObject {
                                         "params": {
                                             "channel": &websocket.channel,
                                             "symbol": &symbols,
-                                            "depth": 10,
+                                            "depth": 1000,
                                             "snapshot": true,
                                             "token": &api_response.get_token(),
                                         }
@@ -216,7 +216,7 @@ impl HostedObjectTrait for HostedObject {
                 error!("Failed to listen for shutdown signal: {}", e);
             }
 
-            let mut connection = create_redis_connection(&redis_pool)
+            let mut connection = get_redis_connection(&redis_pool)
                 .await
                 .expect("Failed to create redis connection");
             match cmd("FLUSHALL").query_async::<_, ()>(&mut connection).await {

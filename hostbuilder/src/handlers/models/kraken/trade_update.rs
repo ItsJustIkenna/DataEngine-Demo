@@ -11,7 +11,7 @@ use databaseschema::{
 };
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
-use redis_utils::create_redis_connection;
+use redis_utils::get_redis_connection;
 use serde::{Deserialize, Serialize};
 
 use super::trade_data::TradeData;
@@ -35,7 +35,7 @@ impl TradeUpdate {
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         order_book: OrderBook
     ) -> Result<()> {
-        let mut trade_connection = create_redis_connection(&redis_pool)
+        let mut trade_connection = get_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
 

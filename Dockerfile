@@ -23,7 +23,7 @@ COPY . /app/DataEngine
 
 COPY databaseschema /app/databaseschema
 
-COPY RedisUtils /app/RedisUtils
+COPY redisutils /app/redisutils
 
 # Ensure the program builds correctly from the workspace
 WORKDIR /app/DataEngine

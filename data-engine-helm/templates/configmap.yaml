@@ -19,6 +19,8 @@ data:
         websocket_token: 'https://api.kraken.com/0/private/GetWebSocketsToken'
         symbols:
           - 'BTC/USD'
+          - 'SUI/USD'
+          - 'SOL/USD'
         apis:
           - websockets:
               - channel: 'level3'
