@@ -106,7 +106,7 @@ impl HostedObjectTrait for HostedObject {
                                         "params": {
                                             "channel": &websocket.channel,
                                             "symbol": &symbols,
-                                            "depth": 1000,
+                                            "depth": &exchange.depth,
                                             "snapshot": true,
                                             "token": &api_response.get_token(),
                                         }

@@ -14,6 +14,7 @@ pub struct Exchange {
     pub exchange: String,
     pub websocket_token: String,
     pub symbols: Vec<String>,
+    pub depth: u64,
     pub apis: Vec<Api>,
 }
 

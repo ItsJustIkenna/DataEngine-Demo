@@ -21,6 +21,7 @@ data:
           - 'BTC/USD'
           - 'SUI/USD'
           - 'SOL/USD'
+        depth: 1000
         apis:
           - websockets:
               - channel: 'level3'
