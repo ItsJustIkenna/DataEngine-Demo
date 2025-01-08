@@ -20,8 +20,9 @@ use databaseschema::{
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
 use redis::cmd;
-use redis_utils::get_redis_connection;
+use redis_utils::create_redis_connection;
 use serde::{Deserialize, Serialize};
+use tokio_retry::{strategy::FixedInterval, Retry};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level3Snapshot {
@@ -42,13 +43,15 @@ impl Level3Snapshot {
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         order_book: OrderBook,
     ) -> Result<()> {
-        let mut book_connection = get_redis_connection(&redis_pool)
+        let retry_strategy = FixedInterval::from_millis(1).take(15);
+        
+        let mut book_connection = create_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
-        let mut bid_connection = get_redis_connection(&redis_pool)
+        let bid_connection = create_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
-        let mut ask_connection = get_redis_connection(&redis_pool)
+        let ask_connection = create_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
 
@@ -112,10 +115,19 @@ impl Level3Snapshot {
                         buy_orders.push(order);
                     }
 
-                    match pipe.query_async::<_, ()>(&mut bid_connection).await {
-                        Ok(_) => println!("Added buy orders to redis"),
-                        Err(e) => println!("Failed to add buy orders to redis: {}", e),
-                    }
+                    let _ = Retry::spawn(retry_strategy.clone(), || async {
+                        match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
+                            Ok(_) => {
+                                println!("Added buy orders to redis");
+                                Ok(())
+                            },
+                            Err(e) => {
+                                println!("Failed to add buy orders to redis: {}", e);
+                                Err(e)
+                            },
+                        }
+                    }).await;
+                    
 
                     create_open_buy_orders(postgres_pool.clone(), buy_orders).await;
                 }
@@ -166,10 +178,18 @@ impl Level3Snapshot {
                         add_sell_orders.push(order);
                     }
 
-                    match pipe.query_async::<_, ()>(&mut ask_connection).await {
-                        Ok(_) => println!("Added sell orders to redis"),
-                        Err(e) => println!("Failed to add sell orders to redis: {}", e),
-                    }
+                    let _ = Retry::spawn(retry_strategy.clone(), || async {
+                        match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
+                            Ok(_) => {
+                                println!("Added sell orders to redis");
+                                Ok(())
+                            },
+                            Err(e) => {
+                                println!("Failed to add sell orders to redis: {}", e);
+                                Err(e)
+                            },
+                        }
+                    }).await;
 
                     create_open_sell_orders(postgres_pool.clone(), add_sell_orders).await;
                 }
@@ -212,6 +232,41 @@ impl Level3Snapshot {
                     println!("Failed to add order book to redis: {}", e);
                 }
             }
+
+            let _ = Retry::spawn(retry_strategy.clone(), || async {
+                match cmd("HSET")
+                .arg(format!("order_book:{}", order_book.order_book_id))
+                .arg("created_at")
+                .arg(&order_book.created_at.to_string())
+                .arg("updated_at")
+                .arg(&order_book.updated_at.expect("").to_string())
+                .arg("symbol")
+                .arg(&order_book.symbol)
+                .arg("exchange")
+                .arg(&order_book.exchange)
+                .arg("security_id")
+                .arg(&order_book.security_id.to_string())
+                .arg("exchange_id")
+                .arg(&order_book.exchange_id.to_string())
+                .arg("buy_order_book_id")
+                .arg(&order_book.buy_order_book_id.to_string())
+                .arg("sell_order_book_id")
+                .arg(&order_book.sell_order_book_id.to_string())
+                .arg("total_volume")
+                .arg(&total_volume.to_string())
+                .query_async::<_, ()>(&mut book_connection.clone())
+                .await
+            {
+                Ok(_) => {
+                    println!("Added order book to redis");
+                    Ok(())
+                }
+                Err(e) => {
+                    println!("Failed to add order book to redis: {}", e);
+                    Err(e)
+                }
+            }
+            }).await;
             update_orderbook(postgres_pool.clone(), order_book, total_volume).await;
             Ok(())
         } else {

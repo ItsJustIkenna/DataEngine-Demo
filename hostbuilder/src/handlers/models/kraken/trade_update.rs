@@ -11,8 +11,9 @@ use databaseschema::{
 };
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
-use redis_utils::get_redis_connection;
+use redis_utils::create_redis_connection;
 use serde::{Deserialize, Serialize};
+use tokio_retry::{strategy::FixedInterval, Retry};
 
 use super::trade_data::TradeData;
 
@@ -35,7 +36,9 @@ impl TradeUpdate {
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         order_book: OrderBook
     ) -> Result<()> {
-        let mut trade_connection = get_redis_connection(&redis_pool)
+        let retry_strategy = FixedInterval::from_millis(1).take(15);
+        
+        let trade_connection = create_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
 
@@ -79,10 +82,18 @@ impl TradeUpdate {
                 trades.push(new_trade);
             }
 
-            match pipe.query_async::<_, ()>(&mut trade_connection).await {
-                Ok(_) => println!("Added trades to redis"),
-                Err(e) => println!("Failed to add trades to redis: {}", e),
-            }
+            Retry::spawn(retry_strategy, || async {
+                match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
+                    Ok(_) => {
+                        println!("Added trades to redis");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        println!("Failed to add trades to redis: {}", e);
+                        Err(e)
+                    }
+                }
+            }).await?;
 
             create_trades(postgres_pool.clone(), trades).await;
 

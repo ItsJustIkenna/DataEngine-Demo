@@ -69,11 +69,11 @@ jobs:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
 
-      - name: Checkout RedisUtils
+      - name: Checkout redisutils
         uses: actions/checkout@v4
         with:
-          repository: Nwagbara-Group-LLC/RedisUtils
-          path: RedisUtils
+          repository: Nwagbara-Group-LLC/redisutils
+          path: redisutils
 
       # Logs in with your Azure credentials
       - name: Azure login

@@ -14,14 +14,14 @@ use databaseschema::{
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
 use redis::cmd;
-use redis_utils::get_redis_connection;
+use redis_utils::create_redis_connection;
 
 pub async fn get_exchange(
     redis_pool: Arc<Pool<Manager, Connection>>,
     postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
     exchange: String,
 ) -> Exchange {
-    let mut connection = get_redis_connection(&redis_pool)
+    let mut connection = create_redis_connection(&redis_pool)
         .await
         .expect("Failed to create redis connection");
 
@@ -82,7 +82,7 @@ pub async fn get_securities(
     postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
     symbols: &Vec<String>,
 ) -> Vec<Security> {
-    let mut connection = get_redis_connection(&redis_pool)
+    let mut connection = create_redis_connection(&redis_pool)
         .await
         .expect("Failed to create redis connection");
 
@@ -140,7 +140,7 @@ pub async fn get_orderbooks(
     securities: Vec<Security>,
     exchange: &Exchange,
 ) -> Vec<OrderBook> {
-    let mut connection = get_redis_connection(&redis_pool)
+    let mut connection = create_redis_connection(&redis_pool)
         .await
         .expect("Failed to create redis connection");
 

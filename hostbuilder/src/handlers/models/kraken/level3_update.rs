@@ -18,8 +18,9 @@ use databaseschema::{
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
 use redis::cmd;
-use redis_utils::get_redis_connection;
+use redis_utils::create_redis_connection;
 use serde::{Deserialize, Serialize};
+use tokio_retry::{strategy::FixedInterval, Retry};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level3Update {
@@ -40,13 +41,15 @@ impl Level3Update {
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         order_book: OrderBook,
     ) -> Result<()> {
-        let mut book_connection = get_redis_connection(&redis_pool)
+        let retry_strategy = FixedInterval::from_millis(1).take(15);
+
+        let mut book_connection = create_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
-        let mut bid_connection = get_redis_connection(&redis_pool)
+        let bid_connection = create_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
-        let mut ask_connection = get_redis_connection(&redis_pool)
+        let ask_connection = create_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
 
@@ -61,10 +64,22 @@ impl Level3Update {
                 println!("Both bids and asks are empty");
             }
 
-            let total_volume = cmd("HGET")
-            .arg(format!("order_book:{}", order_book.order_book_id))
-            .arg("total_volume")
-            .query_async::<_, String>(&mut book_connection).await.expect("Failed to get total volume");
+            let total_volume = Retry::spawn(retry_strategy.clone(), || async {    
+                match cmd("HGET")
+                .arg(format!("order_book:{}", order_book.order_book_id))
+                .arg("total_volume")
+                .query_async::<_, String>(&mut book_connection.clone())
+                .await {
+                    Ok(volume) => {
+                        println!("Successfully retrieved total volume");
+                        Ok(volume)
+                    },
+                    Err(e) => {
+                        println!("Failed to get total volume: {}", e);
+                        Err(e)
+                    },
+                }
+            }).await?;
 
             let mut bid_volume = BigDecimal::zero();
             let mut ask_volume = BigDecimal::zero();
@@ -122,10 +137,21 @@ impl Level3Update {
                         let new_buy_quantity = &bid.order_qty;
                         let unique_id = &bid.order_id;
 
-                        let buy_quantity = cmd("HGET")
+                        let buy_quantity = Retry::spawn(retry_strategy.clone(), || async {    
+                            match cmd("HGET")
                             .arg(format!("buy_order:{}", unique_id))
                             .arg("buy_quantity")
-                            .query_async::<_, String>(&mut bid_connection).await.expect("Failed to get total volume");
+                            .query_async::<_, String>(&mut bid_connection.clone()).await {
+                                Ok(volume) => {
+                                    println!("Successfully retrieved buy quantity");
+                                    Ok(volume)
+                                },
+                                Err(e) => {
+                                    println!("Failed to get buy quantity: {}", e);
+                                    Err(e)
+                                },
+                            }
+                        }).await?;
 
                         let buy_quantity = BigDecimal::from_str(&buy_quantity).expect("Failed to convert total volume to BigDecimal");
 
@@ -194,19 +220,23 @@ impl Level3Update {
                         delete_orders.push(&bid.order_id);
                     }
                 }
-                match pipe.query_async::<_, ()>(&mut bid_connection).await {
-                    Ok(_) => {
-                        println!("Batch added, modified, and deleted buy orders to/from redis")
+                let _ = Retry::spawn(retry_strategy.clone(), || async {
+                    match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
+                        Ok(_) => {
+                            println!("Batch added, modified, and deleted buy orders to/from redis");
+                            Ok(())
+                        }
+                        Err(e) => {
+                            println!("Failed to batch add, modify, and delete buy orders to/from redis: {}", e);
+                            Err(e)
+                        }
                     }
-                    Err(e) => println!(
-                        "Failed to batch add, modify, and delete buy orders to/from redis: {}",
-                        e
-                    ),
-                }
+                }).await;
                 create_open_buy_orders(postgres_pool.clone(), buy_orders).await;
                 create_modified_buy_orders(postgres_pool.clone(), modified_orders).await;
                 delete_open_buy_orders(postgres_pool.clone(), &delete_orders).await;
                 delete_modified_buy_orders(postgres_pool.clone(), &delete_orders).await;
+                Ok::<(), anyhow::Error>(())
             };
 
             let ask_futures = async {
@@ -260,10 +290,21 @@ impl Level3Update {
                         let new_sell_quantity = &ask.order_qty;
                         let unique_id = &ask.order_id;
 
-                        let ask_quantity = cmd("HGET")
-                            .arg(format!("sell_order:{}", unique_id))
-                            .arg("sell_quantity")
-                            .query_async::<_, String>(&mut ask_connection).await.expect("Failed to get total volume");
+                        let ask_quantity = Retry::spawn(retry_strategy.clone(), || async {    
+                            match cmd("HGET")
+                            .arg(format!("ask_order:{}", unique_id))
+                            .arg("ask_quantity")
+                            .query_async::<_, String>(&mut bid_connection.clone()).await {
+                                Ok(volume) => {
+                                    println!("Successfully retrieved ask quantity");
+                                    Ok(volume)
+                                },
+                                Err(e) => {
+                                    println!("Failed to get ask quantity: {}", e);
+                                    Err(e)
+                                },
+                            }
+                        }).await?;
 
                         let ask_quantity = BigDecimal::from_str(&ask_quantity).expect("Failed to convert total volume to BigDecimal");
 
@@ -332,22 +373,29 @@ impl Level3Update {
                         delete_orders.push(&ask.order_id);
                     }
                 }
-                match pipe.query_async::<_, ()>(&mut ask_connection).await {
-                    Ok(_) => {
-                        println!("Batch added, modified, and deleted buy orders to/from redis")
+                Retry::spawn(retry_strategy.clone(), || async {
+                    match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
+                        Ok(_) => {
+                            println!("Batch added, modified, and deleted sell orders to/from redis");
+                            Ok(())
+                        }
+                        Err(e) => {
+                            println!("Failed to batch add, modify, and delete sell orders to/from redis: {}", e);
+                            Err(e)
+                        }
                     }
-                    Err(e) => println!(
-                        "Failed to batch add, modify, and delete buy orders to/from redis: {}",
-                        e
-                    ),
-                }
+                }).await?;
                 create_open_sell_orders(postgres_pool.clone(), sell_orders).await;
                 create_modified_sell_orders(postgres_pool.clone(), modified_orders).await;
                 delete_open_sell_orders(postgres_pool.clone(), &delete_orders).await;
                 delete_modified_sell_orders(postgres_pool.clone(), &delete_orders).await;
+                Ok::<(), anyhow::Error>(())
             };
 
-            tokio::join!(bid_futures, ask_futures);
+            let (bid_result, ask_result) = tokio::join!(bid_futures, ask_futures);
+
+            bid_result?;
+            ask_result?;
 
             total_volume += bid_volume + ask_volume;
 

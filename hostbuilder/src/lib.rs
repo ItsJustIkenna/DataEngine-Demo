@@ -17,7 +17,7 @@ use handlers::{
 };
 use mockall::automock;
 use redis::cmd;
-use redis_utils::{create_redis_connection_pool, get_redis_connection};
+use redis_utils::{create_redis_pool, create_redis_connection};
 use serde_json::json;
 use std::{env, sync::Arc};
 use tokio::{signal, sync::broadcast::channel};
@@ -42,7 +42,7 @@ impl HostedObject {
         dotenv().ok();
         let config_path = env::var("CONFIG_PATH").expect("CONFIG_PATH must be set");
         let config = Config::new(&config_path)?;
-        let redis_pool = Arc::new(create_redis_connection_pool().expect("Failed to create Redis pool"));
+        let redis_pool = Arc::new(create_redis_pool().expect("Failed to create Redis pool"));
         let postgres_pool = Arc::new(create_timescale_connection_pool());
 
         Ok(Self {
@@ -216,7 +216,7 @@ impl HostedObjectTrait for HostedObject {
                 error!("Failed to listen for shutdown signal: {}", e);
             }
 
-            let mut connection = get_redis_connection(&redis_pool)
+            let mut connection = create_redis_connection(&redis_pool)
                 .await
                 .expect("Failed to create redis connection");
             match cmd("FLUSHALL").query_async::<_, ()>(&mut connection).await {
