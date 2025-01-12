@@ -10,7 +10,7 @@ use futures_util::{
     SinkExt, StreamExt,
 };
 use serde_json::Value;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::{
     net::TcpStream,
     sync::{broadcast::Receiver, Mutex},
@@ -29,13 +29,13 @@ pub struct KrakenWebSocketHandler {
     writer: Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>,
     reader: Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     unsubscribe_message: Value,
-    order_book: OrderBook,
+    order_books: HashMap<String, OrderBook>,
     redis_pool: Arc<Pool<Manager, Connection>>,
     postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
 }
 
 impl KrakenWebSocketHandler {
-    pub async fn new(endpoint: &str, order_book: OrderBook, subscribe_message: &Value, unsubscribe_message: &Value, redis_pool: Arc<Pool<Manager, Connection>>, postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>) -> Result<Self> {
+    pub async fn new(endpoint: &str, order_books: HashMap<String, OrderBook>, subscribe_message: &Value, unsubscribe_message: &Value, redis_pool: Arc<Pool<Manager, Connection>>, postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>) -> Result<Self> {
         let (ws_stream, _) = match connect_async(endpoint).await {
             Ok(val) => {
                 println!("Connected to endpoint: {}", endpoint);
@@ -60,7 +60,7 @@ impl KrakenWebSocketHandler {
             writer,
             reader,
             unsubscribe_message: unsubscribe_message.clone(),
-            order_book,
+            order_books,
             redis_pool,
             postgres_pool,
         })
@@ -85,50 +85,79 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                     Ok(Response::Level3Snapshot(snapshot)) => {
                                         println!("Received level 3 snapshot: {:?}", snapshot);
                                         // Process the snapshot
-                                        match snapshot.process_snapshot(self.redis_pool.clone(), self.postgres_pool.clone(), handler.order_book.clone()).await {
-                                            Ok(()) => {
-                                                println!("Order book snapshot processed successfully");
+                                        match self.order_books.get(&snapshot.data[0].symbol) {
+                                            Some(order_book) => {
+                                                match snapshot.process_snapshot(self.redis_pool.clone(), self.postgres_pool.clone(), order_book).await {
+                                                    Ok(()) => {
+                                                        println!("Order book snapshot processed successfully");
+                                                    },
+                                                    Err(e) => {
+                                                        println!("Failed to process order book snapshot: {}", e);
+                                                    }
+                                                }
                                             },
-                                            Err(e) => {
-                                                println!("Failed to process order book snapshot: {}", e);
+                                            None => {
+                                                println!("Order book not found for symbol: {}", snapshot.data[0].symbol);
                                             }
-                                        }
+                                        };
+                                        
                                     },
                                     Ok(Response::Level3Update(update)) => {
                                         println!("Received level 3 update: {:?}", update);
                                         // Process the update
-                                        match update.process_update(self.redis_pool.clone(), self.postgres_pool.clone(), handler.order_book.clone()).await {
-                                            Ok(()) => {
-                                                println!("Order book update processed successfully");
+                                        match self.order_books.get(&update.data[0].symbol) {
+                                            Some(order_book) => {
+                                                match update.process_update(self.redis_pool.clone(), self.postgres_pool.clone(), order_book).await {
+                                                    Ok(()) => {
+                                                        println!("Order book update processed successfully");
+                                                    },
+                                                    Err(e) => {
+                                                        println!("Failed to process order book update: {}", e);
+                                                    }
+                                                }
                                             },
-                                            Err(e) => {
-                                                println!("Failed to process order book update: {}", e);
+                                            None => {
+                                                println!("Order book not found for symbol: {}", update.data[0].symbol);
                                             }
-                                        }
+                                        };
                                     },
                                     Ok(Response::TradeSnapshot(snapshot)) => {
                                         println!("Received trade snapshot: {:?}", snapshot);
                                         // Process the snapshot
-                                        match snapshot.process_snapshot(self.redis_pool.clone(), self.postgres_pool.clone(), handler.order_book.clone()).await {
-                                            Ok(()) => {
-                                                println!("Trade snapshot processed successfully");
+                                        match self.order_books.get(&snapshot.data[0].symbol) {
+                                            Some(order_book) => {
+                                                match snapshot.process_snapshot(self.redis_pool.clone(), self.postgres_pool.clone(), order_book).await {
+                                                    Ok(()) => {
+                                                        println!("Trade snapshot processed successfully");
+                                                    },
+                                                    Err(e) => {
+                                                        println!("Failed to process trade snapshot: {}", e);
+                                                    }
+                                                }
                                             },
-                                            Err(e) => {
-                                                println!("Failed to process trade snapshot: {}", e);
+                                            None => {
+                                                println!("Order book not found for symbol: {}", snapshot.data[0].symbol);
                                             }
-                                        }
+                                        };
                                     },
                                     Ok(Response::TradeUpdate(update)) => {
                                         println!("Received trade update: {:?}", update);
                                         // Process the update
-                                        match update.process_update(self.redis_pool.clone(), self.postgres_pool.clone(), handler.order_book.clone()).await {
-                                            Ok(()) => {
-                                                println!("Trade update processed successfully");
+                                        match self.order_books.get(&update.data[0].symbol) {
+                                            Some(order_book) => {
+                                                match update.process_update(self.redis_pool.clone(), self.postgres_pool.clone(), order_book).await {
+                                                    Ok(()) => {
+                                                        println!("Trade update processed successfully");
+                                                    },
+                                                    Err(e) => {
+                                                        println!("Failed to process trade update: {}", e);
+                                                    }
+                                                }
                                             },
-                                            Err(e) => {
-                                                println!("Failed to process trade update: {}", e);
+                                            None => {
+                                                println!("Order book not found for symbol: {}", update.data[0].symbol);
                                             }
-                                        }
+                                        };
                                     },
                                     Ok(Response::HeartBeat(heartbeat)) => {
                                         println!("Received heartbeat: {:?}", heartbeat);

@@ -11,7 +11,7 @@ use databaseschema::{
 };
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
-use redis_utils::create_redis_connection;
+use redis_utils::get_redis_connection;
 use serde::{Deserialize, Serialize};
 use tokio_retry::{strategy::FixedInterval, Retry};
 
@@ -21,7 +21,7 @@ use super::trade_data::TradeData;
 pub struct TradeSnapshot {
     channel: String,
     r#type: String,
-    data: Vec<TradeData>,
+    pub data: Vec<TradeData>,
 }
 
 impl TradeSnapshot {
@@ -34,11 +34,11 @@ impl TradeSnapshot {
         &self,
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
-        order_book: OrderBook
+        order_book: &OrderBook
     ) -> Result<()> {
         let retry_strategy = FixedInterval::from_millis(1).take(15);
         
-        let trade_connection = create_redis_connection(&redis_pool)
+        let trade_connection = get_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
 

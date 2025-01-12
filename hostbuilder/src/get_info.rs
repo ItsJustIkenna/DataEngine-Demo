@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use databaseschema::{
     models::exchange::{Exchange, NewExchange},
@@ -15,14 +15,14 @@ use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
 use diesel::result::Error;
 use redis::cmd;
-use redis_utils::create_redis_connection;
+use redis_utils::get_redis_connection;
 
 pub async fn get_exchange(
     redis_pool: Arc<Pool<Manager, Connection>>,
     postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
     exchange: String,
 ) -> Result<Exchange, Error> {
-    let mut connection = create_redis_connection(&redis_pool)
+    let mut connection = get_redis_connection(&redis_pool)
         .await
         .expect("Failed to create redis connection");
 
@@ -100,7 +100,7 @@ pub async fn get_securities(
     postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
     symbols: &Vec<String>,
 ) -> Result<Vec<Security>, Error> {
-    let mut connection = create_redis_connection(&redis_pool)
+    let mut connection = get_redis_connection(&redis_pool)
         .await
         .expect("Failed to create redis connection");
 
@@ -108,49 +108,6 @@ pub async fn get_securities(
 
     let mut securities = vec![];
     for symbol in symbols.iter() {
-        match security_exists(postgres_pool.clone(), symbol).await {
-            true => {
-                println!("Security exists");
-                match get_security_by_symbol(postgres_pool.clone(), symbol).await {
-                    Ok(security) => {
-                        pipe.atomic()
-                            .cmd("HSET")
-                            .arg(format!("security:{}", &security.security_id))
-                            .arg("created_at")
-                            .arg(&security.created_at.to_string())
-                            .arg("security_id")
-                            .arg(&security.security_id.to_string())
-                            .arg("symbol")
-                            .arg(&security.symbol);
-                        securities.push(security);
-                    }
-                    Err(e) => {
-                        println!("Failed to get security by symbol: {}", e);
-                    }
-                };
-            }
-            false => {
-                println!("Security does not exist");
-                let new_security = NewSecurity::new(symbol);
-                match create_security(postgres_pool.clone(), new_security).await {
-                    Ok(security) => {
-                        pipe.atomic()
-                            .cmd("HSET")
-                            .arg(format!("security:{}", &security.security_id))
-                            .arg("created_at")
-                            .arg(&security.created_at.to_string())
-                            .arg("security_id")
-                            .arg(&security.security_id.to_string())
-                            .arg("symbol")
-                            .arg(&security.symbol);
-                        securities.push(security);
-                    }
-                    Err(e) => {
-                        println!("Failed to create security: {}", e);
-                    }
-                };
-            }
-        };
         match security_exists(postgres_pool.clone(), symbol).await {
             true => {
                 println!("Security exists");
@@ -213,14 +170,14 @@ pub async fn get_orderbooks(
     postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
     securities: Vec<Security>,
     exchange: &Exchange,
-) -> Result<Vec<OrderBook>, Error> {
-    let mut connection = create_redis_connection(&redis_pool)
+) -> Result<HashMap<String, OrderBook>, Error> {
+    let mut connection = get_redis_connection(&redis_pool)
         .await
         .expect("Failed to create redis connection");
 
     let mut pipe = redis::pipe();
 
-    let mut orderbooks = vec![];
+    let mut orderbooks = HashMap::new();
     for security in securities.iter() {
         match orderbook_exists(postgres_pool.clone(), &exchange.exchange_id).await {
             true => {
@@ -251,7 +208,7 @@ pub async fn get_orderbooks(
                             .arg("total_volume")
                             .arg(&order_book.total_volume.to_string());
 
-                        orderbooks.push(order_book);
+                        orderbooks.insert(security.symbol.clone(), order_book);
                     }
                     Err(e) => {
                         println!("Failed to get orderbook by exchange id: {}", e);
@@ -292,7 +249,7 @@ pub async fn get_orderbooks(
                             .arg("total_volume")
                             .arg(&order_book.total_volume.to_string());
 
-                        orderbooks.push(order_book);
+                        orderbooks.insert(security.symbol.clone(), order_book);
                     }
                     Err(e) => {
                         println!("Failed to create orderbook: {}", e);

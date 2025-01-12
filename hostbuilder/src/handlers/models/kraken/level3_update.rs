@@ -18,7 +18,7 @@ use databaseschema::{
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
 use redis::cmd;
-use redis_utils::create_redis_connection;
+use redis_utils::get_redis_connection;
 use serde::{Deserialize, Serialize};
 use tokio_retry::{strategy::FixedInterval, Retry};
 
@@ -26,7 +26,7 @@ use tokio_retry::{strategy::FixedInterval, Retry};
 pub struct Level3Update {
     channel: String,
     r#type: String,
-    data: Vec<Level3UpdateData>,
+    pub data: Vec<Level3UpdateData>,
 }
 
 impl Level3Update {
@@ -39,17 +39,17 @@ impl Level3Update {
         &self,
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
-        order_book: OrderBook,
+        order_book: &OrderBook,
     ) -> Result<()> {
         let retry_strategy = FixedInterval::from_millis(1).take(15);
 
-        let book_connection = create_redis_connection(&redis_pool)
+        let book_connection = get_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
-        let bid_connection = create_redis_connection(&redis_pool)
+        let bid_connection = get_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
-        let ask_connection = create_redis_connection(&redis_pool)
+        let ask_connection = get_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
 
@@ -566,7 +566,7 @@ impl Level3Update {
                 }
             }
 
-            match update_orderbook(postgres_pool.clone(), order_book, total_volume).await {
+            match update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume).await {
                 Ok(_) => {
                     println!("Updated order book in postgres");
                 }
@@ -584,8 +584,8 @@ impl Level3Update {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Level3UpdateData {
-    symbol: String,
+pub struct Level3UpdateData {
+    pub symbol: String,
     checksum: i64,
     bids: Vec<UpdateOrder>,
     asks: Vec<UpdateOrder>,

@@ -20,7 +20,7 @@ use databaseschema::{
 use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
 use redis::cmd;
-use redis_utils::create_redis_connection;
+use redis_utils::get_redis_connection;
 use serde::{Deserialize, Serialize};
 use tokio_retry::{strategy::FixedInterval, Retry};
 
@@ -28,7 +28,7 @@ use tokio_retry::{strategy::FixedInterval, Retry};
 pub struct Level3Snapshot {
     channel: String,
     r#type: String,
-    data: Vec<Level3SnapshotData>,
+    pub data: Vec<Level3SnapshotData>,
 }
 
 impl Level3Snapshot {
@@ -41,17 +41,17 @@ impl Level3Snapshot {
         &self,
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
-        order_book: OrderBook,
+        order_book: &OrderBook,
     ) -> Result<()> {
         let retry_strategy = FixedInterval::from_millis(1).take(15);
         
-        let mut book_connection = create_redis_connection(&redis_pool)
+        let mut book_connection = get_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
-        let bid_connection = create_redis_connection(&redis_pool)
+        let bid_connection = get_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
-        let ask_connection = create_redis_connection(&redis_pool)
+        let ask_connection = get_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
 
@@ -285,11 +285,10 @@ impl Level3Snapshot {
                 println!("All retries failed for redis commands: {}", e);
             }  
             
-            match update_orderbook(postgres_pool.clone(), order_book, total_volume).await {
+            match update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume).await {
                 Ok(_) => println!("Updated order book in postgres"),
                 Err(e) => println!("Failed to update order book in postgres: {}", e),
             };
-            
             Ok(())
         } else {
             println!("Channel is not level3");
@@ -299,8 +298,8 @@ impl Level3Snapshot {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Level3SnapshotData {
-    symbol: String,
+pub struct Level3SnapshotData {
+    pub symbol: String,
     checksum: i64,
     bids: Vec<SnapshotOrder>,
     asks: Vec<SnapshotOrder>,

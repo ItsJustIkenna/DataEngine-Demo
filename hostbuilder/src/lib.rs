@@ -17,7 +17,7 @@ use handlers::{
 };
 use mockall::automock;
 use redis::cmd;
-use redis_utils::{create_redis_pool, create_redis_connection};
+use redis_utils::{create_redis_pool, get_redis_connection};
 use serde_json::json;
 use std::{env, sync::Arc};
 use tokio::{signal, sync::broadcast::channel};
@@ -124,32 +124,29 @@ impl HostedObjectTrait for HostedObject {
                                                                 }
                                                             });
                 
-                                                            for orderbook in orderbooks.iter() {
-                                                                match KrakenWebSocketHandler::new(
-                                                                    &websocket.endpoint,
-                                                                    orderbook.clone(),
-                                                                    &subscribe_message,
-                                                                    &unsubscribe_message,
-                                                                    redis_pool.clone(),
-                                                                    postgres_pool.clone(),
-                                                                )
-                                                                .await
-                                                                {
-                                                                    Ok(handler) => {
-                                                                        let handler = Arc::new(handler);
-                                                                        match handler.listen(shutdown_tx.subscribe()).await
-                                                                        {
-                                                                            Ok(_) => {
-                                                                                println!(
-                                                                                    "Listening to Kraken level 3 {}",
-                                                                                    orderbook.symbol
-                                                                                );
-                                                                            }
-                                                                            Err(e) => error!("Failed to listen: {}", e),
+                                                            match KrakenWebSocketHandler::new(
+                                                                &websocket.endpoint,
+                                                                orderbooks.clone(),
+                                                                &subscribe_message,
+                                                                &unsubscribe_message,
+                                                                redis_pool.clone(),
+                                                                postgres_pool.clone(),
+                                                            )
+                                                            .await
+                                                            {
+                                                                Ok(handler) => {
+                                                                    let handler = Arc::new(handler);
+                                                                    match handler.listen(shutdown_tx.subscribe()).await
+                                                                    {
+                                                                        Ok(_) => {
+                                                                            println!(
+                                                                                "Listening to Kraken level 3"
+                                                                            );
                                                                         }
+                                                                        Err(e) => error!("Failed to listen: {}", e),
                                                                     }
-                                                                    Err(e) => error!("Failed to create handler: {}", e),
                                                                 }
+                                                                Err(e) => error!("Failed to create handler: {}", e),
                                                             }
                                                         }
                                                         "trade" => {
@@ -171,32 +168,29 @@ impl HostedObjectTrait for HostedObject {
                                                                 }
                                                             });
                 
-                                                            for orderbook in orderbooks.iter() {
-                                                                match KrakenWebSocketHandler::new(
-                                                                    &websocket.endpoint,
-                                                                    orderbook.clone(),
-                                                                    &subscribe_message,
-                                                                    &unsubscribe_message,
-                                                                    redis_pool.clone(),
-                                                                    postgres_pool.clone(),
-                                                                )
-                                                                .await
-                                                                {
-                                                                    Ok(handler) => {
-                                                                        let handler = Arc::new(handler);
-                                                                        match handler.listen(shutdown_tx.subscribe()).await
-                                                                        {
-                                                                            Ok(_) => {
-                                                                                println!(
-                                                                                    "Listening to Kraken trade {}",
-                                                                                    orderbook.symbol
-                                                                                );
-                                                                            }
-                                                                            Err(e) => error!("Failed to listen: {}", e),
+                                                            match KrakenWebSocketHandler::new(
+                                                                &websocket.endpoint,
+                                                                orderbooks.clone(),
+                                                                &subscribe_message,
+                                                                &unsubscribe_message,
+                                                                redis_pool.clone(),
+                                                                postgres_pool.clone(),
+                                                            )
+                                                            .await
+                                                            {
+                                                                Ok(handler) => {
+                                                                    let handler = Arc::new(handler);
+                                                                    match handler.listen(shutdown_tx.subscribe()).await
+                                                                    {
+                                                                        Ok(_) => {
+                                                                            println!(
+                                                                                "Listening to Kraken trade"
+                                                                            );
                                                                         }
+                                                                        Err(e) => error!("Failed to listen: {}", e),
                                                                     }
-                                                                    Err(e) => error!("Failed to create handler: {}", e),
                                                                 }
+                                                                Err(e) => error!("Failed to create handler: {}", e),
                                                             }
                                                         }
                                                         _ => {
@@ -234,7 +228,7 @@ impl HostedObjectTrait for HostedObject {
                 error!("Failed to listen for shutdown signal: {}", e);
             }
 
-            let mut connection = create_redis_connection(&redis_pool)
+            let mut connection = get_redis_connection(&redis_pool)
                 .await
                 .expect("Failed to create redis connection");
             match cmd("FLUSHALL").query_async::<_, ()>(&mut connection).await {
