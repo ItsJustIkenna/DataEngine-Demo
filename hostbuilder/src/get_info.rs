@@ -27,7 +27,7 @@ pub async fn get_exchange(
         .expect("Failed to create redis connection");
 
     match exchange_exists(postgres_pool.clone(), &exchange).await {
-        Ok(true) => {
+        true => {
             println!("Exchange exists");
 
             match get_exchanges_by_name(postgres_pool.clone(), &exchange).await {
@@ -59,7 +59,7 @@ pub async fn get_exchange(
                 }
             }
         }
-        Ok(false) => {
+        false => {
             println!("Exchange does not exist");
             let new_exchange = NewExchange::new(&exchange);
 
@@ -92,10 +92,6 @@ pub async fn get_exchange(
                 }
             }
         }
-        Err(e) => {
-            println!("Failed to check if exchange exists: {}", e);
-            Err(e)
-        }
     }
 }
 
@@ -113,7 +109,7 @@ pub async fn get_securities(
     let mut securities = vec![];
     for symbol in symbols.iter() {
         match security_exists(postgres_pool.clone(), symbol).await {
-            Ok(true) => {
+            true => {
                 println!("Security exists");
                 match get_security_by_symbol(postgres_pool.clone(), symbol).await {
                     Ok(security) => {
@@ -133,7 +129,7 @@ pub async fn get_securities(
                     }
                 };
             }
-            Ok(false) => {
+            false => {
                 println!("Security does not exist");
                 let new_security = NewSecurity::new(symbol);
                 match create_security(postgres_pool.clone(), new_security).await {
@@ -153,13 +149,10 @@ pub async fn get_securities(
                         println!("Failed to create security: {}", e);
                     }
                 };
-            }
-            Err(e) => {
-                println!("Failed to check if security exists: {}", e);
             }
         };
         match security_exists(postgres_pool.clone(), symbol).await {
-            Ok(true) => {
+            true => {
                 println!("Security exists");
                 match get_security_by_symbol(postgres_pool.clone(), symbol).await {
                     Ok(security) => {
@@ -179,7 +172,7 @@ pub async fn get_securities(
                     }
                 };
             }
-            Ok(false) => {
+            false => {
                 println!("Security does not exist");
                 let new_security = NewSecurity::new(symbol);
                 match create_security(postgres_pool.clone(), new_security).await {
@@ -199,9 +192,6 @@ pub async fn get_securities(
                         println!("Failed to create security: {}", e);
                     }
                 };
-            }
-            Err(e) => {
-                println!("Failed to check if security exists: {}", e);
             }
         };
     }
@@ -233,7 +223,7 @@ pub async fn get_orderbooks(
     let mut orderbooks = vec![];
     for security in securities.iter() {
         match orderbook_exists(postgres_pool.clone(), &exchange.exchange_id).await {
-            Ok(true) => {
+            true => {
                 println!("Orderbook exists");
                 match get_orderbook_by_exchange_id(postgres_pool.clone(), &exchange.exchange_id).await {
                     Ok(order_book) => {
@@ -268,7 +258,7 @@ pub async fn get_orderbooks(
                     }
                 };
             }
-            Ok(false) => {
+            false => {
                 println!("Orderbook does not exist");
                 let new_orderbook = NewOrderBook::new(
                     &security.symbol,
@@ -308,9 +298,6 @@ pub async fn get_orderbooks(
                         println!("Failed to create orderbook: {}", e);
                     }
                 };
-            }
-            Err(e) => {
-                println!("Failed to check if orderbook exists: {}", e);
             }
         };
     }
