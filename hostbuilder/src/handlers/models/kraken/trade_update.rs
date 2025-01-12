@@ -82,7 +82,7 @@ impl TradeUpdate {
                 trades.push(new_trade);
             }
 
-            Retry::spawn(retry_strategy, || async {
+            let result = Retry::spawn(retry_strategy, || async {
                 match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
                     Ok(_) => {
                         println!("Added trades to redis");
@@ -93,9 +93,17 @@ impl TradeUpdate {
                         Err(e)
                     }
                 }
-            }).await?;
+            }).await;
 
-            create_trades(postgres_pool.clone(), trades).await;
+            match result {
+                Ok(_) => println!("Added trades to redis"),
+                Err(e) => println!("Failed to add trades to redis: {}", e),
+            }
+
+            match create_trades(postgres_pool.clone(), trades).await {
+                Ok(_) => println!("Added trades to postgres"),
+                Err(e) => println!("Failed to add trades to postgres: {}", e),
+            };
 
             Ok(())
         } else {

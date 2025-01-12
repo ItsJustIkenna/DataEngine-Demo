@@ -1,6 +1,6 @@
 use std::{str::FromStr, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{Result, Error};
 use bigdecimal::{BigDecimal, Zero};
 use databaseschema::{
     models::{modified_buy_order::NewModifiedBuyOrder,
@@ -43,7 +43,7 @@ impl Level3Update {
     ) -> Result<()> {
         let retry_strategy = FixedInterval::from_millis(1).take(15);
 
-        let mut book_connection = create_redis_connection(&redis_pool)
+        let book_connection = create_redis_connection(&redis_pool)
             .await
             .expect("Failed to create redis connection");
         let bid_connection = create_redis_connection(&redis_pool)
@@ -79,7 +79,15 @@ impl Level3Update {
                         Err(e)
                     },
                 }
-            }).await?;
+            }).await;
+
+            let total_volume = match total_volume {
+                Ok(volume) => volume,
+                Err(e) => {
+                    println!("All retries failed for redis commands: {}", e);
+                    "0".to_string()
+                }
+            };  
 
             let mut bid_volume = BigDecimal::zero();
             let mut ask_volume = BigDecimal::zero();
@@ -151,7 +159,15 @@ impl Level3Update {
                                     Err(e)
                                 },
                             }
-                        }).await?;
+                        }).await;
+
+                        let buy_quantity = match buy_quantity {
+                            Ok(volume) => volume,
+                            Err(e) => {
+                                println!("All retries failed for redis commands: {}", e);
+                                "0".to_string()
+                            }
+                        };
 
                         let buy_quantity = BigDecimal::from_str(&buy_quantity).expect("Failed to convert total volume to BigDecimal");
 
@@ -220,7 +236,7 @@ impl Level3Update {
                         delete_orders.push(&bid.order_id);
                     }
                 }
-                let _ = Retry::spawn(retry_strategy.clone(), || async {
+                let result = Retry::spawn(retry_strategy.clone(), || async {
                     match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
                         Ok(_) => {
                             println!("Batch added, modified, and deleted buy orders to/from redis");
@@ -232,11 +248,53 @@ impl Level3Update {
                         }
                     }
                 }).await;
-                create_open_buy_orders(postgres_pool.clone(), buy_orders).await;
-                create_modified_buy_orders(postgres_pool.clone(), modified_orders).await;
-                delete_open_buy_orders(postgres_pool.clone(), &delete_orders).await;
-                delete_modified_buy_orders(postgres_pool.clone(), &delete_orders).await;
-                Ok::<(), anyhow::Error>(())
+
+                match result {
+                    Ok(_) => {
+                        println!("Added, modified, and deleted buy orders to/from redis");
+                    }
+                    Err(e) => {
+                        println!("Failed to add, modify, and delete buy orders to/from redis: {}", e);
+                    }
+                }
+
+                match create_open_buy_orders(postgres_pool.clone(), buy_orders).await {
+                    Ok(_) => {
+                        println!("Added open buy orders to postgres");
+                    }
+                    Err(e) => {
+                        println!("Failed to add open buy orders to postgres: {}", e);
+                    }
+                };
+
+                match create_modified_buy_orders(postgres_pool.clone(), modified_orders).await {
+                    Ok(_) => {
+                        println!("Added modified buy orders to postgres");
+                    }
+                    Err(e) => {
+                        println!("Failed to add modified buy orders to postgres: {}", e);
+                    }
+                };
+
+                match delete_open_buy_orders(postgres_pool.clone(), &delete_orders).await {
+                    Ok(_) => {
+                        println!("Deleted open buy orders from postgres");
+                    }
+                    Err(e) => {
+                        println!("Failed to delete open buy orders from postgres: {}", e);
+                    }
+                };
+
+                match delete_modified_buy_orders(postgres_pool.clone(), &delete_orders).await {
+                    Ok(_) => {
+                        println!("Deleted modified buy orders from postgres");
+                    }
+                    Err(e) => {
+                        println!("Failed to delete modified buy orders from postgres: {}", e);
+                    }
+                };
+
+                Ok::<(), Error>(())
             };
 
             let ask_futures = async {
@@ -304,7 +362,15 @@ impl Level3Update {
                                     Err(e)
                                 },
                             }
-                        }).await?;
+                        }).await;
+
+                        let ask_quantity = match ask_quantity {
+                            Ok(volume) => volume,
+                            Err(e) => {
+                                println!("All retries failed for redis commands: {}", e);
+                                "0".to_string()
+                            }
+                        };
 
                         let ask_quantity = BigDecimal::from_str(&ask_quantity).expect("Failed to convert total volume to BigDecimal");
 
@@ -373,7 +439,7 @@ impl Level3Update {
                         delete_orders.push(&ask.order_id);
                     }
                 }
-                Retry::spawn(retry_strategy.clone(), || async {
+                let result = Retry::spawn(retry_strategy.clone(), || async {
                     match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
                         Ok(_) => {
                             println!("Batch added, modified, and deleted sell orders to/from redis");
@@ -384,22 +450,80 @@ impl Level3Update {
                             Err(e)
                         }
                     }
-                }).await?;
-                create_open_sell_orders(postgres_pool.clone(), sell_orders).await;
-                create_modified_sell_orders(postgres_pool.clone(), modified_orders).await;
-                delete_open_sell_orders(postgres_pool.clone(), &delete_orders).await;
-                delete_modified_sell_orders(postgres_pool.clone(), &delete_orders).await;
-                Ok::<(), anyhow::Error>(())
+                }).await;
+
+                match result {
+                    Ok(_) => {
+                        println!("Added, modified, and deleted sell orders to/from redis");
+                    }
+                    Err(e) => {
+                        println!("Failed to add, modify, and delete sell orders to/from redis: {}", e);
+                    }
+                }
+
+                match create_open_sell_orders(postgres_pool.clone(), sell_orders).await {
+                    Ok(_) => {
+                        println!("Added open sell orders to postgres");
+                    }
+                    Err(e) => {
+                        println!("Failed to add open sell orders to postgres: {}", e);
+                    }
+                };
+
+                match create_modified_sell_orders(postgres_pool.clone(), modified_orders).await {
+                    Ok(_) => {
+                        println!("Added modified sell orders to postgres");
+                    }
+                    Err(e) => {
+                        println!("Failed to add modified sell orders to postgres: {}", e);
+                    }
+                };
+
+                match delete_open_sell_orders(postgres_pool.clone(), &delete_orders).await {
+                    Ok(_) => {
+                        println!("Deleted open sell orders from postgres");
+                    }
+                    Err(e) => {
+                        println!("Failed to delete open sell orders from postgres: {}", e);
+                    }
+                };
+
+                match delete_modified_sell_orders(postgres_pool.clone(), &delete_orders).await {
+                    Ok(_) => {
+                        println!("Deleted modified sell orders from postgres");
+                    }
+                    Err(e) => {
+                        println!("Failed to delete modified sell orders from postgres: {}", e);
+                    }
+                };
+
+                Ok::<(), Error>(())
             };
 
             let (bid_result, ask_result) = tokio::join!(bid_futures, ask_futures);
 
-            bid_result?;
-            ask_result?;
+            match bid_result {
+                Ok(_) => {
+                    println!("Added, modified, and deleted buy orders to/from redis");
+                }
+                Err(e) => {
+                    println!("Failed to add, modify, and delete buy orders to/from redis: {}", e);
+                }
+            }
+            
+            match ask_result {
+                Ok(_) => {
+                    println!("Added, modified, and deleted sell orders to/from redis");
+                }
+                Err(e) => {
+                    println!("Failed to add, modify, and delete sell orders to/from redis: {}", e);
+                }
+            }
 
             total_volume += bid_volume + ask_volume;
 
-            match cmd("HSET")
+            let result = Retry::spawn(retry_strategy.clone(), || async {
+                match cmd("HSET")
                 .arg(format!("order_book:{}", order_book.order_book_id))
                 .arg("created_at")
                 .arg(&order_book.created_at.to_string())
@@ -419,9 +543,21 @@ impl Level3Update {
                 .arg(&order_book.sell_order_book_id.to_string())
                 .arg("total_volume")
                 .arg(&total_volume.to_string())
-                .query_async::<_, ()>(&mut book_connection)
+                .query_async::<_, ()>(&mut book_connection.clone())
                 .await
-            {
+                {
+                    Ok(_) => {
+                        println!("Updated order book in redis");
+                        Ok(())
+                    }
+                    Err(e) => {
+                        println!("Failed to update order book in redis: {}", e);
+                        Err(e)
+                    }
+                }
+            }).await;
+
+            match result {
                 Ok(_) => {
                     println!("Updated order book in redis");
                 }
@@ -429,7 +565,16 @@ impl Level3Update {
                     println!("Failed to update order book in redis: {}", e);
                 }
             }
-            update_orderbook(postgres_pool.clone(), order_book, total_volume).await;
+
+            match update_orderbook(postgres_pool.clone(), order_book, total_volume).await {
+                Ok(_) => {
+                    println!("Updated order book in postgres");
+                }
+                Err(e) => {
+                    println!("Failed to update order book in postgres: {}", e);
+                }
+            }
+            
             Ok(())
         } else {
             println!("Channel is not level3");

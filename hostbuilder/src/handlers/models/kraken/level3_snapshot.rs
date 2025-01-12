@@ -115,7 +115,7 @@ impl Level3Snapshot {
                         buy_orders.push(order);
                     }
 
-                    let _ = Retry::spawn(retry_strategy.clone(), || async {
+                    let result = Retry::spawn(retry_strategy.clone(), || async {
                         match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
                             Ok(_) => {
                                 println!("Added buy orders to redis");
@@ -127,9 +127,15 @@ impl Level3Snapshot {
                             },
                         }
                     }).await;
-                    
 
-                    create_open_buy_orders(postgres_pool.clone(), buy_orders).await;
+                    if let Err(e) = result {
+                        println!("All retries failed for redis commands: {}", e);
+                    }                    
+
+                    match create_open_buy_orders(postgres_pool.clone(), buy_orders).await {
+                        Ok(_) => println!("Added buy orders to postgres"),
+                        Err(e) => println!("Failed to add buy orders to postgres: {}", e),
+                    };
                 }
             };
 
@@ -178,7 +184,7 @@ impl Level3Snapshot {
                         add_sell_orders.push(order);
                     }
 
-                    let _ = Retry::spawn(retry_strategy.clone(), || async {
+                    let result = Retry::spawn(retry_strategy.clone(), || async {
                         match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
                             Ok(_) => {
                                 println!("Added sell orders to redis");
@@ -191,7 +197,14 @@ impl Level3Snapshot {
                         }
                     }).await;
 
-                    create_open_sell_orders(postgres_pool.clone(), add_sell_orders).await;
+                    if let Err(e) = result {
+                        println!("All retries failed for redis commands: {}", e);
+                    }  
+
+                    match create_open_sell_orders(postgres_pool.clone(), add_sell_orders).await {
+                        Ok(_) => println!("Added sell orders to postgres"),
+                        Err(e) => println!("Failed to add sell orders to postgres: {}", e),
+                    };
                 }
             };
 
@@ -233,7 +246,7 @@ impl Level3Snapshot {
                 }
             }
 
-            let _ = Retry::spawn(retry_strategy.clone(), || async {
+            let result = Retry::spawn(retry_strategy.clone(), || async {
                 match cmd("HSET")
                 .arg(format!("order_book:{}", order_book.order_book_id))
                 .arg("created_at")
@@ -267,7 +280,16 @@ impl Level3Snapshot {
                 }
             }
             }).await;
-            update_orderbook(postgres_pool.clone(), order_book, total_volume).await;
+
+            if let Err(e) = result {
+                println!("All retries failed for redis commands: {}", e);
+            }  
+            
+            match update_orderbook(postgres_pool.clone(), order_book, total_volume).await {
+                Ok(_) => println!("Updated order book in postgres"),
+                Err(e) => println!("Failed to update order book in postgres: {}", e),
+            };
+            
             Ok(())
         } else {
             println!("Channel is not level3");
