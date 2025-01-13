@@ -256,6 +256,7 @@ pub async fn get_orderbooks(
             }
         };
     }
+    std::process::exit(0);
 
     match pipe.query_async::<_, ()>(&mut connection).await {
         Ok(_) => {
