@@ -179,7 +179,7 @@ pub async fn get_orderbooks(
     for security in securities.iter() {
         match orderbook_exists(postgres_pool.clone(), &security.symbol).await {
             true => {
-                println!("Orderbook exists");
+                println!("Orderbook exists for security: {}", security.symbol);
                 match get_orderbook_by_symbol(postgres_pool.clone(), &security.symbol).await {
                     Ok(order_book) => {
                         pipe.atomic()
@@ -214,7 +214,7 @@ pub async fn get_orderbooks(
                 };
             }
             false => {
-                println!("Orderbook does not exist");
+                println!("Orderbook does not exist for security: {}", security.symbol);
                 let new_orderbook = NewOrderBook::new(
                     &security.symbol,
                     &exchange.exchange,
