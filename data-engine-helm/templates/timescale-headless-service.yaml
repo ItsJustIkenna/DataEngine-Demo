@@ -7,6 +7,6 @@ spec:
   selector:
     app: {{ .Values.database }}
   ports:
-  - port: 39237
-    targetPort: 39237
+  - port: 35278
+    targetPort: 35278
     name: {{ .Values.database }}
