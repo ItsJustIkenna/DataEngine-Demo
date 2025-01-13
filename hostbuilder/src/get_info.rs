@@ -4,7 +4,7 @@ use databaseschema::{
     models::{exchange::{Exchange, NewExchange}, orderbook::{NewOrderBook, OrderBook}, security::{NewSecurity, Security}},
     ops::{
         exchanges_ops::{create_exchange, exchange_exists, get_exchanges_by_name},
-        order_book_ops::{create_orderbook, get_orderbook_by_symbol, orderbook_exists},
+        order_book_ops::{create_orderbook, get_orderbook_by_exchange_id_and_security_id, orderbook_exists},
         securities_ops::{create_security, get_security_by_symbol, security_exists},
     },
     CustomAsyncPgConnectionManager,
@@ -177,10 +177,10 @@ pub async fn get_orderbooks(
 
     let mut orderbooks = HashMap::new();
     for security in securities.iter() {
-        match orderbook_exists(postgres_pool.clone(), &security.symbol).await {
+        match orderbook_exists(postgres_pool.clone(), security.security_id).await {
             true => {
                 println!("Orderbook exists for security: {}", security.symbol);
-                match get_orderbook_by_symbol(postgres_pool.clone(), &security.symbol).await {
+                match get_orderbook_by_exchange_id_and_security_id(postgres_pool.clone(), exchange.exchange_id, security.security_id).await {
                     Ok(order_book) => {
                         pipe.atomic()
                             .cmd("HSET")
