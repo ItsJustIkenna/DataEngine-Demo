@@ -61,155 +61,153 @@ impl HostedObjectTrait for HostedObject {
         let config = self.config.clone();
 
         for exchange in config.exchanges.iter().cloned() {
-            if exchange.exchange == "Kraken" {
+            if exchange.name == "Kraken" {
                 match get_exchange(
                     self.redis_pool.clone(),
                     self.postgres_pool.clone(),
-                    exchange.exchange,
+                    exchange.name,
                 )
                 .await {
                     Ok(kraken_exchange) => {
-                        println!("Successfully retrieved exchange: {}", kraken_exchange.exchange);
+                        println!("Successfully retrieved exchange: {}", kraken_exchange.name);
                         let auth_endpoint = exchange.websocket_token.clone();
                         let api_response = KrakenRestHandler::authenticate(&auth_endpoint).await?;
 
-                        for api in exchange.apis.iter().cloned() {
-                            for websocket in api.websockets.iter().cloned() {
-                                let api_response = api_response.clone();
+                        for websocket in exchange.websockets.iter().cloned() {
+                            let api_response = api_response.clone();
 
-                                match get_securities(
-                                    self.redis_pool.clone(),
-                                    self.postgres_pool.clone(),
-                                    &exchange.symbols,
-                                )
-                                .await {
-                                    Ok(securities) => {
-                                        println!("Successfully retrieved securities");
-                                        match get_orderbooks(
-                                            self.redis_pool.clone(),
-                                            self.postgres_pool.clone(),
-                                            securities,
-                                            &kraken_exchange,
-                                        )
-                                        .await {
-                                            Ok(orderbooks) => {
-                                                println!("Successfully retrieved orderbooks");
-                                                let orderbooks = orderbooks.clone();
-                                                let shutdown_tx = shutdown_tx.clone();
-                                                let redis_pool = self.redis_pool.clone();
-                                                let postgres_pool = self.postgres_pool.clone();
-                                                let symbols = exchange.symbols.clone();
-                                                let handle = tokio::spawn(async move {
-                                                    info!("Connecting to {:?}", &websocket.endpoint);
-                
-                                                    match websocket.channel.as_str() {
-                                                        "level3" => {
-                                                            let subscribe_message = json!({
-                                                                "method": "subscribe",
-                                                                "params": {
-                                                                    "channel": &websocket.channel,
-                                                                    "symbol": &symbols,
-                                                                    "depth": &exchange.depth,
-                                                                    "snapshot": true,
-                                                                    "token": &api_response.get_token(),
-                                                                }
-                                                            });
-                
-                                                            let unsubscribe_message = json!({
-                                                                "method": "unsubscribe",
-                                                                "params": {
-                                                                    "channel": &websocket.channel,
-                                                                    "symbol": &symbols,
-                                                                    "token": &api_response.get_token(),
-                                                                }
-                                                            });
-                
-                                                            match KrakenWebSocketHandler::new(
-                                                                &websocket.endpoint,
-                                                                orderbooks.clone(),
-                                                                &subscribe_message,
-                                                                &unsubscribe_message,
-                                                                redis_pool.clone(),
-                                                                postgres_pool.clone(),
-                                                            )
-                                                            .await
-                                                            {
-                                                                Ok(handler) => {
-                                                                    let handler = Arc::new(handler);
-                                                                    match handler.listen(shutdown_tx.subscribe()).await
-                                                                    {
-                                                                        Ok(_) => {
-                                                                            println!(
-                                                                                "Listening to Kraken level 3"
-                                                                            );
-                                                                        }
-                                                                        Err(e) => error!("Failed to listen: {}", e),
-                                                                    }
-                                                                }
-                                                                Err(e) => error!("Failed to create handler: {}", e),
+                            match get_securities(
+                                self.redis_pool.clone(),
+                                self.postgres_pool.clone(),
+                                &exchange.symbols,
+                            )
+                            .await {
+                                Ok(securities) => {
+                                    println!("Successfully retrieved securities: {:?}", securities);
+                                    match get_orderbooks(
+                                        self.redis_pool.clone(),
+                                        self.postgres_pool.clone(),
+                                        securities,
+                                        &kraken_exchange,
+                                    )
+                                    .await {
+                                        Ok(orderbooks) => {
+                                            println!("Successfully retrieved orderbooks");
+                                            let orderbooks = orderbooks.clone();
+                                            let shutdown_tx = shutdown_tx.clone();
+                                            let redis_pool = self.redis_pool.clone();
+                                            let postgres_pool = self.postgres_pool.clone();
+                                            let symbols = exchange.symbols.clone();
+                                            let handle = tokio::spawn(async move {
+                                                info!("Connecting to {:?}", &websocket.endpoint);
+            
+                                                match websocket.channel.as_str() {
+                                                    "level3" => {
+                                                        let subscribe_message = json!({
+                                                            "method": "subscribe",
+                                                            "params": {
+                                                                "channel": &websocket.channel,
+                                                                "symbol": &symbols,
+                                                                "depth": &exchange.depth,
+                                                                "snapshot": true,
+                                                                "token": &api_response.get_token(),
                                                             }
-                                                        }
-                                                        "trade" => {
-                                                            let subscribe_message = json!({
-                                                                "method": "subscribe",
-                                                                "params": {
-                                                                    "channel": &websocket.channel,
-                                                                    "symbol": &symbols,
-                                                                    "snapshot": true
-                                                                }
-                                                            });
-                
-                                                            let unsubscribe_message = json!({
-                                                                "method": "unsubscribe",
-                                                                "params": {
-                                                                    "channel": &websocket.channel,
-                                                                    "symbol": symbols,
-                                                                    "snapshot": true
-                                                                }
-                                                            });
-                
-                                                            match KrakenWebSocketHandler::new(
-                                                                &websocket.endpoint,
-                                                                orderbooks.clone(),
-                                                                &subscribe_message,
-                                                                &unsubscribe_message,
-                                                                redis_pool.clone(),
-                                                                postgres_pool.clone(),
-                                                            )
-                                                            .await
-                                                            {
-                                                                Ok(handler) => {
-                                                                    let handler = Arc::new(handler);
-                                                                    match handler.listen(shutdown_tx.subscribe()).await
-                                                                    {
-                                                                        Ok(_) => {
-                                                                            println!(
-                                                                                "Listening to Kraken trade"
-                                                                            );
-                                                                        }
-                                                                        Err(e) => error!("Failed to listen: {}", e),
-                                                                    }
-                                                                }
-                                                                Err(e) => error!("Failed to create handler: {}", e),
+                                                        });
+            
+                                                        let unsubscribe_message = json!({
+                                                            "method": "unsubscribe",
+                                                            "params": {
+                                                                "channel": &websocket.channel,
+                                                                "symbol": &symbols,
+                                                                "token": &api_response.get_token(),
                                                             }
+                                                        });
+            
+                                                        match KrakenWebSocketHandler::new(
+                                                            &websocket.endpoint,
+                                                            orderbooks.clone(),
+                                                            &subscribe_message,
+                                                            &unsubscribe_message,
+                                                            redis_pool.clone(),
+                                                            postgres_pool.clone(),
+                                                        )
+                                                        .await
+                                                        {
+                                                            Ok(handler) => {
+                                                                let handler = Arc::new(handler);
+                                                                match handler.listen(shutdown_tx.subscribe()).await
+                                                                {
+                                                                    Ok(_) => {
+                                                                        println!(
+                                                                            "Listening to Kraken level 3"
+                                                                        );
+                                                                    }
+                                                                    Err(e) => error!("Failed to listen: {}", e),
+                                                                }
+                                                            }
+                                                            Err(e) => error!("Failed to create handler: {}", e),
                                                         }
-                                                        _ => {
-                                                            info!("Unknown websocket type: {}", websocket.channel.as_str());
+                                                    }
+                                                    "trade" => {
+                                                        let subscribe_message = json!({
+                                                            "method": "subscribe",
+                                                            "params": {
+                                                                "channel": &websocket.channel,
+                                                                "symbol": &symbols,
+                                                                "snapshot": true
+                                                            }
+                                                        });
+            
+                                                        let unsubscribe_message = json!({
+                                                            "method": "unsubscribe",
+                                                            "params": {
+                                                                "channel": &websocket.channel,
+                                                                "symbol": symbols,
+                                                                "snapshot": true
+                                                            }
+                                                        });
+            
+                                                        match KrakenWebSocketHandler::new(
+                                                            &websocket.endpoint,
+                                                            orderbooks.clone(),
+                                                            &subscribe_message,
+                                                            &unsubscribe_message,
+                                                            redis_pool.clone(),
+                                                            postgres_pool.clone(),
+                                                        )
+                                                        .await
+                                                        {
+                                                            Ok(handler) => {
+                                                                let handler = Arc::new(handler);
+                                                                match handler.listen(shutdown_tx.subscribe()).await
+                                                                {
+                                                                    Ok(_) => {
+                                                                        println!(
+                                                                            "Listening to Kraken trade"
+                                                                        );
+                                                                    }
+                                                                    Err(e) => error!("Failed to listen: {}", e),
+                                                                }
+                                                            }
+                                                            Err(e) => error!("Failed to create handler: {}", e),
                                                         }
-                                                    };
-                                                });
-                                                handles.push(handle);
-                                            }
-                                            Err(e) => {
-                                                println!("Failed to retrieve orderbooks: {}", e);
-                                            }
-                                        }; 
-                                    }
-                                    Err(e) => {
-                                        println!("Failed to retrieve securities: {}", e);
-                                    }
-                                }; 
-                            }
+                                                    }
+                                                    _ => {
+                                                        info!("Unknown websocket type: {}", websocket.channel.as_str());
+                                                    }
+                                                };
+                                            });
+                                            handles.push(handle);
+                                        }
+                                        Err(e) => {
+                                            println!("Failed to retrieve orderbooks: {}", e);
+                                        }
+                                    }; 
+                                }
+                                Err(e) => {
+                                    println!("Failed to retrieve securities: {}", e);
+                                }
+                            }; 
                         }
                     }
                     Err(e) => {
@@ -217,7 +215,7 @@ impl HostedObjectTrait for HostedObject {
                     }
                 }
             } else {
-                println!("Unknown exchange: {}", exchange.exchange);
+                println!("Unknown exchange: {}", exchange.name);
             }
         }
 

@@ -18,17 +18,17 @@ use redis_utils::get_redis_connection;
 pub async fn get_exchange(
     redis_pool: Arc<Pool<Manager, Connection>>,
     postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
-    exchange: String,
+    name: String,
 ) -> Result<Exchange, Error> {
     let mut connection = get_redis_connection(&redis_pool)
         .await
         .expect("Failed to create redis connection");
 
-    match exchange_exists(postgres_pool.clone(), &exchange).await {
+    match exchange_exists(postgres_pool.clone(), &name).await {
         true => {
             println!("Exchange exists");
 
-            match get_exchanges_by_name(postgres_pool.clone(), &exchange).await {
+            match get_exchanges_by_name(postgres_pool.clone(), &name).await {
                 Ok(exchange) => {
                     match cmd("HSET")
                         .arg(format!("exchange:{}", &exchange.exchange_id))
@@ -37,7 +37,7 @@ pub async fn get_exchange(
                         .arg("exchange_id")
                         .arg(&exchange.exchange_id.to_string())
                         .arg("exchange")
-                        .arg(&exchange.exchange)
+                        .arg(&exchange.name)
                         .query_async::<_, ()>(&mut connection)
                         .await
                     {
@@ -59,7 +59,7 @@ pub async fn get_exchange(
         }
         false => {
             println!("Exchange does not exist");
-            let new_exchange = NewExchange::new(&exchange);
+            let new_exchange = NewExchange::new(&name);
 
             match create_exchange(postgres_pool.clone(), new_exchange).await {
                 Ok(exchange) => {
@@ -70,7 +70,7 @@ pub async fn get_exchange(
                         .arg("exchange_id")
                         .arg(&exchange.exchange_id.to_string())
                         .arg("exchange")
-                        .arg(&exchange.exchange)
+                        .arg(&exchange.name)
                         .query_async::<_, ()>(&mut connection)
                         .await
                     {
@@ -209,7 +209,7 @@ pub async fn get_orderbooks(
                         orderbooks.insert(security.symbol.clone(), order_book);
                     }
                     Err(e) => {
-                        println!("Failed to get orderbook by exchange id: {}", e);
+                        println!("Failed to get orderbook by symbol: {}", e);
                     }
                 };
             }
@@ -217,7 +217,7 @@ pub async fn get_orderbooks(
                 println!("Orderbook does not exist");
                 let new_orderbook = NewOrderBook::new(
                     &security.symbol,
-                    &exchange.exchange,
+                    &exchange.name,
                     security.security_id,
                     exchange.exchange_id,
                 );

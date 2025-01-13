@@ -11,15 +11,10 @@ pub struct Config {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Exchange {
-    pub exchange: String,
+    pub name: String,
     pub websocket_token: String,
     pub symbols: Vec<String>,
     pub depth: u64,
-    pub apis: Vec<Api>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct Api {
     pub websockets: Vec<Websocket>,
 }
 
