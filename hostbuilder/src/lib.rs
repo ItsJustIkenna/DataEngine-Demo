@@ -69,7 +69,7 @@ impl HostedObjectTrait for HostedObject {
                 )
                 .await {
                     Ok(kraken_exchange) => {
-                        println!("Successfully retrieved exchange: {}", kraken_exchange.name);
+                        println!("Successfully retrieved exchange: {}", kraken_exchange.exchange_name);
                         let auth_endpoint = exchange.websocket_token.clone();
                         let api_response = KrakenRestHandler::authenticate(&auth_endpoint).await?;
 

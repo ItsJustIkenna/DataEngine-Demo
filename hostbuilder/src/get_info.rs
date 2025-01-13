@@ -37,7 +37,7 @@ pub async fn get_exchange(
                         .arg("exchange_id")
                         .arg(&exchange.exchange_id.to_string())
                         .arg("exchange")
-                        .arg(&exchange.name)
+                        .arg(&exchange.exchange_name)
                         .query_async::<_, ()>(&mut connection)
                         .await
                     {
@@ -70,7 +70,7 @@ pub async fn get_exchange(
                         .arg("exchange_id")
                         .arg(&exchange.exchange_id.to_string())
                         .arg("exchange")
-                        .arg(&exchange.name)
+                        .arg(&exchange.exchange_name)
                         .query_async::<_, ()>(&mut connection)
                         .await
                     {
@@ -217,7 +217,7 @@ pub async fn get_orderbooks(
                 println!("Orderbook does not exist");
                 let new_orderbook = NewOrderBook::new(
                     &security.symbol,
-                    &exchange.name,
+                    &exchange.exchange_name,
                     security.security_id,
                     exchange.exchange_id,
                 );
