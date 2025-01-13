@@ -15,7 +15,7 @@ data:
       - 'trade-data'
     
     exchanges:
-      - exchange: 'Kraken'
+      - name: 'Kraken'
         websocket_token: 'https://api.kraken.com/0/private/GetWebSocketsToken'
         symbols:
           - 'BTC/USD'
