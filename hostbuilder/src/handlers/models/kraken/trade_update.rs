@@ -13,7 +13,7 @@ use deadpool::managed::Pool;
 use deadpool_redis::{Connection, Manager};
 use redis_utils::get_redis_connection;
 use serde::{Deserialize, Serialize};
-use tokio_retry::{strategy::FixedInterval, Retry};
+use tokio_retry::{strategy::{jitter, ExponentialBackoff}, Retry};
 
 use super::trade_data::TradeData;
 
@@ -36,7 +36,7 @@ impl TradeUpdate {
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         order_book: &OrderBook
     ) -> Result<()> {
-        let retry_strategy = FixedInterval::from_millis(1).take(15);
+        let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
         
         let trade_connection = get_redis_connection(&redis_pool)
             .await

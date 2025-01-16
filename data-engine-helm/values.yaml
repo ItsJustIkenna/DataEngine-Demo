@@ -1,6 +1,10 @@
 appName: data-engine
 host: localhost
 database: timescale
+timescale:
+  port: 37085
+redis:
+  port: 19298
 cache: redis
 volumeName: config-volume
 image:

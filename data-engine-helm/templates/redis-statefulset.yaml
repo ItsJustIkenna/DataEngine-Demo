@@ -30,7 +30,7 @@ spec:
       - name: {{ .Values.cache }}
         image: {{ .Values.cache }}:latest
         ports:
-        - containerPort: 19298
+        - containerPort: {{ .Values.redis.port }}
           name: {{ .Values.cache }}
         volumeMounts:
         - name: {{ .Values.cache }}-storage

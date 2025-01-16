@@ -7,6 +7,6 @@ spec:
   selector:
     app: {{ .Values.cache }}
   ports:
-  - port: 30980
-    targetPort: 30980
+  - port: {{ .Values.redis.port }}
+    targetPort: {{ .Values.redis.port }}
     name: {{ .Values.cache }}

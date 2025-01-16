@@ -22,7 +22,7 @@ use deadpool_redis::{Connection, Manager};
 use redis::cmd;
 use redis_utils::get_redis_connection;
 use serde::{Deserialize, Serialize};
-use tokio_retry::{strategy::FixedInterval, Retry};
+use tokio_retry::{strategy::{jitter, ExponentialBackoff}, Retry};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level3Snapshot {
@@ -43,7 +43,7 @@ impl Level3Snapshot {
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         order_book: &OrderBook,
     ) -> Result<()> {
-        let retry_strategy = FixedInterval::from_millis(1).take(15);
+        let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
         
         let mut book_connection = get_redis_connection(&redis_pool)
             .await
