@@ -55,244 +55,247 @@ impl Level3Snapshot {
             .await
             .expect("Failed to create redis connection");
 
-        if self.channel == "level3" {
-            if self.data.is_empty() {
+        match self.data.is_empty() {
+            true => {
                 println!("Snapshot data is empty");
-            }
+                Ok(())
+            },
+            false => {
+                let snapshot_data = &self.data[0];
 
-            let snapshot_data = &self.data[0];
+                match snapshot_data.bids.is_empty() && snapshot_data.asks.is_empty() {
+                    true => {
+                        println!("Snapshot data is empty");
+                        Ok(())
+                    },
+                    false => {
+                        let mut open_bid_volume = BigDecimal::zero();
+                        let mut open_ask_volume = BigDecimal::zero();
 
-            if snapshot_data.bids.is_empty() && snapshot_data.asks.is_empty() {
-                println!("Both bids and asks are empty");
-            }
+                        let bid_futures = async {
+                            if !snapshot_data.bids.is_empty() {
+                                let mut buy_orders = Vec::new();
+                                let mut pipe = redis::pipe();
 
-            let mut open_bid_volume = BigDecimal::zero();
-            let mut open_ask_volume = BigDecimal::zero();
+                                for bid in snapshot_data.bids.iter() {
+                                    let price_level = &bid.limit_price;
+                                    let buy_quantity = &bid.order_qty;
+                                    let unique_id = &bid.order_id;
 
-            let bid_futures = async {
-                if !snapshot_data.bids.is_empty() {
-                    let mut buy_orders = Vec::new();
-                    let mut pipe = redis::pipe();
+                                    open_bid_volume += buy_quantity;
 
-                    for bid in snapshot_data.bids.iter() {
-                        let price_level = &bid.limit_price;
-                        let buy_quantity = &bid.order_qty;
-                        let unique_id = &bid.order_id;
+                                    let order = NewOpenBuyOrder::new(
+                                        &order_book.symbol,
+                                        &order_book.exchange,
+                                        order_book.security_id,
+                                        order_book.exchange_id,
+                                        order_book.buy_order_book_id,
+                                        unique_id,
+                                        price_level,
+                                        buy_quantity,
+                                    );
 
-                        open_bid_volume += buy_quantity;
+                                    pipe.atomic()
+                                        .cmd("HSET")
+                                        .arg(format!("buy_order:{}", order.unique_id))
+                                        .arg("symbol")
+                                        .arg(&order.symbol)
+                                        .arg("exchange")
+                                        .arg(&order.exchange)
+                                        .arg("security_id")
+                                        .arg(&order.security_id.to_string())
+                                        .arg("exchange_id")
+                                        .arg(&order.exchange_id.to_string())
+                                        .arg("buy_order_book_id")
+                                        .arg(&order.buy_order_book_id.to_string())
+                                        .arg("unique_id")
+                                        .arg(&order.unique_id)
+                                        .arg("price_level")
+                                        .arg(&order.price_level.to_string())
+                                        .arg("buy_quantity")
+                                        .arg(&order.buy_quantity.to_string());
 
-                        let order = NewOpenBuyOrder::new(
-                            &order_book.symbol,
-                            &order_book.exchange,
-                            order_book.security_id,
-                            order_book.exchange_id,
-                            order_book.buy_order_book_id,
-                            unique_id,
-                            price_level,
-                            buy_quantity,
-                        );
+                                    buy_orders.push(order);
+                                }
 
-                        pipe.atomic()
-                            .cmd("HSET")
-                            .arg(format!("buy_order:{}", order.unique_id))
+                                let result = Retry::spawn(retry_strategy.clone(), || async {
+                                    match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
+                                        Ok(_) => {
+                                            println!("Added buy orders to redis");
+                                            Ok(())
+                                        },
+                                        Err(e) => {
+                                            println!("Failed to add buy orders to redis: {}", e);
+                                            Err(e)
+                                        },
+                                    }
+                                }).await;
+
+                                if let Err(e) = result {
+                                    println!("All retries failed for redis commands: {}", e);
+                                }                    
+
+                                match create_open_buy_orders(postgres_pool.clone(), buy_orders).await {
+                                    Ok(_) => println!("Added buy orders to postgres"),
+                                    Err(e) => println!("Failed to add buy orders to postgres: {}", e),
+                                };
+                            }
+                        };
+
+                        let ask_futures = async {
+                            if !snapshot_data.asks.is_empty() {
+                                let mut add_sell_orders = Vec::new();
+                                let mut pipe = redis::pipe();
+                                for ask in snapshot_data.asks.iter() {
+                                    let price_level = &ask.limit_price;
+                                    let sell_quantity = &ask.order_qty;
+                                    let unique_id = &ask.order_id;
+
+                                    open_ask_volume += sell_quantity;
+
+                                    let order = NewOpenSellOrder::new(
+                                        &order_book.symbol,
+                                        &order_book.exchange,
+                                        order_book.security_id,
+                                        order_book.exchange_id,
+                                        order_book.sell_order_book_id,
+                                        unique_id,
+                                        price_level,
+                                        sell_quantity,
+                                    );
+
+                                    pipe.atomic()
+                                        .cmd("HSET")
+                                        .arg(format!("sell_order:{}", order.unique_id))
+                                        .arg("symbol")
+                                        .arg(&order.symbol)
+                                        .arg("exchange")
+                                        .arg(&order.exchange)
+                                        .arg("security_id")
+                                        .arg(&order.security_id.to_string())
+                                        .arg("exchange_id")
+                                        .arg(&order.exchange_id.to_string())
+                                        .arg("sell_order_book_id")
+                                        .arg(&order.sell_order_book_id.to_string())
+                                        .arg("unique_id")
+                                        .arg(&order.unique_id)
+                                        .arg("price_level")
+                                        .arg(&order.price_level.to_string())
+                                        .arg("sell_quantity")
+                                        .arg(&order.sell_quantity.to_string());
+
+                                    add_sell_orders.push(order);
+                                }
+
+                                let result = Retry::spawn(retry_strategy.clone(), || async {
+                                    match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
+                                        Ok(_) => {
+                                            println!("Added sell orders to redis");
+                                            Ok(())
+                                        },
+                                        Err(e) => {
+                                            println!("Failed to add sell orders to redis: {}", e);
+                                            Err(e)
+                                        },
+                                    }
+                                }).await;
+
+                                if let Err(e) = result {
+                                    println!("All retries failed for redis commands: {}", e);
+                                }  
+
+                                match create_open_sell_orders(postgres_pool.clone(), add_sell_orders).await {
+                                    Ok(_) => println!("Added sell orders to postgres"),
+                                    Err(e) => println!("Failed to add sell orders to postgres: {}", e),
+                                };
+                            }
+                        };
+
+                        tokio::join!(bid_futures, ask_futures);
+
+
+                        let total_volume = open_bid_volume + open_ask_volume;
+
+                        println!("Total volume: {}", total_volume);
+
+                        match cmd("HSET")
+                            .arg(format!("order_book:{}", order_book.order_book_id))
+                            .arg("created_at")
+                            .arg(&order_book.created_at.to_string())
+                            .arg("updated_at")
+                            .arg(&order_book.updated_at.expect("").to_string())
                             .arg("symbol")
-                            .arg(&order.symbol)
+                            .arg(&order_book.symbol)
                             .arg("exchange")
-                            .arg(&order.exchange)
+                            .arg(&order_book.exchange)
                             .arg("security_id")
-                            .arg(&order.security_id.to_string())
+                            .arg(&order_book.security_id.to_string())
                             .arg("exchange_id")
-                            .arg(&order.exchange_id.to_string())
+                            .arg(&order_book.exchange_id.to_string())
                             .arg("buy_order_book_id")
-                            .arg(&order.buy_order_book_id.to_string())
-                            .arg("unique_id")
-                            .arg(&order.unique_id)
-                            .arg("price_level")
-                            .arg(&order.price_level.to_string())
-                            .arg("buy_quantity")
-                            .arg(&order.buy_quantity.to_string());
-
-                        buy_orders.push(order);
-                    }
-
-                    let result = Retry::spawn(retry_strategy.clone(), || async {
-                        match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
-                            Ok(_) => {
-                                println!("Added buy orders to redis");
-                                Ok(())
-                            },
-                            Err(e) => {
-                                println!("Failed to add buy orders to redis: {}", e);
-                                Err(e)
-                            },
-                        }
-                    }).await;
-
-                    if let Err(e) = result {
-                        println!("All retries failed for redis commands: {}", e);
-                    }                    
-
-                    match create_open_buy_orders(postgres_pool.clone(), buy_orders).await {
-                        Ok(_) => println!("Added buy orders to postgres"),
-                        Err(e) => println!("Failed to add buy orders to postgres: {}", e),
-                    };
-                }
-            };
-
-            let ask_futures = async {
-                if !snapshot_data.asks.is_empty() {
-                    let mut add_sell_orders = Vec::new();
-                    let mut pipe = redis::pipe();
-                    for ask in snapshot_data.asks.iter() {
-                        let price_level = &ask.limit_price;
-                        let sell_quantity = &ask.order_qty;
-                        let unique_id = &ask.order_id;
-
-                        open_ask_volume += sell_quantity;
-
-                        let order = NewOpenSellOrder::new(
-                            &order_book.symbol,
-                            &order_book.exchange,
-                            order_book.security_id,
-                            order_book.exchange_id,
-                            order_book.sell_order_book_id,
-                            unique_id,
-                            price_level,
-                            sell_quantity,
-                        );
-
-                        pipe.atomic()
-                            .cmd("HSET")
-                            .arg(format!("sell_order:{}", order.unique_id))
-                            .arg("symbol")
-                            .arg(&order.symbol)
-                            .arg("exchange")
-                            .arg(&order.exchange)
-                            .arg("security_id")
-                            .arg(&order.security_id.to_string())
-                            .arg("exchange_id")
-                            .arg(&order.exchange_id.to_string())
+                            .arg(&order_book.buy_order_book_id.to_string())
                             .arg("sell_order_book_id")
-                            .arg(&order.sell_order_book_id.to_string())
-                            .arg("unique_id")
-                            .arg(&order.unique_id)
-                            .arg("price_level")
-                            .arg(&order.price_level.to_string())
-                            .arg("sell_quantity")
-                            .arg(&order.sell_quantity.to_string());
-
-                        add_sell_orders.push(order);
-                    }
-
-                    let result = Retry::spawn(retry_strategy.clone(), || async {
-                        match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
+                            .arg(&order_book.sell_order_book_id.to_string())
+                            .arg("total_volume")
+                            .arg(&total_volume.to_string())
+                            .query_async::<_, ()>(&mut book_connection)
+                            .await
+                        {
                             Ok(_) => {
-                                println!("Added sell orders to redis");
-                                Ok(())
-                            },
+                                println!("Added order book to redis");
+                            }
                             Err(e) => {
-                                println!("Failed to add sell orders to redis: {}", e);
-                                Err(e)
-                            },
+                                println!("Failed to add order book to redis: {}", e);
+                            }
                         }
-                    }).await;
 
-                    if let Err(e) = result {
-                        println!("All retries failed for redis commands: {}", e);
-                    }  
+                        let result = Retry::spawn(retry_strategy.clone(), || async {
+                            match cmd("HSET")
+                            .arg(format!("order_book:{}", order_book.order_book_id))
+                            .arg("created_at")
+                            .arg(&order_book.created_at.to_string())
+                            .arg("updated_at")
+                            .arg(&order_book.updated_at.expect("").to_string())
+                            .arg("symbol")
+                            .arg(&order_book.symbol)
+                            .arg("exchange")
+                            .arg(&order_book.exchange)
+                            .arg("security_id")
+                            .arg(&order_book.security_id.to_string())
+                            .arg("exchange_id")
+                            .arg(&order_book.exchange_id.to_string())
+                            .arg("buy_order_book_id")
+                            .arg(&order_book.buy_order_book_id.to_string())
+                            .arg("sell_order_book_id")
+                            .arg(&order_book.sell_order_book_id.to_string())
+                            .arg("total_volume")
+                            .arg(&total_volume.to_string())
+                            .query_async::<_, ()>(&mut book_connection.clone())
+                            .await
+                        {
+                            Ok(_) => {
+                                println!("Added order book to redis");
+                                Ok(())
+                            }
+                            Err(e) => {
+                                println!("Failed to add order book to redis: {}", e);
+                                Err(e)
+                            }
+                        }
+                        }).await;
 
-                    match create_open_sell_orders(postgres_pool.clone(), add_sell_orders).await {
-                        Ok(_) => println!("Added sell orders to postgres"),
-                        Err(e) => println!("Failed to add sell orders to postgres: {}", e),
-                    };
-                }
-            };
-
-            tokio::join!(bid_futures, ask_futures);
-
-
-            let total_volume = open_bid_volume + open_ask_volume;
-
-            println!("Total volume: {}", total_volume);
-
-            match cmd("HSET")
-                .arg(format!("order_book:{}", order_book.order_book_id))
-                .arg("created_at")
-                .arg(&order_book.created_at.to_string())
-                .arg("updated_at")
-                .arg(&order_book.updated_at.expect("").to_string())
-                .arg("symbol")
-                .arg(&order_book.symbol)
-                .arg("exchange")
-                .arg(&order_book.exchange)
-                .arg("security_id")
-                .arg(&order_book.security_id.to_string())
-                .arg("exchange_id")
-                .arg(&order_book.exchange_id.to_string())
-                .arg("buy_order_book_id")
-                .arg(&order_book.buy_order_book_id.to_string())
-                .arg("sell_order_book_id")
-                .arg(&order_book.sell_order_book_id.to_string())
-                .arg("total_volume")
-                .arg(&total_volume.to_string())
-                .query_async::<_, ()>(&mut book_connection)
-                .await
-            {
-                Ok(_) => {
-                    println!("Added order book to redis");
-                }
-                Err(e) => {
-                    println!("Failed to add order book to redis: {}", e);
+                        if let Err(e) = result {
+                            println!("All retries failed for redis commands: {}", e);
+                        }  
+                        
+                        match update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume).await {
+                            Ok(_) => println!("Updated order book in postgres"),
+                            Err(e) => println!("Failed to update order book in postgres: {}", e),
+                        };
+                        Ok(())
+                    }
                 }
             }
-
-            let result = Retry::spawn(retry_strategy.clone(), || async {
-                match cmd("HSET")
-                .arg(format!("order_book:{}", order_book.order_book_id))
-                .arg("created_at")
-                .arg(&order_book.created_at.to_string())
-                .arg("updated_at")
-                .arg(&order_book.updated_at.expect("").to_string())
-                .arg("symbol")
-                .arg(&order_book.symbol)
-                .arg("exchange")
-                .arg(&order_book.exchange)
-                .arg("security_id")
-                .arg(&order_book.security_id.to_string())
-                .arg("exchange_id")
-                .arg(&order_book.exchange_id.to_string())
-                .arg("buy_order_book_id")
-                .arg(&order_book.buy_order_book_id.to_string())
-                .arg("sell_order_book_id")
-                .arg(&order_book.sell_order_book_id.to_string())
-                .arg("total_volume")
-                .arg(&total_volume.to_string())
-                .query_async::<_, ()>(&mut book_connection.clone())
-                .await
-            {
-                Ok(_) => {
-                    println!("Added order book to redis");
-                    Ok(())
-                }
-                Err(e) => {
-                    println!("Failed to add order book to redis: {}", e);
-                    Err(e)
-                }
-            }
-            }).await;
-
-            if let Err(e) = result {
-                println!("All retries failed for redis commands: {}", e);
-            }  
-            
-            match update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume).await {
-                Ok(_) => println!("Updated order book in postgres"),
-                Err(e) => println!("Failed to update order book in postgres: {}", e),
-            };
-            Ok(())
-        } else {
-            println!("Channel is not level3");
-            Ok(())
         }
     }
 }

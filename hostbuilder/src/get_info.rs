@@ -30,24 +30,39 @@ pub async fn get_exchange(
 
             match get_exchanges_by_name(postgres_pool.clone(), &name).await {
                 Ok(exchange) => {
-                    match cmd("HSET")
+                    let exists: bool = cmd("HEXISTS")
                         .arg(format!("exchange:{}", &exchange.exchange_id))
-                        .arg("created_at")
-                        .arg(&exchange.created_at.to_string())
-                        .arg("exchange_id")
-                        .arg(&exchange.exchange_id.to_string())
                         .arg("exchange")
-                        .arg(&exchange.exchange)
-                        .query_async::<_, ()>(&mut connection)
+                        .query_async(&mut connection)
                         .await
-                    {
-                        Ok(_) => {
-                            println!("Successfully saved exchange to Redis with key exchange:{}", exchange.exchange_id);
+                        .unwrap_or(false);
+
+                    match exists {
+                        true => {
+                            println!("Exchange already exists in Redis with key exchange:{}", exchange.exchange_id);
                             Ok(exchange)
                         }
-                        Err(e) => {
-                            println!("Failed to save exchange to redis: {}", e);
-                            Ok(exchange)
+                        false => {
+                            match cmd("HSET")
+                                .arg(format!("exchange:{}", &exchange.exchange_id))
+                                .arg("created_at")
+                                .arg(&exchange.created_at.to_string())
+                                .arg("exchange_id")
+                                .arg(&exchange.exchange_id.to_string())
+                                .arg("exchange")
+                                .arg(&exchange.exchange)
+                                .query_async::<_, ()>(&mut connection)
+                                .await
+                            {
+                                Ok(_) => {
+                                    println!("Successfully saved exchange to Redis with key exchange:{}", exchange.exchange_id);
+                                    Ok(exchange)
+                                }
+                                Err(e) => {
+                                    println!("Failed to save exchange to redis: {}", e);
+                                    Ok(exchange)
+                                }
+                            }
                         }
                     }
                 }
@@ -111,16 +126,31 @@ pub async fn get_securities(
                 println!("Security exists");
                 match get_security_by_symbol(postgres_pool.clone(), symbol).await {
                     Ok(security) => {
-                        pipe.atomic()
-                            .cmd("HSET")
-                            .arg(format!("security:{}", &security.security_id))
-                            .arg("created_at")
-                            .arg(&security.created_at.to_string())
-                            .arg("security_id")
-                            .arg(&security.security_id.to_string())
-                            .arg("symbol")
-                            .arg(&security.symbol);
-                        securities.push(security);
+                        let exists: bool = cmd("HEXISTS")
+                        .arg(format!("security:{}", &security.security_id))
+                        .arg("symbol")
+                        .query_async(&mut connection)
+                        .await
+                        .unwrap_or(false);
+
+                        match exists {
+                            true => {
+                                println!("Security already exists in Redis with key security:{}", security.security_id);
+                                securities.push(security);
+                            },
+                            false => {
+                                pipe.atomic()
+                                    .cmd("HSET")
+                                    .arg(format!("security:{}", &security.security_id))
+                                    .arg("created_at")
+                                    .arg(&security.created_at.to_string())
+                                    .arg("security_id")
+                                    .arg(&security.security_id.to_string())
+                                    .arg("symbol")
+                                    .arg(&security.symbol);
+                                securities.push(security);
+                            }
+                        }
                     }
                     Err(e) => {
                         println!("Failed to get security by symbol: {}", e);
@@ -182,31 +212,46 @@ pub async fn get_orderbooks(
                 println!("Orderbook exists for security: {}", security.symbol);
                 match get_orderbook_by_exchange_id_and_security_id(postgres_pool.clone(), exchange.exchange_id, security.security_id).await {
                     Ok(order_book) => {
-                        pipe.atomic()
-                            .cmd("HSET")
-                            .arg(format!("order_book:{}", &order_book.order_book_id))
-                            .arg("created_at")
-                            .arg(&order_book.created_at.to_string())
-                            .arg("updated_at")
-                            .arg(&order_book.updated_at.expect("").to_string())
-                            .arg("symbol")
-                            .arg(&order_book.symbol)
-                            .arg("exchange")
-                            .arg(&order_book.exchange)
-                            .arg("security_id")
-                            .arg(&order_book.security_id.to_string())
-                            .arg("exchange_id")
-                            .arg(&order_book.exchange_id.to_string())
-                            .arg("order_book_id")
-                            .arg(&order_book.order_book_id.to_string())
-                            .arg("buy_order_book_id")
-                            .arg(&order_book.buy_order_book_id.to_string())
-                            .arg("sell_order_book_id")
-                            .arg(&order_book.sell_order_book_id.to_string())
-                            .arg("total_volume")
-                            .arg(&order_book.total_volume.to_string());
+                        let exists: bool = cmd("HEXISTS")
+                        .arg(format!("order_book:{}", &order_book.order_book_id))
+                        .arg("symbol")
+                        .query_async(&mut connection)
+                        .await
+                        .unwrap_or(false);
 
-                        orderbooks.insert(security.symbol.clone(), order_book);
+                        match exists {
+                            true => {
+                                println!("Orderbook already exists in Redis with key order_book:{}", order_book.order_book_id);
+                                orderbooks.insert(security.symbol.clone(), order_book);
+                            },
+                            false => {
+                                pipe.atomic()
+                                    .cmd("HSET")
+                                    .arg(format!("order_book:{}", &order_book.order_book_id))
+                                    .arg("created_at")
+                                    .arg(&order_book.created_at.to_string())
+                                    .arg("updated_at")
+                                    .arg(&order_book.updated_at.expect("").to_string())
+                                    .arg("symbol")
+                                    .arg(&order_book.symbol)
+                                    .arg("exchange")
+                                    .arg(&order_book.exchange)
+                                    .arg("security_id")
+                                    .arg(&order_book.security_id.to_string())
+                                    .arg("exchange_id")
+                                    .arg(&order_book.exchange_id.to_string())
+                                    .arg("order_book_id")
+                                    .arg(&order_book.order_book_id.to_string())
+                                    .arg("buy_order_book_id")
+                                    .arg(&order_book.buy_order_book_id.to_string())
+                                    .arg("sell_order_book_id")
+                                    .arg(&order_book.sell_order_book_id.to_string())
+                                    .arg("total_volume")
+                                    .arg(&order_book.total_volume.to_string());
+
+                                orderbooks.insert(security.symbol.clone(), order_book);
+                            }
+                        }
                     }
                     Err(e) => {
                         println!("Failed to get orderbook by symbol: {}", e);

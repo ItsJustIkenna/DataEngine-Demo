@@ -42,73 +42,72 @@ impl TradeUpdate {
             .await
             .expect("Failed to create redis connection");
 
-        if self.channel == "trade" {
-            if self.data.is_empty() {
+        match self.data.is_empty() {
+            true => {
                 println!("Trade data is empty");
-            }
+                Ok(())
+            },
+            false => {
+                let mut trades = Vec::new();
+                let mut pipe = redis::pipe();
 
-            let mut trades = Vec::new();
-            let mut pipe = redis::pipe();
+                for trade in self.data.iter() {
+                    let new_trade = NewTrade::new(
+                        &trade.symbol,
+                        &order_book.exchange,
+                        order_book.security_id,
+                        order_book.exchange_id,
+                        &trade.side,
+                        &trade.price,
+                        &trade.qty,
+                    );
 
-            for trade in self.data.iter() {
-                let new_trade = NewTrade::new(
-                    &trade.symbol,
-                    &order_book.exchange,
-                    order_book.security_id,
-                    order_book.exchange_id,
-                    &trade.side,
-                    &trade.price,
-                    &trade.qty,
-                );
+                    pipe.atomic()
+                        .cmd("HSET")
+                        .arg(format!("trade:{}", trade.trade_id))
+                        .arg("symbol")
+                        .arg(&trade.symbol)
+                        .arg("side")
+                        .arg(&trade.side)
+                        .arg("price")
+                        .arg(&trade.price.to_string())
+                        .arg("qty")
+                        .arg(&trade.qty.to_string())
+                        .arg("ord_type")
+                        .arg(&trade.ord_type)
+                        .arg("trade_id")
+                        .arg(&trade.trade_id)
+                        .arg("timestamp")
+                        .arg(&trade.timestamp);
 
-                pipe.atomic()
-                    .cmd("HSET")
-                    .arg(format!("trade:{}", trade.trade_id))
-                    .arg("symbol")
-                    .arg(&trade.symbol)
-                    .arg("side")
-                    .arg(&trade.side)
-                    .arg("price")
-                    .arg(&trade.price.to_string())
-                    .arg("qty")
-                    .arg(&trade.qty.to_string())
-                    .arg("ord_type")
-                    .arg(&trade.ord_type)
-                    .arg("trade_id")
-                    .arg(&trade.trade_id)
-                    .arg("timestamp")
-                    .arg(&trade.timestamp);
-
-                trades.push(new_trade);
-            }
-
-            let result = Retry::spawn(retry_strategy, || async {
-                match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
-                    Ok(_) => {
-                        println!("Added trades to redis");
-                        Ok(())
-                    }
-                    Err(e) => {
-                        println!("Failed to add trades to redis: {}", e);
-                        Err(e)
-                    }
+                    trades.push(new_trade);
                 }
-            }).await;
 
-            match result {
-                Ok(_) => println!("Added trades to redis"),
-                Err(e) => println!("Failed to add trades to redis: {}", e),
+                let result = Retry::spawn(retry_strategy, || async {
+                    match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
+                        Ok(_) => {
+                            println!("Added trades to redis");
+                            Ok(())
+                        }
+                        Err(e) => {
+                            println!("Failed to add trades to redis: {}", e);
+                            Err(e)
+                        }
+                    }
+                }).await;
+
+                match result {
+                    Ok(_) => println!("Added trades to redis"),
+                    Err(e) => println!("Failed to add trades to redis: {}", e),
+                }
+
+                match create_trades(postgres_pool.clone(), trades).await {
+                    Ok(_) => println!("Added trades to postgres"),
+                    Err(e) => println!("Failed to add trades to postgres: {}", e),
+                };
+
+                Ok(())
             }
-
-            match create_trades(postgres_pool.clone(), trades).await {
-                Ok(_) => println!("Added trades to postgres"),
-                Err(e) => println!("Failed to add trades to postgres: {}", e),
-            };
-
-            Ok(())
-        } else {
-            println!("Channel is not trade");
-            Ok(())
         }
     }
 }
