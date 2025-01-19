@@ -37,7 +37,10 @@ use std::{
     sync::Arc
 };
 #[cfg(unix)]
-use tokio::signal::unix::SignalKind;
+use tokio::signal::unix::{
+    signal,
+    SignalKind
+};
 use tokio::{
     signal,
     sync::broadcast::channel,
