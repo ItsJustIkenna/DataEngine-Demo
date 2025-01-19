@@ -257,8 +257,8 @@ impl HostedObjectTrait for HostedObject {
                     match signal(SignalKind::terminate()) {
                         Ok(mut term_signal) => {
                             match term_signal.recv().await {
-                                Some(t) => {
-                                    info!("Received SIGTERM {}, initiating shutdown...", t);
+                                Some(_) => {
+                                    info!("Received SIGTERM, initiating shutdown...");
                                 }
                                 None => {
                                     error!("Failed to receive SIGTERM signal");
