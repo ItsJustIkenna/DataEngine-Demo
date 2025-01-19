@@ -1,7 +1,13 @@
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize,
+    Serialize
+};
 use serde_yaml;
 use std::fs;
-use anyhow::{Context, Result};
+use anyhow::{
+    Context,
+    Result
+};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Config {

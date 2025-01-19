@@ -1,14 +1,34 @@
-use anyhow::{anyhow, Result};
-use base64::{prelude::BASE64_STANDARD, Engine};
-use hmac::{Hmac, Mac};
+use anyhow::{
+    anyhow,
+    Result
+};
+use base64::{
+    prelude::BASE64_STANDARD,
+    Engine
+};
+use hmac::{
+    Hmac,
+    Mac
+};
 use reqwest::{
-    header::{HeaderMap, HeaderValue, CONTENT_TYPE},
+    header::{
+        HeaderMap,
+        HeaderValue,
+        CONTENT_TYPE
+    },
     Client,
 };
-use sha2::{Digest, Sha256, Sha512};
+use sha2::{
+    Digest,
+    Sha256,
+    Sha512
+};
 use std::{
     env,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{
+        SystemTime,
+        UNIX_EPOCH
+    }
 };
 use url::Url;
 

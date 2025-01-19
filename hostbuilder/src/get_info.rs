@@ -1,16 +1,47 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc
+};
 
 use databaseschema::{
-    models::{exchange::{Exchange, NewExchange}, orderbook::{NewOrderBook, OrderBook}, security::{NewSecurity, Security}},
+    models::{
+        exchange::{
+            Exchange,
+            NewExchange
+        },
+        orderbook::{
+            NewOrderBook,
+            OrderBook
+        },
+        security::{
+            NewSecurity,
+            Security
+        }
+    },
     ops::{
-        exchanges_ops::{create_exchange, exchange_exists, get_exchanges_by_name},
-        order_book_ops::{create_orderbook, get_orderbook_by_exchange_id_and_security_id, orderbook_exists},
-        securities_ops::{create_security, get_security_by_symbol, security_exists},
+        exchanges_ops::{
+            create_exchange,
+            exchange_exists,
+            get_exchanges_by_name
+        },
+        order_book_ops::{
+            create_orderbook,
+            get_orderbook_by_exchange_id_and_security_id,
+            orderbook_exists
+        },
+        securities_ops::{
+            create_security,
+            get_security_by_symbol,
+            security_exists
+        },
     },
     CustomAsyncPgConnectionManager,
 };
 use deadpool::managed::Pool;
-use deadpool_redis::{Connection, Manager};
+use deadpool_redis::{
+    Connection,
+    Manager
+};
 use diesel::result::Error;
 use redis::cmd;
 use redis_utils::get_redis_connection;

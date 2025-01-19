@@ -1,28 +1,39 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use bigdecimal::{BigDecimal, Zero};
+use bigdecimal::{
+    BigDecimal,
+    Zero
+};
 use databaseschema::{
     models::orderbook::OrderBook,
     models::open_buy_order::NewOpenBuyOrder,
     models::open_sell_order::NewOpenSellOrder,
     ops::{
-        open_buy_order_ops::
-            create_open_buy_orders
-        ,
-        open_sell_order_ops::
-            create_open_sell_orders
-        ,
+        open_buy_order_ops::create_open_buy_orders,
+        open_sell_order_ops::create_open_sell_orders,
         order_book_ops::update_orderbook,
     },
     CustomAsyncPgConnectionManager,
 };
 use deadpool::managed::Pool;
-use deadpool_redis::{Connection, Manager};
+use deadpool_redis::{
+    Connection,
+    Manager
+};
 use redis::cmd;
 use redis_utils::get_redis_connection;
-use serde::{Deserialize, Serialize};
-use tokio_retry::{strategy::{jitter, ExponentialBackoff}, Retry};
+use serde::{
+    Deserialize,
+    Serialize
+};
+use tokio_retry::{
+    strategy::{
+        jitter,
+        ExponentialBackoff
+    },
+    Retry
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level3Snapshot {

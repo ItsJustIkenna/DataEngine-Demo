@@ -1,5 +1,11 @@
-use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
+use anyhow::{
+    anyhow,
+    Result
+};
+use serde::{
+    Deserialize,
+    Serialize
+};
 use serde_json::Value;
 
 use super::token_response::TokenResponse;

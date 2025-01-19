@@ -1,27 +1,48 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use databaseschema::{
-    models::orderbook::OrderBook, CustomAsyncPgConnectionManager,
+    models::orderbook::OrderBook, 
+    CustomAsyncPgConnectionManager,
 };
 use deadpool::managed::Pool;
-use deadpool_redis::{Connection, Manager};
+use deadpool_redis::{
+    Connection,
+    Manager
+};
 use futures_util::{
-    stream::{SplitSink, SplitStream},
-    SinkExt, StreamExt,
+    stream::{
+        SplitSink,
+        SplitStream
+    },
+    SinkExt,
+    StreamExt,
 };
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::Arc
+};
 use tokio::{
     net::TcpStream,
-    sync::{broadcast::Receiver, Mutex},
+    sync::{
+        broadcast::Receiver,
+        Mutex
+    },
 };
-use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    connect_async,
+    tungstenite::Message,
+    MaybeTlsStream,
+    WebSocketStream
+};
 
 use crate::{
     endpoint::EndpointHandler,
     handlers::
-        models::kraken::responses::{parse_message, Response}
-    ,
+        models::kraken::responses::{
+            parse_message,
+            Response
+        }
 };
 //-------------------------------------------------------------------------
 

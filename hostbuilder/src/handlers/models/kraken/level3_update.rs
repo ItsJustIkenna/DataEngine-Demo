@@ -1,26 +1,63 @@
-use std::{str::FromStr, sync::Arc};
+use std::{
+    str::FromStr,
+    sync::Arc
+};
 
-use anyhow::{Result, Error};
-use bigdecimal::{BigDecimal, Zero};
+use anyhow::{
+    Result,
+    Error
+};
+use bigdecimal::{
+    BigDecimal,
+    Zero
+};
 use databaseschema::{
-    models::{modified_buy_order::NewModifiedBuyOrder,
+    models::{
+        modified_buy_order::NewModifiedBuyOrder,
         modified_sell_order::NewModifiedSellOrder,
         open_buy_order::NewOpenBuyOrder,
         open_sell_order::NewOpenSellOrder,
-        orderbook::OrderBook},
-        ops::{modified_buy_order_ops::{create_modified_buy_orders, delete_modified_buy_orders},
-        modified_sell_order_ops::{create_modified_sell_orders, delete_modified_sell_orders},
-        open_buy_order_ops::{create_open_buy_orders, delete_open_buy_orders},
-        open_sell_order_ops::{create_open_sell_orders, delete_open_sell_orders},
-        order_book_ops::update_orderbook},
-        CustomAsyncPgConnectionManager
+        orderbook::OrderBook
+    },
+        ops::{
+            modified_buy_order_ops::{
+                create_modified_buy_orders,
+                delete_modified_buy_orders
+            },
+            modified_sell_order_ops::{
+                create_modified_sell_orders,
+                delete_modified_sell_orders
+            },
+            open_buy_order_ops::{
+                create_open_buy_orders,
+                delete_open_buy_orders
+            },
+            open_sell_order_ops::{
+                create_open_sell_orders,
+                delete_open_sell_orders
+            },
+            order_book_ops::update_orderbook
+        },
+    CustomAsyncPgConnectionManager
 };
 use deadpool::managed::Pool;
-use deadpool_redis::{Connection, Manager};
+use deadpool_redis::{
+    Connection,
+    Manager
+};
 use redis::cmd;
 use redis_utils::get_redis_connection;
-use serde::{Deserialize, Serialize};
-use tokio_retry::{strategy::{jitter, ExponentialBackoff}, Retry};
+use serde::{
+    Deserialize,
+    Serialize
+};
+use tokio_retry::{
+    strategy::{
+        jitter,
+        ExponentialBackoff
+    },
+    Retry
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level3Update {

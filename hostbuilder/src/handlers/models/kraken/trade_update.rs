@@ -10,10 +10,22 @@ use databaseschema::{
     CustomAsyncPgConnectionManager,
 };
 use deadpool::managed::Pool;
-use deadpool_redis::{Connection, Manager};
+use deadpool_redis::{
+    Connection,
+    Manager
+};
 use redis_utils::get_redis_connection;
-use serde::{Deserialize, Serialize};
-use tokio_retry::{strategy::{jitter, ExponentialBackoff}, Retry};
+use serde::{
+    Deserialize,
+    Serialize
+};
+use tokio_retry::{
+    strategy::{
+        jitter,
+        ExponentialBackoff
+    },
+    Retry
+};
 
 use super::trade_data::TradeData;
 

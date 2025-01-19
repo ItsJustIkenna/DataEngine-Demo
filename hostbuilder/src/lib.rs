@@ -6,21 +6,46 @@ pub mod handlers;
 use anyhow::Result;
 use async_trait::async_trait;
 use config::Config;
-use databaseschema::{create_timescale_connection_pool, CustomAsyncPgConnectionManager};
+use databaseschema::{
+    create_timescale_connection_pool,
+    CustomAsyncPgConnectionManager
+};
 use deadpool::managed::Pool;
-use deadpool_redis::{Connection, Manager};
+use deadpool_redis::{
+    Connection,
+    Manager
+};
 use dotenv::dotenv;
-use get_info::{get_exchange, get_orderbooks, get_securities};
+use get_info::{
+    get_exchange,
+    get_orderbooks,
+    get_securities
+};
 use handlers::{
     rest_apis::kraken::kraken_rest_api::KrakenRestHandler,
     websockets::kraken::kraken_websocket_handler::KrakenWebSocketHandler,
 };
 use mockall::automock;
 use redis::cmd;
-use redis_utils::{create_redis_pool, get_redis_connection};
+use redis_utils::{
+    create_redis_pool,
+    get_redis_connection
+};
 use serde_json::json;
-use std::{env, sync::Arc};
-use tokio::{signal, sync::broadcast::channel, time::{timeout, Duration}};
+use std::{
+    env,
+    sync::Arc
+};
+#[cfg(unix)]
+use tokio::signal::unix::{signal, SignalKind};
+use tokio::{
+    signal,
+    sync::broadcast::channel,
+    time::{
+        timeout,
+        Duration
+    }
+};
 use tracing::{error, info};
 
 use crate::endpoint::EndpointHandler;
@@ -275,7 +300,6 @@ impl HostedObjectTrait for HostedObject {
                 }
             }
         });
-
 
         for handle in handles {
             let _ = handle.await;

@@ -1,4 +1,7 @@
-use hostbuilder::{HostedObject, HostedObjectTrait};
+use hostbuilder::{
+    HostedObject,
+    HostedObjectTrait
+};
 use anyhow::Result;
 
 #[tokio::main]
