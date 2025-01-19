@@ -20,7 +20,7 @@ use redis::cmd;
 use redis_utils::{create_redis_pool, get_redis_connection};
 use serde_json::json;
 use std::{env, sync::Arc};
-use tokio::{signal, sync::broadcast::channel};
+use tokio::{signal, sync::broadcast::channel, time::{timeout, Duration}};
 use tracing::{error, info};
 
 use crate::endpoint::EndpointHandler;
@@ -222,24 +222,60 @@ impl HostedObjectTrait for HostedObject {
         let redis_pool = self.redis_pool.clone();
 
         let shutdown_handle = tokio::spawn(async move {
-            if let Err(e) = signal::ctrl_c().await {
-                error!("Failed to listen for shutdown signal: {}", e);
-            }
+            match  timeout(Duration::from_secs(30), async {
+                #[cfg(unix)]
+                {
+                    // Use SIGTERM signal handler for Unix-based systems (Kubernetes)
+                    match signal(SignalKind::terminate()) {
+                        Ok(mut term_signal) => {
+                            match term_signal.recv().await {
+                                Ok(_) => {
+                                    info!("Received SIGTERM, initiating shutdown...");
+                                }
+                                Err(e) => {
+                                    error!("Failed to listen for SIGTERM shutdown signal: {}", e);
+                                }
+                            };
+                        }
+                        Err(e) => {
+                            error!("Failed to listen for SIGTERM shutdown signal: {}", e);
+                        }
+                    }
+                }
 
-            let mut connection = get_redis_connection(&redis_pool)
-                .await
-                .expect("Failed to create redis connection");
-            match cmd("FLUSHALL").query_async::<_, ()>(&mut connection).await {
+                #[cfg(not(unix))]
+                {
+                    // Use ctrl_c for non-Unix systems (Windows testing)
+                    match signal::ctrl_c().await {
+                        Ok(_) => info!("Received Ctrl+C, initiating shutdown..."),
+                        Err(e) => error!("Failed to listen for ctrl_c shutdown signal: {}", e),
+                    }
+                    
+                }
+
+                let mut connection = get_redis_connection(&redis_pool)
+                    .await
+                    .expect("Failed to create redis connection");
+                match cmd("FLUSHALL").query_async::<_, ()>(&mut connection).await {
+                    Ok(_) => {
+                        println!("Successfully flushed Redis cache");
+                    }
+                    Err(e) => {
+                        println!("Failed to flush Redis cache: {}", e);
+                    }
+                }
+
+                let _ = shutdown_tx.send(());
+            }).await {
                 Ok(_) => {
-                    println!("Successfully flushed Redis cache");
+                    info!("Shutdown completed successfully");
                 }
-                Err(e) => {
-                    println!("Failed to flush Redis cache: {}", e);
+                Err(_) => {
+                    error!("Shutdown timed out");
                 }
             }
-
-            let _ = shutdown_tx.send(());
         });
+
 
         for handle in handles {
             let _ = handle.await;

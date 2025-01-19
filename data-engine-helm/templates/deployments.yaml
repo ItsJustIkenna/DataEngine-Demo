@@ -110,6 +110,7 @@ spec:
           initialDelaySeconds: 15
           timeoutSeconds: 10
         imagePullPolicy: IfNotPresent
+      terminationGracePeriodSeconds: 30
       volumes:
       - name: {{ .Values.volumeName }}
         configMap:

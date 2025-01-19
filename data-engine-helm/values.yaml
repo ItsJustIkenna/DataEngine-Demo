@@ -2,7 +2,7 @@ appName: data-engine
 host: localhost
 database: timescale
 timescale:
-  port: 32963
+  port: 34282
 redis:
   port: 19298
 cache: redis
