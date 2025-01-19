@@ -37,7 +37,7 @@ use std::{
     sync::Arc
 };
 #[cfg(unix)]
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::SignalKind;
 use tokio::{
     signal,
     sync::broadcast::channel,
@@ -254,11 +254,11 @@ impl HostedObjectTrait for HostedObject {
                     match signal(SignalKind::terminate()) {
                         Ok(mut term_signal) => {
                             match term_signal.recv().await {
-                                Ok(_) => {
-                                    info!("Received SIGTERM, initiating shutdown...");
+                                Some(t) => {
+                                    info!("Received SIGTERM {}, initiating shutdown...", t);
                                 }
-                                Err(e) => {
-                                    error!("Failed to listen for SIGTERM shutdown signal: {}", e);
+                                None => {
+                                    error!("Failed to receive SIGTERM signal");
                                 }
                             };
                         }
