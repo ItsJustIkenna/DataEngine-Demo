@@ -197,7 +197,7 @@ impl Level3Update {
                                             Err(e) => {
                                                 println!("Failed to get buy quantity: {}", e);
                                                 Err(e)
-                                            },
+                                            }
                                         }
                                     }).await;
         
