@@ -281,18 +281,6 @@ impl HostedObjectTrait for HostedObject {
                     
                 }
 
-                let mut connection = get_redis_connection(&redis_pool)
-                    .await
-                    .expect("Failed to create redis connection");
-                match cmd("FLUSHALL").query_async::<_, ()>(&mut connection).await {
-                    Ok(_) => {
-                        println!("Successfully flushed Redis cache");
-                    }
-                    Err(e) => {
-                        println!("Failed to flush Redis cache: {}", e);
-                    }
-                }
-
                 let _ = shutdown_tx.send(());
             }).await {
                 Ok(_) => {
