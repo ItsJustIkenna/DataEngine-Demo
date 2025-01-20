@@ -26,10 +26,8 @@ use handlers::{
     websockets::kraken::kraken_websocket_handler::KrakenWebSocketHandler,
 };
 use mockall::automock;
-use redis::cmd;
 use redis_utils::{
     create_redis_pool,
-    get_redis_connection
 };
 use serde_json::json;
 use std::{
