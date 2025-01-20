@@ -26,9 +26,7 @@ use handlers::{
     websockets::kraken::kraken_websocket_handler::KrakenWebSocketHandler,
 };
 use mockall::automock;
-use redis_utils::{
-    create_redis_pool,
-};
+use redis_utils::create_redis_pool;
 use serde_json::json;
 use std::{
     env,
@@ -244,8 +242,6 @@ impl HostedObjectTrait for HostedObject {
                 println!("Unknown exchange: {}", exchange.name);
             }
         }
-
-        let redis_pool = self.redis_pool.clone();
 
         let shutdown_handle = tokio::spawn(async move {
             match  timeout(Duration::from_secs(30), async {
