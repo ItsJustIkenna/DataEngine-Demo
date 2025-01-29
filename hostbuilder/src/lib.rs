@@ -45,7 +45,6 @@ use tokio::{
         Duration
     }
 };
-use tracing::{error, info};
 
 use crate::endpoint::EndpointHandler;
 
@@ -123,7 +122,7 @@ impl HostedObjectTrait for HostedObject {
                                             let postgres_pool = self.postgres_pool.clone();
                                             let symbols = exchange.symbols.clone();
                                             let handle = tokio::spawn(async move {
-                                                info!("Connecting to {:?}", &websocket.endpoint);
+                                                println!("Connecting to {:?}", &websocket.endpoint);
             
                                                 match websocket.channel.as_str() {
                                                     "level3" => {
@@ -166,10 +165,10 @@ impl HostedObjectTrait for HostedObject {
                                                                             "Listening to Kraken level 3"
                                                                         );
                                                                     }
-                                                                    Err(e) => error!("Failed to listen: {}", e),
+                                                                    Err(e) => eprintln!("Failed to listen: {}", e),
                                                                 }
                                                             }
-                                                            Err(e) => error!("Failed to create handler: {}", e),
+                                                            Err(e) => eprintln!("Failed to create handler: {}", e),
                                                         }
                                                     }
                                                     "trade" => {
@@ -210,14 +209,14 @@ impl HostedObjectTrait for HostedObject {
                                                                             "Listening to Kraken trade"
                                                                         );
                                                                     }
-                                                                    Err(e) => error!("Failed to listen: {}", e),
+                                                                    Err(e) => eprintln!("Failed to listen: {}", e),
                                                                 }
                                                             }
-                                                            Err(e) => error!("Failed to create handler: {}", e),
+                                                            Err(e) => eprintln!("Failed to create handler: {}", e),
                                                         }
                                                     }
                                                     _ => {
-                                                        info!("Unknown websocket type: {}", websocket.channel.as_str());
+                                                        println!("Unknown websocket type: {}", websocket.channel.as_str());
                                                     }
                                                 };
                                             });
@@ -252,15 +251,15 @@ impl HostedObjectTrait for HostedObject {
                         Ok(mut term_signal) => {
                             match term_signal.recv().await {
                                 Some(_) => {
-                                    info!("Received SIGTERM, initiating shutdown...");
+                                    println!("Received SIGTERM, initiating shutdown...");
                                 }
                                 None => {
-                                    error!("Failed to receive SIGTERM signal");
+                                    eprintln!("Failed to receive SIGTERM signal");
                                 }
                             };
                         }
                         Err(e) => {
-                            error!("Failed to listen for SIGTERM shutdown signal: {}", e);
+                            eprintln!("Failed to listen for SIGTERM shutdown signal: {}", e);
                         }
                     }
                 }
@@ -269,8 +268,8 @@ impl HostedObjectTrait for HostedObject {
                 {
                     // Use ctrl_c for non-Unix systems (Windows testing)
                     match signal::ctrl_c().await {
-                        Ok(_) => info!("Received Ctrl+C, initiating shutdown..."),
-                        Err(e) => error!("Failed to listen for ctrl_c shutdown signal: {}", e),
+                        Ok(_) => println!("Received Ctrl+C, initiating shutdown..."),
+                        Err(e) => eprintln!("Failed to listen for ctrl_c shutdown signal: {}", e),
                     }
                     
                 }
@@ -278,10 +277,10 @@ impl HostedObjectTrait for HostedObject {
                 let _ = shutdown_tx.send(());
             }).await {
                 Ok(_) => {
-                    info!("Shutdown completed successfully");
+                    println!("Shutdown completed successfully");
                 }
                 Err(_) => {
-                    error!("Shutdown timed out");
+                    eprintln!("Shutdown timed out");
                 }
             }
         });
