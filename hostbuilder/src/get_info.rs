@@ -56,28 +56,12 @@ pub async fn get_exchange(
     // Acquire a Redis connection
     let connection = get_redis_connection(&redis_pool).await?;
     
-    // Check if the exchange doesn't exist in the database
+    // Check if the exchange exists in the database
     if !exchange_exists(postgres_pool.clone(), &name).await {
         println!("Exchange does not exist");
         let new_exchange = NewExchange::new(&name);
-        return create_exchange(postgres_pool.clone(), new_exchange).await.map_err(anyhow::Error::from);
-    }
-
-    // Retrieve the exchange from the database
-    let exchange = get_exchanges_by_name(postgres_pool.clone(), &name).await?;
-    let redis_key = format!("exchange:{}", exchange.exchange_id);
-
-    // Check if the exchange exists in Redis
-    let exists= Retry::spawn(retry_strategy.clone(), || async {
-        cmd("HEXISTS")
-            .arg(&redis_key)
-            .arg("exchange")
-            .query_async::<_, bool>(&mut connection.clone())
-            .await
-    }).await?;
-
-    if !exists {
-        // Save the exchange to Redis if it doesn't exist
+        let exchange = create_exchange(postgres_pool.clone(), new_exchange).await?;
+        let redis_key = format!("exchange:{}", exchange.exchange);
         Retry::spawn(retry_strategy.clone(), || async {
             cmd("HSET")
                 .arg(&redis_key)
@@ -89,13 +73,44 @@ pub async fn get_exchange(
                 .arg(&exchange.exchange)
                 .query_async::<_, ()>(&mut connection.clone())
                 .await
-        }).await?;
-        println!("Saved exchange to Redis with key {}", redis_key);
+        }).await?;        
+        Ok(exchange)
     } else {
-        println!("Exchange already exists in Redis with key {}", redis_key);
-    }
+        println!("Exchange already exists");
 
-    Ok(exchange)
+        // Retrieve the exchange from the database
+        let exchange = get_exchanges_by_name(postgres_pool.clone(), &name).await?;
+        let redis_key = format!("exchange:{}", exchange.exchange);
+
+        // Check if the exchange exists in Redis
+        let exists= Retry::spawn(retry_strategy.clone(), || async {
+            cmd("HEXISTS")
+                .arg(&redis_key)
+                .arg("exchange")
+                .query_async::<_, bool>(&mut connection.clone())
+                .await
+        }).await?;
+
+        if !exists {
+            // Save the exchange to Redis if it doesn't exist
+            Retry::spawn(retry_strategy.clone(), || async {
+                cmd("HSET")
+                    .arg(&redis_key)
+                    .arg("created_at")
+                    .arg(&exchange.created_at.to_string())
+                    .arg("exchange_id")
+                    .arg(&exchange.exchange_id.to_string())
+                    .arg("exchange")
+                    .arg(&exchange.exchange)
+                    .query_async::<_, ()>(&mut connection.clone())
+                    .await
+            }).await?;
+            println!("Saved exchange to Redis with key {}", redis_key);
+        } else {
+            println!("Exchange already exists in Redis with key {}", redis_key);
+        }
+        Ok(exchange)
+    }
 }
 
 
