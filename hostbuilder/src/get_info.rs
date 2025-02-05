@@ -56,7 +56,7 @@ pub async fn get_exchange(
     // Acquire a Redis connection
     let connection = get_redis_connection(&redis_pool).await?;
     
-    // Check if the exchange exists in the database
+    // Check if the exchange doesn't exist in the database
     if !exchange_exists(postgres_pool.clone(), &name).await {
         println!("Exchange does not exist");
         let new_exchange = NewExchange::new(&name);

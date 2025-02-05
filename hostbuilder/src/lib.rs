@@ -164,7 +164,6 @@ impl HostedObjectTrait for HostedObject {
                                                                         println!(
                                                                             "Listening to Kraken level 3"
                                                                         );
-
                                                                     }
                                                                     Err(e) => eprintln!("Failed to listen: {}", e),
                                                                 }
