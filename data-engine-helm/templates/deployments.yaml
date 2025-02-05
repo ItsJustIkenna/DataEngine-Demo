@@ -101,14 +101,6 @@ spec:
             - "ps aux | grep -q '[s]erver' || exit 1"
           initialDelaySeconds: 15
           timeoutSeconds: 10
-        readinessProbe:
-          exec:
-            command:
-            - sh
-            - -c
-            - "ps aux | grep -q '[s]erver' || exit 1"
-          initialDelaySeconds: 15
-          timeoutSeconds: 10
         imagePullPolicy: IfNotPresent
       terminationGracePeriodSeconds: 30
       volumes:

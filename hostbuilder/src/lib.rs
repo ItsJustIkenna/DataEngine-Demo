@@ -274,7 +274,9 @@ impl HostedObjectTrait for HostedObject {
                     
                 }
 
-                let _ = shutdown_tx.send(());
+                if let Err(e) = shutdown_tx.send(()) {
+                    eprintln!("Failed to send shutdown signal: {}", e);
+                }
             }).await {
                 Ok(_) => {
                     println!("Shutdown completed successfully");
