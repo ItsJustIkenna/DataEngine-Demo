@@ -96,11 +96,17 @@ spec:
         livenessProbe:
           exec:
             command:
-            - sh
-            - -c
-            - "ps aux | grep -q '[s]erver' || exit 1"
-          initialDelaySeconds: 30
-          timeoutSeconds: 10
+              - "/usr/local/bin/liveness_check.sh"
+          initialDelaySeconds: 10
+          periodSeconds: 20
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+              - "/usr/local/bin/health_check.sh"
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
         imagePullPolicy: IfNotPresent
       terminationGracePeriodSeconds: 30
       volumes:
