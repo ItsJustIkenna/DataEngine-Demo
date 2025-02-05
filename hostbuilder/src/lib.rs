@@ -28,7 +28,6 @@ use handlers::{
 use mockall::automock;
 use redis_utils::create_redis_pool;
 use serde_json::json;
-use std::time::Instant;
 use std::{
     env,
     sync::Arc
@@ -80,7 +79,6 @@ impl HostedObject {
 #[async_trait]
 impl HostedObjectTrait for HostedObject {
     async fn run(&mut self) -> Result<()> {
-        let start_time = Instant::now();
         let (shutdown_tx, _) = channel(1);
         let mut handles = vec![];
         let config = self.config.clone();
@@ -166,9 +164,6 @@ impl HostedObjectTrait for HostedObject {
                                                                         println!(
                                                                             "Listening to Kraken level 3"
                                                                         );
-                                                                        let duration = start_time.elapsed();
-                                                                        println!("Startup time: {:.2?} seconds", duration);
-                                                                        std::process::exit(1);
                                                                     }
                                                                     Err(e) => eprintln!("Failed to listen: {}", e),
                                                                 }
