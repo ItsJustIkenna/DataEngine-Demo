@@ -12,5 +12,6 @@ async fn main() -> Result<()> {
     engine.run().await?;
     let duration = start_time.elapsed();
     println!("Startup time: {:.2?} seconds", duration);
+    std::process::exit(1);
     Ok(())
 }
