@@ -99,7 +99,7 @@ spec:
             - sh
             - -c
             - "ps aux | grep -q '[s]erver' || exit 1"
-          initialDelaySeconds: 15
+          initialDelaySeconds: 30
           timeoutSeconds: 10
         imagePullPolicy: IfNotPresent
       terminationGracePeriodSeconds: 30
