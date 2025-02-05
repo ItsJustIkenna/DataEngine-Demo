@@ -126,22 +126,20 @@ pub async fn get_securities(
                 .arg("symbol")
                 .arg(&security.symbol);
             securities.push(security);
-            continue;
-        }
+        } else {
+            println!("Security already exists in the database: {}", symbol);
 
-        let security = get_security_by_symbol(postgres_pool.clone(), symbol).await?;
+            let security = get_security_by_symbol(postgres_pool.clone(), symbol).await?;
 
-        match Retry::spawn(retry_strategy.clone(), || async {
-            cmd("HEXISTS")
-                .arg(format!("security:{}", security.security_id))
-                .arg("symbol")
-                .query_async::<_, bool>(&mut connection.clone())
-                .await
-        }).await {
-            Ok(exists) if exists => {
-                println!("Security already exists in Redis: {}", security.symbol);
-            }
-            Ok(_) => {
+            let exists = Retry::spawn(retry_strategy.clone(), || async {
+                cmd("HEXISTS")
+                    .arg(format!("security:{}", security.security_id))
+                    .arg("symbol")
+                    .query_async::<_, bool>(&mut connection.clone())
+                    .await
+            }).await?;
+            
+            if !exists {
                 println!("Security does not exist in Redis. Adding security: {}", security.symbol);
                 pipe.atomic()
                 .cmd("HSET")
@@ -152,12 +150,11 @@ pub async fn get_securities(
                 .arg(&security.security_id.to_string())
                 .arg("symbol")
                 .arg(&security.symbol);
+            } else {
+                println!("Security already exists in Redis: {}", security.symbol);
             }
-            Err(e) => {
-                println!("Failed to check if security exists in Redis: {}", e);
-            }
-        };
-        securities.push(security);
+            securities.push(security);
+        }
     }
 
     Retry::spawn(retry_strategy.clone(), || async {
@@ -214,44 +211,37 @@ pub async fn get_orderbooks(
                     println!("Failed to create orderbook: {}", e);
                 }
             }
-            continue;
-        }
+        } else {
+            println!("Orderbook exists for security: {}", security.symbol);
 
-        // Retrieve existing orderbook from PostgreSQL
-        let order_book = get_orderbook_by_exchange_id_and_security_id(
-            postgres_pool.clone(),
-            exchange.exchange_id,
-            security.security_id,
-        )
-        .await?;
+            // Retrieve existing orderbook from PostgreSQL
+            let order_book = get_orderbook_by_exchange_id_and_security_id(
+                postgres_pool.clone(),
+                exchange.exchange_id,
+                security.security_id,
+            )
+            .await?;
 
-        let redis_key = format!("order_book:{}", order_book.order_book_id);
+            let redis_key = format!("order_book:{}", order_book.order_book_id);
 
-        // Check if the orderbook exists in Redis
-        match Retry::spawn(retry_strategy.clone(), || async {
-            cmd("HEXISTS")
-                .arg(&redis_key)
-                .arg("symbol")
-                .query_async::<_, bool>(&mut connection.clone())
-                .await
-        })
-        .await
-        {
-            Ok(exists) if exists => {
+            // Check if the orderbook exists in Redis
+            let exists = Retry::spawn(retry_strategy.clone(), || async {
+                cmd("HEXISTS")
+                    .arg(&redis_key)
+                    .arg("symbol")
+                    .query_async::<_, bool>(&mut connection.clone())
+                    .await
+            })
+            .await?;
+
+            if !exists {
+                println!("Orderbook does not exist in Redis. Adding key {}", redis_key);
+                add_orderbook_to_redis_pipeline(&mut pipe, &order_book);
+            } else {
                 println!("Orderbook already exists in Redis with key {}", redis_key);
             }
-            Ok(_) => {
-                println!(
-                    "Orderbook does not exist in Redis. Adding key {}",
-                    redis_key
-                );
-                add_orderbook_to_redis_pipeline(&mut pipe, &order_book);
-            }
-            Err(e) => {
-                println!("Failed to check if orderbook exists in Redis: {}", e);
-            }
+            orderbooks.insert(security.symbol.clone(), order_book);
         }
-        orderbooks.insert(security.symbol.clone(), order_book);
     }
 
     // Execute the Redis pipeline
