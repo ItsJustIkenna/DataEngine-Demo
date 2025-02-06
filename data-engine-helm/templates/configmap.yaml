@@ -4,6 +4,7 @@ metadata:
   name: {{ .Values.appName }}-configmap
 data:
   POSTGRES_DB: "tsdb_transaction"
+  POSTGRES_USER: "tsdbadmin"
   POSTGRES_HOST: "ll8stnrnd9.yd4ed8gjcp.tsdb.cloud.timescale.com"
   POSTGRES_PORT: "{{ .Values.timescale.port }}"
   REDIS_DB: "cache-LW5CEFX0"
