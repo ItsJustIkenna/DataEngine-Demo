@@ -244,7 +244,7 @@ impl HostedObjectTrait for HostedObject {
 
         let shutdown_handle = tokio::spawn(async move {
             println!("Shutdown handle spawned");
-            match  timeout(Duration::from_secs(30), async {
+            match  timeout(Duration::from_secs(60), async {
                 #[cfg(unix)]
                 {
                     // Use SIGTERM signal handler for Unix-based systems (Kubernetes)
