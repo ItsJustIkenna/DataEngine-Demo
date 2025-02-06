@@ -39,11 +39,7 @@ use tokio::signal::unix::{
 };
 use tokio::{
     signal,
-    sync::broadcast::channel,
-    time::{
-        timeout,
-        Duration
-    }
+    sync::broadcast::channel
 };
 
 use crate::endpoint::EndpointHandler;
@@ -244,60 +240,50 @@ impl HostedObjectTrait for HostedObject {
 
         let shutdown_handle = tokio::spawn(async move {
             println!("Shutdown handle spawned");
-            match  timeout(Duration::from_secs(60), async {
-                #[cfg(unix)]
-                {
-                    // Use SIGTERM signal handler for Unix-based systems (Kubernetes)
-                    match signal(SignalKind::terminate()) {
-                        Ok(mut term_signal) => {
-                            match term_signal.recv().await {
-                                Some(_) => {
-                                    println!("Received SIGTERM, initiating shutdown...");
-                                    if let Err(e) = shutdown_tx.send(()) {
-                                        eprintln!("Failed to send shutdown signal: {}", e);
-                                    }
+            #[cfg(unix)]
+            {
+                // Use SIGTERM signal handler for Unix-based systems (Kubernetes)
+                match signal(SignalKind::terminate()) {
+                    Ok(mut term_signal) => {
+                        match term_signal.recv().await {
+                            Some(_) => {
+                                println!("Received SIGTERM, initiating shutdown...");
+                                if let Err(e) = shutdown_tx.send(()) {
+                                    eprintln!("Failed to send shutdown signal: {}", e);
                                 }
-                                None => {
-                                    eprintln!("Failed to receive SIGTERM signal");
-                                }
-                            };
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to listen for SIGTERM shutdown signal: {}", e);
-                        }
-                    }
-                }
-
-                #[cfg(not(unix))]
-                {
-                    // Use ctrl_c for non-Unix systems (Windows testing)
-                    match signal::ctrl_c().await {
-                        Ok(_) => {
-                            println!("Received Ctrl+C, initiating shutdown...");
-                            if let Err(e) = shutdown_tx.send(()) {
-                                eprintln!("Failed to send shutdown signal: {}", e);
                             }
-                        }
-                        Err(e) => eprintln!("Failed to listen for ctrl_c shutdown signal: {}", e),
+                            None => {
+                                eprintln!("Failed to receive SIGTERM signal");
+                            }
+                        };
                     }
-                    
-                }
-
-            }).await {
-                Ok(_) => {
-                    println!("Shutdown completed successfully");
-                }
-                Err(e) => {
-                    eprintln!("Shutdown timed out: {}", e);
+                    Err(e) => {
+                        eprintln!("Failed to listen for SIGTERM shutdown signal: {}", e);
+                    }
                 }
             }
+
+            #[cfg(not(unix))]
+            {
+                // Use ctrl_c for non-Unix systems (Windows testing)
+                match signal::ctrl_c().await {
+                    Ok(_) => {
+                        println!("Received Ctrl+C, initiating shutdown...");
+                        if let Err(e) = shutdown_tx.send(()) {
+                            eprintln!("Failed to send shutdown signal: {}", e);
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to listen for ctrl_c shutdown signal: {}", e),
+                }
+                
+            }
         });
+
+        handles.push(shutdown_handle);
 
         for handle in handles {
             let _ = handle.await;
         }
-
-        let _ = shutdown_handle.await;
         Ok(())
     }
 }
