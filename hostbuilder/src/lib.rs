@@ -243,6 +243,7 @@ impl HostedObjectTrait for HostedObject {
         }
 
         let shutdown_handle = tokio::spawn(async move {
+            println!("Shutdown handle spawned");
             match  timeout(Duration::from_secs(30), async {
                 #[cfg(unix)]
                 {
@@ -281,8 +282,8 @@ impl HostedObjectTrait for HostedObject {
                 Ok(_) => {
                     println!("Shutdown completed successfully");
                 }
-                Err(_) => {
-                    eprintln!("Shutdown timed out");
+                Err(e) => {
+                    eprintln!("Shutdown timed out: {}", e);
                 }
             }
         });
