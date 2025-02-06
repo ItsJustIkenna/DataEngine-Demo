@@ -49,16 +49,16 @@ RUN apt-get update && apt-get install -y \
 
 # Create the health check script
 RUN echo '#!/bin/sh' > /usr/local/bin/health_check.sh \
-&& echo 'if ! pgrep -f "server"; then exit 1; fi' >> /usr/local/bin/health_check.sh \
-&& echo 'if ! redis-cli -h $REDIS_HOST -p $REDIS_PORT ping | grep -q "PONG"; then exit 1; fi' >> /usr/local/bin/health_check.sh \
+&& echo 'if ! pgrep -x "/bin/server"; then exit 1; fi' >> /usr/local/bin/health_check.sh \
+&& echo 'if ! redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASSWORD ping | grep -q "PONG"; then exit 1; fi' >> /usr/local/bin/health_check.sh \
 && echo 'PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1" >/dev/null 2>&1 || exit 1' >> /usr/local/bin/health_check.sh \
 && echo 'if ! netstat -an | grep LISTEN | grep -q 443; then exit 1; fi' >> /usr/local/bin/health_check.sh \
 && chmod +x /usr/local/bin/health_check.sh
 
 # Create the liveness probe script
 RUN echo '#!/bin/sh' > /usr/local/bin/liveness_check.sh \
-&& echo 'if ! pgrep -f "server"; then exit 1; fi' >> /usr/local/bin/liveness_check.sh \
-&& echo 'if ! redis-cli -h $REDIS_HOST -p $REDIS_PORT ping | grep -q "PONG"; then exit 1; fi' >> /usr/local/bin/liveness_check.sh \
+&& echo 'if ! pgrep -x "/bin/server"; then exit 1; fi' >> /usr/local/bin/liveness_check.sh \
+&& echo 'if ! redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASSWORD ping | grep -q "PONG"; then exit 1; fi' >> /usr/local/bin/liveness_check.sh \
 && echo 'PGPASSWORD=$POSTGRES_PASSWORD psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1" >/dev/null 2>&1 || exit 1' >> /usr/local/bin/liveness_check.sh \
 && chmod +x /usr/local/bin/liveness_check.sh
 
