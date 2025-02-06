@@ -93,20 +93,20 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "200m"
-        livenessProbe:
-          exec:
-            command:
-              - "/usr/local/bin/liveness_check.sh"
-          initialDelaySeconds: 10
-          periodSeconds: 20
-          failureThreshold: 3
-        readinessProbe:
-          exec:
-            command:
-              - "/usr/local/bin/health_check.sh"
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          failureThreshold: 3
+        # livenessProbe:
+        #   exec:
+        #     command:
+        #       - "/usr/local/bin/liveness_check.sh"
+        #   initialDelaySeconds: 10
+        #   periodSeconds: 20
+        #   failureThreshold: 3
+        # readinessProbe:
+        #   exec:
+        #     command:
+        #       - "/usr/local/bin/health_check.sh"
+        #   initialDelaySeconds: 5
+        #   periodSeconds: 10
+        #   failureThreshold: 3
         imagePullPolicy: IfNotPresent
       terminationGracePeriodSeconds: 30
       volumes:
