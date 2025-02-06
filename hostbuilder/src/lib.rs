@@ -253,6 +253,9 @@ impl HostedObjectTrait for HostedObject {
                             match term_signal.recv().await {
                                 Some(_) => {
                                     println!("Received SIGTERM, initiating shutdown...");
+                                    if let Err(e) = shutdown_tx.send(()) {
+                                        eprintln!("Failed to send shutdown signal: {}", e);
+                                    }
                                 }
                                 None => {
                                     eprintln!("Failed to receive SIGTERM signal");
@@ -269,15 +272,17 @@ impl HostedObjectTrait for HostedObject {
                 {
                     // Use ctrl_c for non-Unix systems (Windows testing)
                     match signal::ctrl_c().await {
-                        Ok(_) => println!("Received Ctrl+C, initiating shutdown..."),
+                        Ok(_) => {
+                            println!("Received Ctrl+C, initiating shutdown...");
+                            if let Err(e) = shutdown_tx.send(()) {
+                                eprintln!("Failed to send shutdown signal: {}", e);
+                            }
+                        }
                         Err(e) => eprintln!("Failed to listen for ctrl_c shutdown signal: {}", e),
                     }
                     
                 }
 
-                if let Err(e) = shutdown_tx.send(()) {
-                    eprintln!("Failed to send shutdown signal: {}", e);
-                }
             }).await {
                 Ok(_) => {
                     println!("Shutdown completed successfully");
