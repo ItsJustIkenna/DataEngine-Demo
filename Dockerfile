@@ -51,14 +51,14 @@ RUN apt-get update && apt-get install -y \
 RUN echo '#!/bin/sh' > /usr/local/bin/health_check.sh \
 && echo 'if ! pgrep "server"; then exit 1; fi' >> /usr/local/bin/health_check.sh \
 && echo 'if ! redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASSWORD ping | grep -q "PONG"; then exit 1; fi' >> /usr/local/bin/health_check.sh \
-&& echo 'if ! pg_isready -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB; then exit 1; fi' >> /usr/local/bin/health_check.sh \
+&& echo 'if ! pg_isready -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USERNAME -d $POSTGRES_DB; then exit 1; fi' >> /usr/local/bin/health_check.sh \
 && chmod +x /usr/local/bin/health_check.sh
 
 # Create the liveness probe script
 RUN echo '#!/bin/sh' > /usr/local/bin/liveness_check.sh \
 && echo 'if ! pgrep "server"; then exit 1; fi' >> /usr/local/bin/liveness_check.sh \
 && echo 'if ! redis-cli -h $REDIS_HOST -p $REDIS_PORT -a $REDIS_PASSWORD ping | grep -q "PONG"; then exit 1; fi' >> /usr/local/bin/liveness_check.sh \
-&& echo 'if ! pg_isready -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB; then exit 1; fi' >> /usr/local/bin/liveness_check.sh \
+&& echo 'if ! pg_isready -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USERNAME -d $POSTGRES_DB; then exit 1; fi' >> /usr/local/bin/liveness_check.sh \
 && chmod +x /usr/local/bin/liveness_check.sh
 
 # Create a non-privileged user to run the app
