@@ -133,7 +133,7 @@ pub async fn get_securities(
             let security = create_security(postgres_pool.clone(), new_security).await?;
             pipe.atomic()
                 .cmd("HSET")
-                .arg(format!("security:{}", security.security_id))
+                .arg(format!("security:{}", security.symbol))
                 .arg("created_at")
                 .arg(&security.created_at.to_string())
                 .arg("security_id")
@@ -148,7 +148,7 @@ pub async fn get_securities(
 
             let exists = Retry::spawn(retry_strategy.clone(), || async {
                 cmd("HEXISTS")
-                    .arg(format!("security:{}", security.security_id))
+                    .arg(format!("security:{}", security.symbol))
                     .arg("symbol")
                     .query_async::<_, bool>(&mut connection.clone())
                     .await
@@ -158,7 +158,7 @@ pub async fn get_securities(
                 println!("Security does not exist in Redis. Adding security: {}", security.symbol);
                 pipe.atomic()
                 .cmd("HSET")
-                .arg(format!("security:{}", security.security_id))
+                .arg(format!("security:{}", security.symbol))
                 .arg("created_at")
                 .arg(&security.created_at.to_string())
                 .arg("security_id")
@@ -273,7 +273,7 @@ pub async fn get_orderbooks(
 fn add_orderbook_to_redis_pipeline(pipe: &mut redis::Pipeline, order_book: &OrderBook) {
     pipe.atomic()
         .cmd("HSET")
-        .arg(format!("order_book:{}", order_book.order_book_id))
+        .arg(format!("order_book:{}", order_book.symbol))
         .arg("created_at")
         .arg(&order_book.created_at.to_string())
         .arg("updated_at")
