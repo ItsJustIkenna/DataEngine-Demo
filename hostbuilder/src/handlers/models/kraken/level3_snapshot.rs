@@ -5,16 +5,11 @@ use bigdecimal::{
     BigDecimal,
     Zero
 };
+use chrono::{DateTime, Utc};
 use databaseschema::{
-    models::orderbook::OrderBook,
-    models::open_buy_order::NewOpenBuyOrder,
-    models::open_sell_order::NewOpenSellOrder,
-    ops::{
-        open_buy_order_ops::create_open_buy_orders,
-        open_sell_order_ops::create_open_sell_orders,
-        order_book_ops::update_orderbook,
-    },
-    CustomAsyncPgConnectionManager,
+    models::{historical_order::NewHistoricalOrder, open_buy_order::NewOpenBuyOrder, open_sell_order::NewOpenSellOrder, order_book::OrderBook}, ops::{
+        historical_order_ops::create_historical_orders, open_buy_order_ops::create_open_buy_orders, open_sell_order_ops::create_open_sell_orders, order_book_ops::update_orderbook
+    }, CustomAsyncPgConnectionManager
 };
 use deadpool::managed::Pool;
 use deadpool_redis::{
@@ -86,16 +81,19 @@ impl Level3Snapshot {
                         let bid_futures = async {
                             if !snapshot_data.bids.is_empty() {
                                 let mut buy_orders = Vec::new();
+                                let mut historical_orders = Vec::new();
                                 let mut pipe = redis::pipe();
 
                                 for bid in snapshot_data.bids.iter() {
                                     let price_level = &bid.limit_price;
                                     let buy_quantity = &bid.order_qty;
                                     let unique_id = &bid.order_id;
+                                    let timestamp = bid.timestamp;
 
                                     open_bid_volume += buy_quantity;
 
                                     let order = NewOpenBuyOrder::new(
+                                        timestamp.clone(),
                                         &order_book.symbol,
                                         &order_book.exchange,
                                         order_book.security_id,
@@ -104,6 +102,20 @@ impl Level3Snapshot {
                                         unique_id,
                                         price_level,
                                         buy_quantity,
+                                    );
+
+                                    let historical_order = NewHistoricalOrder::new(
+                                        timestamp.clone(),
+                                        &unique_id,
+                                        "new",
+                                        "buy",
+                                        price_level,
+                                        buy_quantity,
+                                        None,
+                                        None,
+                                        "open",
+                                        &order_book.exchange,
+                                        &order_book.symbol,
                                     );
 
                                     pipe.atomic()
@@ -127,6 +139,7 @@ impl Level3Snapshot {
                                         .arg(&order.buy_quantity.to_string());
 
                                     buy_orders.push(order);
+                                    historical_orders.push(historical_order);
                                 }
 
                                 let result = Retry::spawn(retry_strategy.clone(), || async {
@@ -150,21 +163,29 @@ impl Level3Snapshot {
                                     Ok(_) => println!("Added buy orders to postgres"),
                                     Err(e) => println!("Failed to add buy orders to postgres: {}", e),
                                 };
+
+                                match create_historical_orders(postgres_pool.clone(), historical_orders).await {
+                                    Ok(_) => println!("Added historical orders to postgres"),
+                                    Err(e) => println!("Failed to add historical orders to postgres: {}", e),
+                                };
                             }
                         };
 
                         let ask_futures = async {
                             if !snapshot_data.asks.is_empty() {
-                                let mut add_sell_orders = Vec::new();
+                                let mut sell_orders = Vec::new();
+                                let mut historical_orders = Vec::new();
                                 let mut pipe = redis::pipe();
                                 for ask in snapshot_data.asks.iter() {
                                     let price_level = &ask.limit_price;
                                     let sell_quantity = &ask.order_qty;
                                     let unique_id = &ask.order_id;
+                                    let timestamp = ask.timestamp;
 
                                     open_ask_volume += sell_quantity;
 
                                     let order = NewOpenSellOrder::new(
+                                        timestamp.clone(),
                                         &order_book.symbol,
                                         &order_book.exchange,
                                         order_book.security_id,
@@ -173,6 +194,20 @@ impl Level3Snapshot {
                                         unique_id,
                                         price_level,
                                         sell_quantity,
+                                    );
+
+                                    let historical_order = NewHistoricalOrder::new(
+                                        timestamp.clone(),
+                                        &unique_id,
+                                        "new",
+                                        "sell",
+                                        price_level,
+                                        sell_quantity,
+                                        None,
+                                        None,
+                                        "open",
+                                        &order_book.exchange,
+                                        &order_book.symbol,
                                     );
 
                                     pipe.atomic()
@@ -195,7 +230,8 @@ impl Level3Snapshot {
                                         .arg("sell_quantity")
                                         .arg(&order.sell_quantity.to_string());
 
-                                    add_sell_orders.push(order);
+                                    sell_orders.push(order);
+                                    historical_orders.push(historical_order);
                                 }
 
                                 let result = Retry::spawn(retry_strategy.clone(), || async {
@@ -215,9 +251,14 @@ impl Level3Snapshot {
                                     println!("All retries failed for redis commands: {}", e);
                                 }  
 
-                                match create_open_sell_orders(postgres_pool.clone(), add_sell_orders).await {
+                                match create_open_sell_orders(postgres_pool.clone(), sell_orders).await {
                                     Ok(_) => println!("Added sell orders to postgres"),
                                     Err(e) => println!("Failed to add sell orders to postgres: {}", e),
+                                };
+
+                                match create_historical_orders(postgres_pool.clone(), historical_orders).await {
+                                    Ok(_) => println!("Added historical orders to postgres"),
+                                    Err(e) => println!("Failed to add historical orders to postgres: {}", e),
                                 };
                             }
                         };
@@ -324,5 +365,5 @@ struct SnapshotOrder {
     order_id: String,
     limit_price: BigDecimal,
     order_qty: BigDecimal,
-    timestamp: String,
+    timestamp: DateTime<Utc>,
 }

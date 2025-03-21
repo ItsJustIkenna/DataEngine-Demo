@@ -8,7 +8,7 @@ use databaseschema::{
             Exchange,
             NewExchange
         },
-        orderbook::{
+        order_book::{
             NewOrderBook,
             OrderBook
         },
@@ -18,7 +18,7 @@ use databaseschema::{
         }
     },
     ops::{
-        exchanges_ops::{
+        exchange_ops::{
             create_exchange,
             exchange_exists,
             get_exchanges_by_name

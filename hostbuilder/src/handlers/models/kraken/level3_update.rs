@@ -11,32 +11,19 @@ use bigdecimal::{
     BigDecimal,
     Zero
 };
+use chrono::{DateTime, Utc};
 use databaseschema::{
     models::{
-        modified_buy_order::NewModifiedBuyOrder,
-        modified_sell_order::NewModifiedSellOrder,
-        open_buy_order::NewOpenBuyOrder,
-        open_sell_order::NewOpenSellOrder,
-        orderbook::OrderBook
+        historical_order::NewHistoricalOrder, open_buy_order::NewOpenBuyOrder, open_sell_order::NewOpenSellOrder, order_book::OrderBook
     },
         ops::{
-            modified_buy_order_ops::{
-                create_modified_buy_orders,
-                delete_modified_buy_orders
-            },
-            modified_sell_order_ops::{
-                create_modified_sell_orders,
-                delete_modified_sell_orders
-            },
-            open_buy_order_ops::{
+            historical_order_ops::create_historical_orders, open_buy_order_ops::{
                 create_open_buy_orders,
-                delete_open_buy_orders
-            },
-            open_sell_order_ops::{
+                delete_open_buy_orders, modify_open_buy_orders
+            }, open_sell_order_ops::{
                 create_open_sell_orders,
-                delete_open_sell_orders
-            },
-            order_book_ops::update_orderbook
+                delete_open_sell_orders, modify_open_sell_orders
+            }, order_book_ops::update_orderbook
         },
     CustomAsyncPgConnectionManager
 };
@@ -135,8 +122,9 @@ impl Level3Update {
                         let mut total_volume = BigDecimal::from_str(&total_volume).expect("Failed to convert total volume to BigDecimal");
         
                         let bid_futures = async {
+                            let mut historical_orders = Vec::new();
                             let mut buy_orders = Vec::new();
-                            let mut modified_orders = Vec::new();
+                            let mut modify_orders = Vec::new();
                             let mut delete_orders = Vec::new();
                             let mut pipe = redis::pipe();
         
@@ -145,10 +133,12 @@ impl Level3Update {
                                     let price_level = &bid.limit_price;
                                     let buy_quantity = &bid.order_qty;
                                     let unique_id = &bid.order_id;
+                                    let timestamp = bid.timestamp;
         
                                     bid_volume += buy_quantity;
         
                                     let order = NewOpenBuyOrder::new(
+                                        timestamp,
                                         &order_book.symbol,
                                         &order_book.exchange,
                                         order_book.security_id,
@@ -157,6 +147,20 @@ impl Level3Update {
                                         unique_id,
                                         price_level,
                                         buy_quantity,
+                                    );
+
+                                    let historical_order = NewHistoricalOrder::new(
+                                        timestamp.clone(),
+                                        &unique_id,
+                                        "new",
+                                        "buy",
+                                        price_level,
+                                        buy_quantity,
+                                        None,
+                                        None,
+                                        "open",
+                                        &order_book.exchange,
+                                        &order_book.symbol,
                                     );
         
                                     pipe.atomic()
@@ -180,10 +184,12 @@ impl Level3Update {
                                         .arg(&order.buy_quantity.to_string());
         
                                     buy_orders.push(order);
+                                    historical_orders.push(historical_order);
                                 } else if bid.event == "modify" {
                                     let price_level = &bid.limit_price;
                                     let new_buy_quantity = &bid.order_qty;
                                     let unique_id = &bid.order_id;
+                                    let timestamp = bid.timestamp;
         
                                     let buy_quantity = Retry::spawn(retry_strategy.clone(), || async {    
                                         match cmd("HGET")
@@ -215,42 +221,61 @@ impl Level3Update {
         
                                     let buy_quantity = (new_buy_quantity - buy_quantity).abs();
         
-                                    bid_volume += buy_quantity;
-        
-                                    let order = NewModifiedBuyOrder::new(
-                                        &order_book.symbol,
-                                        &order_book.exchange,
-                                        order_book.security_id,
-                                        order_book.exchange_id,
-                                        order_book.buy_order_book_id,
-                                        unique_id,
+                                    bid_volume += buy_quantity.clone();
+
+                                    let historical_order = NewHistoricalOrder::new(
+                                        timestamp.clone(),
+                                        &unique_id,
+                                        "modify",
+                                        "buy",
                                         price_level,
                                         new_buy_quantity,
+                                        Some(price_level),
+                                        Some(&buy_quantity),
+                                        "partially_filled",
+                                        &order_book.exchange,
+                                        &order_book.symbol,
                                     );
-        
+
                                     pipe.atomic()
                                         .cmd("HSET")
-                                        .arg(format!("buy_order:{}", order.unique_id))
+                                        .arg(format!("buy_order:{}", unique_id))
                                         .arg("symbol")
-                                        .arg(&order.symbol)
+                                        .arg(&order_book.symbol)
                                         .arg("exchange")
-                                        .arg(&order.exchange)
+                                        .arg(&order_book.exchange)
                                         .arg("security_id")
-                                        .arg(&order.security_id.to_string())
+                                        .arg(&order_book.security_id.to_string())
                                         .arg("exchange_id")
-                                        .arg(&order.exchange_id.to_string())
+                                        .arg(&order_book.exchange_id.to_string())
                                         .arg("buy_order_book_id")
-                                        .arg(&order.buy_order_book_id.to_string())
+                                        .arg(&order_book.buy_order_book_id.to_string())
                                         .arg("unique_id")
-                                        .arg(&order.unique_id)
+                                        .arg(&bid.order_id)
                                         .arg("price_level")
-                                        .arg(&order.price_level.to_string())
+                                        .arg(&bid.limit_price.to_string())
                                         .arg("buy_quantity")
-                                        .arg(&order.new_buy_quantity.to_string());
-        
-                                    delete_orders.push(unique_id);
-                                    modified_orders.push(order);
+                                        .arg(&bid.order_qty.to_string());
+
+                                    modify_orders.push((unique_id, price_level, new_buy_quantity));
+                                    historical_orders.push(historical_order);
                                 } else if bid.event == "delete" {
+                                    let timestamp = bid.timestamp;
+
+                                    let historical_order = NewHistoricalOrder::new(
+                                        timestamp.clone(),
+                                        &bid.order_id,
+                                        "cancel",
+                                        "buy",
+                                        &bid.limit_price,
+                                        &bid.order_qty,
+                                        None,
+                                        None,
+                                        "filled",
+                                        &order_book.exchange,
+                                        &order_book.symbol,
+                                    );
+
                                     pipe.atomic()
                                         .cmd("HDEL")
                                         .arg(format!("buy_order:{}", bid.order_id))
@@ -274,6 +299,7 @@ impl Level3Update {
                                     bid_volume -= &bid.order_qty;
         
                                     delete_orders.push(&bid.order_id);
+                                    historical_orders.push(historical_order);
                                 }
                             }
                             let result = Retry::spawn(retry_strategy.clone(), || async {
@@ -306,13 +332,13 @@ impl Level3Update {
                                     println!("Failed to add open buy orders to postgres: {}", e);
                                 }
                             };
-        
-                            match create_modified_buy_orders(postgres_pool.clone(), modified_orders).await {
+
+                            match modify_open_buy_orders(postgres_pool.clone(), modify_orders).await {
                                 Ok(_) => {
-                                    println!("Added modified buy orders to postgres");
+                                    println!("Modified open buy orders in postgres");
                                 }
                                 Err(e) => {
-                                    println!("Failed to add modified buy orders to postgres: {}", e);
+                                    println!("Failed to modify open buy orders in postgres: {}", e);
                                 }
                             };
         
@@ -324,13 +350,13 @@ impl Level3Update {
                                     println!("Failed to delete open buy orders from postgres: {}", e);
                                 }
                             };
-        
-                            match delete_modified_buy_orders(postgres_pool.clone(), &delete_orders).await {
+
+                            match create_historical_orders(postgres_pool.clone(), historical_orders).await {
                                 Ok(_) => {
-                                    println!("Deleted modified buy orders from postgres");
+                                    println!("Added historical orders to postgres");
                                 }
                                 Err(e) => {
-                                    println!("Failed to delete modified buy orders from postgres: {}", e);
+                                    println!("Failed to add historical orders to postgres: {}", e);
                                 }
                             };
         
@@ -338,8 +364,9 @@ impl Level3Update {
                         };
         
                         let ask_futures = async {
+                            let mut historical_orders = Vec::new();
                             let mut sell_orders = Vec::new();
-                            let mut modified_orders = Vec::new();
+                            let mut modify_orders = Vec::new();
                             let mut delete_orders = Vec::new();
                             let mut pipe = redis::pipe();
         
@@ -348,10 +375,12 @@ impl Level3Update {
                                     let price_level = &ask.limit_price;
                                     let sell_quantity = &ask.order_qty;
                                     let unique_id = &ask.order_id;
+                                    let timestamp = ask.timestamp;
         
                                     ask_volume += sell_quantity;
         
                                     let order = NewOpenSellOrder::new(
+                                        timestamp,
                                         &order_book.symbol,
                                         &order_book.exchange,
                                         order_book.security_id,
@@ -360,6 +389,20 @@ impl Level3Update {
                                         unique_id,
                                         price_level,
                                         sell_quantity,
+                                    );
+
+                                    let historical_order = NewHistoricalOrder::new(
+                                        timestamp.clone(),
+                                        &unique_id,
+                                        "new",
+                                        "sell",
+                                        price_level,
+                                        sell_quantity,
+                                        None,
+                                        None,
+                                        "open",
+                                        &order_book.exchange,
+                                        &order_book.symbol,
                                     );
         
                                     pipe.atomic()
@@ -383,10 +426,12 @@ impl Level3Update {
                                         .arg(&order.sell_quantity.to_string());
         
                                     sell_orders.push(order);
+                                    historical_orders.push(historical_order);
                                 } else if ask.event == "modify" {
                                     let price_level = &ask.limit_price;
                                     let new_sell_quantity = &ask.order_qty;
                                     let unique_id = &ask.order_id;
+                                    let timestamp = ask.timestamp;
         
                                     let ask_quantity = Retry::spawn(retry_strategy.clone(), || async {    
                                         match cmd("HGET")
@@ -418,42 +463,61 @@ impl Level3Update {
         
                                     let ask_quantity = (new_sell_quantity - ask_quantity).abs();
         
-                                    ask_volume += ask_quantity;
-        
-                                    let order = NewModifiedSellOrder::new(
-                                        &order_book.symbol,
-                                        &order_book.exchange,
-                                        order_book.security_id,
-                                        order_book.exchange_id,
-                                        order_book.sell_order_book_id,
-                                        unique_id,
+                                    ask_volume += ask_quantity.clone();
+
+                                    let historical_order = NewHistoricalOrder::new(
+                                        timestamp.clone(),
+                                        &unique_id,
+                                        "modify",
+                                        "sell",
                                         price_level,
                                         new_sell_quantity,
+                                        Some(price_level),
+                                        Some(&ask_quantity),
+                                        "partially_filled",
+                                        &order_book.exchange,
+                                        &order_book.symbol,
                                     );
         
                                     pipe.atomic()
                                         .cmd("HSET")
-                                        .arg(format!("sell_order:{}", order.unique_id))
+                                        .arg(format!("sell_order:{}", unique_id))
                                         .arg("symbol")
-                                        .arg(&order.symbol)
+                                        .arg(&order_book.symbol)
                                         .arg("exchange")
-                                        .arg(&order.exchange)
+                                        .arg(&order_book.exchange)
                                         .arg("security_id")
-                                        .arg(&order.security_id.to_string())
+                                        .arg(&order_book.security_id.to_string())
                                         .arg("exchange_id")
-                                        .arg(&order.exchange_id.to_string())
+                                        .arg(&order_book.exchange_id.to_string())
                                         .arg("sell_order_book_id")
-                                        .arg(&order.sell_order_book_id.to_string())
+                                        .arg(&order_book.sell_order_book_id.to_string())
                                         .arg("unique_id")
-                                        .arg(&order.unique_id)
+                                        .arg(&ask.order_id)
                                         .arg("price_level")
-                                        .arg(&order.price_level.to_string())
+                                        .arg(&ask.limit_price.to_string())
                                         .arg("sell_quantity")
-                                        .arg(&order.new_sell_quantity.to_string());
-        
-                                    delete_orders.push(unique_id);
-                                    modified_orders.push(order);
+                                        .arg(&ask.order_qty.to_string());
+
+                                    modify_orders.push((unique_id, price_level, new_sell_quantity));
+                                    historical_orders.push(historical_order);
                                 } else if ask.event == "delete" {
+                                    let timestamp = ask.timestamp;
+
+                                    let historical_order = NewHistoricalOrder::new(
+                                        timestamp.clone(),
+                                        &ask.order_id,
+                                        "cancel",
+                                        "sell",
+                                        &ask.limit_price,
+                                        &ask.order_qty,
+                                        None,
+                                        None,
+                                        "filled",
+                                        &order_book.exchange,
+                                        &order_book.symbol,
+                                    );
+
                                     pipe.atomic()
                                         .cmd("HDEL")
                                         .arg(format!("sell_order:{}", ask.order_id))
@@ -477,6 +541,7 @@ impl Level3Update {
                                     ask_volume -= &ask.order_qty;
         
                                     delete_orders.push(&ask.order_id);
+                                    historical_orders.push(historical_order);
                                 }
                             }
                             let result = Retry::spawn(retry_strategy.clone(), || async {
@@ -509,13 +574,13 @@ impl Level3Update {
                                     println!("Failed to add open sell orders to postgres: {}", e);
                                 }
                             };
-        
-                            match create_modified_sell_orders(postgres_pool.clone(), modified_orders).await {
+
+                            match modify_open_sell_orders(postgres_pool.clone(), modify_orders).await {
                                 Ok(_) => {
-                                    println!("Added modified sell orders to postgres");
+                                    println!("Modified open sell orders in postgres");
                                 }
                                 Err(e) => {
-                                    println!("Failed to add modified sell orders to postgres: {}", e);
+                                    println!("Failed to modify open sell orders in postgres: {}", e);
                                 }
                             };
         
@@ -527,13 +592,13 @@ impl Level3Update {
                                     println!("Failed to delete open sell orders from postgres: {}", e);
                                 }
                             };
-        
-                            match delete_modified_sell_orders(postgres_pool.clone(), &delete_orders).await {
+
+                            match create_historical_orders(postgres_pool.clone(), historical_orders).await {
                                 Ok(_) => {
-                                    println!("Deleted modified sell orders from postgres");
+                                    println!("Added historical orders to postgres");
                                 }
                                 Err(e) => {
-                                    println!("Failed to delete modified sell orders from postgres: {}", e);
+                                    println!("Failed to add historical orders to postgres: {}", e);
                                 }
                             };
         
@@ -637,5 +702,5 @@ struct UpdateOrder {
     order_id: String,
     limit_price: BigDecimal,
     order_qty: BigDecimal,
-    timestamp: String,
+    timestamp: DateTime<Utc>,
 }

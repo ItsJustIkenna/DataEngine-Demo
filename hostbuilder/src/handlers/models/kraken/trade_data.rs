@@ -1,4 +1,5 @@
 use bigdecimal::BigDecimal;
+use chrono::{DateTime, Utc};
 use serde::{
     Deserialize,
     Serialize
@@ -12,5 +13,5 @@ pub struct TradeData {
     pub qty: BigDecimal,
     pub ord_type: String,
     pub trade_id: u64,
-    pub timestamp: String,
+    pub timestamp: DateTime<Utc>,
 }

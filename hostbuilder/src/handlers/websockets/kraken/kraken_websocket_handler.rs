@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use databaseschema::{
-    models::orderbook::OrderBook, 
+    models::order_book::OrderBook, 
     CustomAsyncPgConnectionManager,
 };
 use deadpool::managed::Pool;

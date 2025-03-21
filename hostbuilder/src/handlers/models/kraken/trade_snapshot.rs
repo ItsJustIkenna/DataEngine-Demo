@@ -2,11 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use databaseschema::{
-    models::trade::NewTrade,
-    models::orderbook::OrderBook,
-    ops::
-        trades_ops::create_trades,
-    CustomAsyncPgConnectionManager,
+    models::{historical_order::NewHistoricalOrder, order_book::OrderBook}, ops::historical_order_ops::create_historical_orders, CustomAsyncPgConnectionManager
 };
 use deadpool::managed::Pool;
 use deadpool_redis::{
@@ -63,14 +59,18 @@ impl TradeSnapshot {
                 let mut pipe = redis::pipe();
 
                 for trade in self.data.iter() {
-                    let new_trade = NewTrade::new(
-                        &trade.symbol,
-                        &order_book.exchange,
-                        order_book.security_id,
-                        order_book.exchange_id,
+                    let historical_trade = NewHistoricalOrder::new(
+                        trade.timestamp,
+                        &trade.trade_id.to_string(),
+                        "trade",
                         &trade.side,
                         &trade.price,
                         &trade.qty,
+                        None,
+                        None,
+                        "filled",
+                        &order_book.exchange,
+                        &trade.symbol,
                     );
 
                     pipe.atomic()
@@ -89,9 +89,9 @@ impl TradeSnapshot {
                         .arg("trade_id")
                         .arg(&trade.trade_id)
                         .arg("timestamp")
-                        .arg(&trade.timestamp);
+                        .arg(&trade.timestamp.to_rfc3339());
 
-                    trades.push(new_trade);
+                    trades.push(historical_trade);
                 }
 
                 let result = Retry::spawn(retry_strategy, || async {
@@ -112,9 +112,9 @@ impl TradeSnapshot {
                     Err(e) => println!("Failed to add trades to redis: {}", e),
                 }
 
-                match create_trades(postgres_pool.clone(), trades).await {
-                    Ok(_) => println!("Added trades to postgres"),
-                    Err(e) => println!("Failed to add trades to postgres: {}", e),
+                match create_historical_orders(postgres_pool.clone(), trades).await {
+                    Ok(_) => println!("Added historical orders to postgres"),
+                    Err(e) => println!("Failed to add historical orders to postgres: {}", e),
                 };
 
                 Ok(())
