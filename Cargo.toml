@@ -1,3 +1,3 @@
 [workspace]
 
-members = ["hostbuilder", "program"]
+members = [ "config","hostbuilder", "program"]

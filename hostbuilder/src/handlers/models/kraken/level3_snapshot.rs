@@ -1,11 +1,9 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use bigdecimal::{
-    BigDecimal,
-    Zero
-};
+use bigdecimal::{BigDecimal, Zero, ToPrimitive};
 use chrono::{DateTime, Utc};
+use config::Config;
 use databaseschema::{
     models::{historical_order::NewHistoricalOrder, open_buy_order::NewOpenBuyOrder, open_sell_order::NewOpenSellOrder, order_book::OrderBook}, ops::{
         historical_order_ops::create_historical_orders, open_buy_order_ops::create_open_buy_orders, open_sell_order_ops::create_open_sell_orders, order_book_ops::update_orderbook
@@ -16,6 +14,8 @@ use deadpool_redis::{
     Connection,
     Manager
 };
+use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
+use publisher::{Publisher, PublisherTrait};
 use redis::cmd;
 use redis_utils::get_redis_connection;
 use serde::{
@@ -47,6 +47,7 @@ impl Level3Snapshot {
         &self,
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+        config: &Config,
         order_book: &OrderBook,
     ) -> Result<()> {
         let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
@@ -75,11 +76,13 @@ impl Level3Snapshot {
                         Ok(())
                     },
                     false => {
+                        let orders = Arc::new(Mutex::new(Vec::new()));
                         let mut open_bid_volume = BigDecimal::zero();
                         let mut open_ask_volume = BigDecimal::zero();
 
                         let bid_futures = async {
                             if !snapshot_data.bids.is_empty() {
+                                let orders = Arc::clone(&orders);
                                 let mut buy_orders = Vec::new();
                                 let mut historical_orders = Vec::new();
                                 let mut pipe = redis::pipe();
@@ -91,6 +94,16 @@ impl Level3Snapshot {
                                     let timestamp = bid.timestamp;
 
                                     open_bid_volume += buy_quantity;
+
+                                    let message = Order {
+                                        unique_id: unique_id.clone(),
+                                        symbol: order_book.symbol.clone(),
+                                        exchange: order_book.exchange.clone(),
+                                        price_level: price_level.to_f32().unwrap(),
+                                        quantity: buy_quantity.to_f32().unwrap(),
+                                        side: "buy".to_string(),
+                                        event: "new".to_string(),
+                                    };
 
                                     let order = NewOpenBuyOrder::new(
                                         timestamp.clone(),
@@ -139,6 +152,7 @@ impl Level3Snapshot {
                                         .arg(&order.buy_quantity.to_string());
 
                                     buy_orders.push(order);
+                                    orders.lock().unwrap().push(message);
                                     historical_orders.push(historical_order);
                                 }
 
@@ -173,6 +187,7 @@ impl Level3Snapshot {
 
                         let ask_futures = async {
                             if !snapshot_data.asks.is_empty() {
+                                let orders = Arc::clone(&orders);
                                 let mut sell_orders = Vec::new();
                                 let mut historical_orders = Vec::new();
                                 let mut pipe = redis::pipe();
@@ -183,6 +198,16 @@ impl Level3Snapshot {
                                     let timestamp = ask.timestamp;
 
                                     open_ask_volume += sell_quantity;
+
+                                    let message = Order {
+                                        unique_id: ask.order_id.clone(),
+                                        symbol: order_book.symbol.clone(),
+                                        exchange: order_book.exchange.clone(),
+                                        price_level: price_level.to_f32().unwrap(),
+                                        quantity: sell_quantity.to_f32().unwrap(),
+                                        side: "sell".to_string(),
+                                        event: "new".to_string(),
+                                    };
 
                                     let order = NewOpenSellOrder::new(
                                         timestamp.clone(),
@@ -231,6 +256,7 @@ impl Level3Snapshot {
                                         .arg(&order.sell_quantity.to_string());
 
                                     sell_orders.push(order);
+                                    orders.lock().unwrap().push(message);
                                     historical_orders.push(historical_order);
                                 }
 
@@ -264,6 +290,24 @@ impl Level3Snapshot {
                         };
 
                         tokio::join!(bid_futures, ask_futures);
+                        
+                        let orders = Orders {
+                            orders: orders.lock().unwrap().clone()
+                        };
+                        let market_message = MarketMessage {
+                            payload: Some(market_message::Payload::OrdersPaylaod(orders)),
+                        };
+                        let topics = &config.topics;
+                        let message = PublishRequest {
+                            topics: topics.clone(),
+                            payload: Some(publish_request::Payload::MarketPayload(market_message)),
+                        };
+                        
+                        
+                        let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
+                        let mut publisher = Publisher::new(&addr).await?;
+                        
+                        publisher.publish(&message.topics, message.payload).await?;
 
 
                         let total_volume = open_bid_volume + open_ask_volume;

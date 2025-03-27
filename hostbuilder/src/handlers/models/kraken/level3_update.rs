@@ -1,6 +1,6 @@
 use std::{
     str::FromStr,
-    sync::Arc
+    sync::{Arc, Mutex}
 };
 
 use anyhow::{
@@ -9,9 +9,11 @@ use anyhow::{
 };
 use bigdecimal::{
     BigDecimal,
-    Zero
+    Zero,
+    ToPrimitive
 };
 use chrono::{DateTime, Utc};
+use config::Config;
 use databaseschema::{
     models::{
         historical_order::NewHistoricalOrder, open_buy_order::NewOpenBuyOrder, open_sell_order::NewOpenSellOrder, order_book::OrderBook
@@ -32,6 +34,8 @@ use deadpool_redis::{
     Connection,
     Manager
 };
+use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
+use publisher::{Publisher, PublisherTrait};
 use redis::cmd;
 use redis_utils::get_redis_connection;
 use serde::{
@@ -63,6 +67,7 @@ impl Level3Update {
         &self,
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+        config: &Config,
         order_book: &OrderBook,
     ) -> Result<()> {
         let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
@@ -91,6 +96,7 @@ impl Level3Update {
                         Ok(())
                     },
                     false => {
+                        let orders = Arc::new(Mutex::new(Vec::new()));
                         let total_volume = Retry::spawn(retry_strategy.clone(), || async {    
                             match cmd("HGET")
                             .arg(format!("order_book:{}", order_book.order_book_id))
@@ -122,6 +128,7 @@ impl Level3Update {
                         let mut total_volume = BigDecimal::from_str(&total_volume).expect("Failed to convert total volume to BigDecimal");
         
                         let bid_futures = async {
+                            let orders = Arc::clone(&orders);
                             let mut historical_orders = Vec::new();
                             let mut buy_orders = Vec::new();
                             let mut modify_orders = Vec::new();
@@ -136,6 +143,16 @@ impl Level3Update {
                                     let timestamp = bid.timestamp;
         
                                     bid_volume += buy_quantity;
+
+                                    let message = Order {
+                                        unique_id: unique_id.clone(),
+                                        symbol: order_book.symbol.clone(),
+                                        exchange: order_book.exchange.clone(),
+                                        price_level: price_level.to_f32().unwrap(),
+                                        quantity: buy_quantity.to_f32().unwrap(),
+                                        side: "buy".to_string(),
+                                        event: "new".to_string(),
+                                    };
         
                                     let order = NewOpenBuyOrder::new(
                                         timestamp,
@@ -184,6 +201,7 @@ impl Level3Update {
                                         .arg(&order.buy_quantity.to_string());
         
                                     buy_orders.push(order);
+                                    orders.lock().unwrap().push(message);
                                     historical_orders.push(historical_order);
                                 } else if bid.event == "modify" {
                                     let price_level = &bid.limit_price;
@@ -223,6 +241,16 @@ impl Level3Update {
         
                                     bid_volume += buy_quantity.clone();
 
+                                    let message = Order {
+                                        unique_id: unique_id.clone(),
+                                        symbol: order_book.symbol.clone(),
+                                        exchange: order_book.exchange.clone(),
+                                        price_level: price_level.to_f32().unwrap(),
+                                        quantity: new_buy_quantity.to_f32().unwrap(),
+                                        side: "buy".to_string(),
+                                        event: "modify".to_string(),
+                                    };
+
                                     let historical_order = NewHistoricalOrder::new(
                                         timestamp.clone(),
                                         &unique_id,
@@ -258,9 +286,20 @@ impl Level3Update {
                                         .arg(&bid.order_qty.to_string());
 
                                     modify_orders.push((unique_id, price_level, new_buy_quantity));
+                                    orders.lock().unwrap().push(message);
                                     historical_orders.push(historical_order);
                                 } else if bid.event == "delete" {
                                     let timestamp = bid.timestamp;
+
+                                    let message = Order {
+                                        unique_id: bid.order_id.clone(),
+                                        symbol: order_book.symbol.clone(),
+                                        exchange: order_book.exchange.clone(),
+                                        price_level: bid.limit_price.to_f32().unwrap(),
+                                        quantity: bid.order_qty.to_f32().unwrap(),
+                                        side: "buy".to_string(),
+                                        event: "delete".to_string(),
+                                    };
 
                                     let historical_order = NewHistoricalOrder::new(
                                         timestamp.clone(),
@@ -299,6 +338,7 @@ impl Level3Update {
                                     bid_volume -= &bid.order_qty;
         
                                     delete_orders.push(&bid.order_id);
+                                    orders.lock().unwrap().push(message);
                                     historical_orders.push(historical_order);
                                 }
                             }
@@ -364,6 +404,7 @@ impl Level3Update {
                         };
         
                         let ask_futures = async {
+                            let orders = Arc::clone(&orders);
                             let mut historical_orders = Vec::new();
                             let mut sell_orders = Vec::new();
                             let mut modify_orders = Vec::new();
@@ -378,6 +419,16 @@ impl Level3Update {
                                     let timestamp = ask.timestamp;
         
                                     ask_volume += sell_quantity;
+
+                                    let message = Order {
+                                        unique_id: ask.order_id.clone(),
+                                        symbol: order_book.symbol.clone(),
+                                        exchange: order_book.exchange.clone(),
+                                        price_level: price_level.to_f32().unwrap(),
+                                        quantity: sell_quantity.to_f32().unwrap(),
+                                        side: "sell".to_string(),
+                                        event: "new".to_string(),
+                                    };
         
                                     let order = NewOpenSellOrder::new(
                                         timestamp,
@@ -426,6 +477,7 @@ impl Level3Update {
                                         .arg(&order.sell_quantity.to_string());
         
                                     sell_orders.push(order);
+                                    orders.lock().unwrap().push(message);
                                     historical_orders.push(historical_order);
                                 } else if ask.event == "modify" {
                                     let price_level = &ask.limit_price;
@@ -465,6 +517,16 @@ impl Level3Update {
         
                                     ask_volume += ask_quantity.clone();
 
+                                    let message = Order {
+                                        unique_id: ask.order_id.clone(),
+                                        symbol: order_book.symbol.clone(),
+                                        exchange: order_book.exchange.clone(),
+                                        price_level: price_level.to_f32().unwrap(),
+                                        quantity: new_sell_quantity.to_f32().unwrap(),
+                                        side: "sell".to_string(),
+                                        event: "bodify".to_string(),
+                                    };
+
                                     let historical_order = NewHistoricalOrder::new(
                                         timestamp.clone(),
                                         &unique_id,
@@ -500,9 +562,20 @@ impl Level3Update {
                                         .arg(&ask.order_qty.to_string());
 
                                     modify_orders.push((unique_id, price_level, new_sell_quantity));
+                                    orders.lock().unwrap().push(message);
                                     historical_orders.push(historical_order);
                                 } else if ask.event == "delete" {
                                     let timestamp = ask.timestamp;
+
+                                    let message = Order {
+                                        unique_id: ask.order_id.clone(),
+                                        symbol: order_book.symbol.clone(),
+                                        exchange: order_book.exchange.clone(),
+                                        price_level: ask.limit_price.to_f32().unwrap(),
+                                        quantity: ask.order_qty.to_f32().unwrap(),
+                                        side: "sell".to_string(),
+                                        event: "delete".to_string(),
+                                    };
 
                                     let historical_order = NewHistoricalOrder::new(
                                         timestamp.clone(),
@@ -541,6 +614,7 @@ impl Level3Update {
                                     ask_volume -= &ask.order_qty;
         
                                     delete_orders.push(&ask.order_id);
+                                    orders.lock().unwrap().push(message);
                                     historical_orders.push(historical_order);
                                 }
                             }
@@ -624,6 +698,24 @@ impl Level3Update {
                                 println!("Failed to add, modify, and delete sell orders to/from redis: {}", e);
                             }
                         }
+
+                        let orders = Orders {
+                            orders: orders.lock().unwrap().clone()
+                        };
+                        let market_message = MarketMessage {
+                            payload: Some(market_message::Payload::OrdersPaylaod(orders)),
+                        };
+                        let topics = &config.topics;
+                        let message = PublishRequest {
+                            topics: topics.clone(),
+                            payload: Some(publish_request::Payload::MarketPayload(market_message)),
+                        };
+                        
+                        
+                        let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
+                        let mut publisher = Publisher::new(&addr).await?;
+                        
+                        publisher.publish(&message.topics, message.payload).await?;
         
                         total_volume += bid_volume + ask_volume;
         

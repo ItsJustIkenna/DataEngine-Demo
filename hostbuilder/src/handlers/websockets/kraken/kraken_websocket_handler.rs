@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use config::Config;
 use databaseschema::{
     models::order_book::OrderBook, 
     CustomAsyncPgConnectionManager,
@@ -19,8 +20,7 @@ use futures_util::{
 };
 use serde_json::Value;
 use std::{
-    collections::HashMap,
-    sync::Arc
+    collections::HashMap, env, sync::Arc
 };
 use tokio::{
     net::TcpStream,
@@ -47,6 +47,7 @@ use crate::{
 //-------------------------------------------------------------------------
 
 pub struct KrakenWebSocketHandler {
+    config: Config,
     writer: Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>,
     reader: Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     unsubscribe_message: Value,
@@ -68,6 +69,9 @@ impl KrakenWebSocketHandler {
             }
         };
 
+        let config_path = env::var("CONFIG_PATH").expect("CONFIG_PATH must be set");
+        let config = Config::new(&config_path)?;
+
         let (mut writer, reader) = ws_stream.split();
         
         writer
@@ -78,6 +82,7 @@ impl KrakenWebSocketHandler {
         let reader = Mutex::new(reader);
         let writer = Mutex::new(writer);
         Ok(Self {
+            config,
             writer,
             reader,
             unsubscribe_message: unsubscribe_message.clone(),
@@ -108,7 +113,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         // Process the snapshot
                                         match self.order_books.get(&snapshot.data[0].symbol) {
                                             Some(order_book) => {
-                                                match snapshot.process_snapshot(self.redis_pool.clone(), self.postgres_pool.clone(), order_book).await {
+                                                match snapshot.process_snapshot(self.redis_pool.clone(), self.postgres_pool.clone(), &self.config, order_book).await {
                                                     Ok(()) => {
                                                         println!("Order book snapshot processed successfully");
                                                     },
@@ -128,7 +133,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         // Process the update
                                         match self.order_books.get(&update.data[0].symbol) {
                                             Some(order_book) => {
-                                                match update.process_update(self.redis_pool.clone(), self.postgres_pool.clone(), order_book).await {
+                                                match update.process_update(self.redis_pool.clone(), self.postgres_pool.clone(), &self.config, order_book).await {
                                                     Ok(()) => {
                                                         println!("Order book update processed successfully");
                                                     },
@@ -147,7 +152,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         // Process the snapshot
                                         match self.order_books.get(&snapshot.data[0].symbol) {
                                             Some(order_book) => {
-                                                match snapshot.process_snapshot(self.redis_pool.clone(), self.postgres_pool.clone(), order_book).await {
+                                                match snapshot.process_snapshot(self.redis_pool.clone(), self.postgres_pool.clone(), &self.config, order_book).await {
                                                     Ok(()) => {
                                                         println!("Trade snapshot processed successfully");
                                                     },
@@ -166,7 +171,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         // Process the update
                                         match self.order_books.get(&update.data[0].symbol) {
                                             Some(order_book) => {
-                                                match update.process_update(self.redis_pool.clone(), self.postgres_pool.clone(), order_book).await {
+                                                match update.process_update(self.redis_pool.clone(), self.postgres_pool.clone(), &self.config, order_book).await {
                                                     Ok(()) => {
                                                         println!("Trade update processed successfully");
                                                     },

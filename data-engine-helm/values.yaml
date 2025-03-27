@@ -1,5 +1,4 @@
 appName: data-engine
-host: localhost
 database: timescale
 timescale:
   port: 35220

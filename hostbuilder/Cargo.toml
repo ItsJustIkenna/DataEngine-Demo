@@ -8,7 +8,7 @@ anyhow = "1.0.86"
 async-trait = "0.1.80"
 base64 = "0.22.1"
 bigdecimal = { version = "0.4.5", features = ["serde"] }
-config = "0.14.0"
+config = { path = "../config" }
 chrono = { version = "0.4.19", features = ["serde"] }
 databaseschema = { path = "../../databaseschema" }
 deadpool = "0.12.1"
@@ -19,6 +19,8 @@ dotenv = "0.15.0"
 futures-util = "0.3.30"
 hmac = "0.12.1"
 mockall = "0.12.1"
+publisher = { path = "../../MessageBrokerEngine/publisher" }
+protocol = { path = "../../MessageBrokerEngine/protocol" }
 redis = { version = "0.25.4", features = ["tokio-native-tls-comp"] }
 redis_utils = { path = "../../redisutils" }
 reqwest = { version = "0.12", features = ["json"] }

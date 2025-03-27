@@ -1,4 +1,3 @@
-mod config;
 pub mod endpoint;
 pub mod get_info;
 pub mod handlers;

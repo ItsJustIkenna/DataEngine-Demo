@@ -11,8 +11,15 @@ use anyhow::{
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Config {
+    pub message_broker: MessageBroker,
     pub topics: Vec<String>,
     pub exchanges: Vec<Exchange>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct MessageBroker {
+    pub address: String,
+    pub port: u16,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use bigdecimal::ToPrimitive;
+use config::Config;
 use databaseschema::{
     models::{historical_order::NewHistoricalOrder, order_book::OrderBook}, ops::historical_order_ops::create_historical_orders, CustomAsyncPgConnectionManager
 };
@@ -9,6 +11,8 @@ use deadpool_redis::{
     Connection,
     Manager
 };
+use protocol::broker::messages::{market_message, publish_request, MarketMessage, PublishRequest, Trade, Trades};
+use publisher::{Publisher, PublisherTrait};
 use redis_utils::get_redis_connection;
 use serde::{
     Deserialize,
@@ -41,6 +45,7 @@ impl TradeSnapshot {
         &self,
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+        config: &Config,
         order_book: &OrderBook
     ) -> Result<()> {
         let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
@@ -56,9 +61,22 @@ impl TradeSnapshot {
             },
             false => {
                 let mut trades = Vec::new();
+                let mut trade_messages = Vec::new();
                 let mut pipe = redis::pipe();
 
                 for trade in self.data.iter() {
+
+                    let trade_message = Trade {
+                        symbol: trade.symbol.clone(),
+                        exchange: order_book.exchange.clone(),
+                        side: trade.side.clone(),
+                        price: trade.price.to_f32().unwrap(),
+                        qty: trade.qty.to_f32().unwrap(),
+                        ord_type: trade.ord_type.clone(),
+                        timestamp: trade.timestamp.to_rfc2822(),
+                        trade_id: trade.trade_id.clone(),
+                    };
+
                     let historical_trade = NewHistoricalOrder::new(
                         trade.timestamp,
                         &trade.trade_id.to_string(),
@@ -89,10 +107,31 @@ impl TradeSnapshot {
                         .arg("trade_id")
                         .arg(&trade.trade_id)
                         .arg("timestamp")
-                        .arg(&trade.timestamp.to_rfc3339());
+                        .arg(&trade.timestamp.to_rfc2822());
 
                     trades.push(historical_trade);
+                    trade_messages.push(trade_message);
                 }
+
+                let trade_messages = Trades {
+                    trades: trade_messages,
+                };
+
+                let market_message = MarketMessage {
+                    payload: Some(market_message::Payload::TradesPayload(trade_messages)),
+                };
+
+                let topics = &config.topics;
+                let message = PublishRequest {
+                    topics: topics.clone(),
+                    payload: Some(publish_request::Payload::MarketPayload(market_message)),
+                };
+                
+                
+                let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
+                let mut publisher = Publisher::new(&addr).await?;
+                
+                publisher.publish(&message.topics, message.payload).await?;
 
                 let result = Retry::spawn(retry_strategy, || async {
                     match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
