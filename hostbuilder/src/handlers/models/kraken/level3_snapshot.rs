@@ -29,6 +29,17 @@ use tokio_retry::{
     },
     Retry
 };
+use tracing::{info, error, warn, debug};
+
+// Pre-allocate capacity for collections
+const INITIAL_ORDERS_CAPACITY: usize = 100;
+const BID_ASK_BATCH_SIZE: usize = 64;
+
+// Common strings to avoid allocations
+const SIDE_BUY: &str = "buy";
+const SIDE_SELL: &str = "sell";
+const EVENT_NEW: &str = "new";
+const STATUS_OPEN: &str = "open";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level3Snapshot {
@@ -50,349 +61,357 @@ impl Level3Snapshot {
         config: &Config,
         order_book: &OrderBook,
     ) -> Result<()> {
-        let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
+        // Reduce retry attempts for lower latency
+        let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
         
-        let mut book_connection = get_redis_connection(&redis_pool)
-            .await
-            .expect("Failed to create redis connection");
-        let bid_connection = get_redis_connection(&redis_pool)
-            .await
-            .expect("Failed to create redis connection");
-        let ask_connection = get_redis_connection(&redis_pool)
-            .await
-            .expect("Failed to create redis connection");
+        // Fetch connections concurrently
+        let book_connection_future = get_redis_connection(&redis_pool);
+        let bid_connection_future = get_redis_connection(&redis_pool);
+        let ask_connection_future = get_redis_connection(&redis_pool);
+        
+        let (book_connection_result, bid_connection_result, ask_connection_result) = 
+            tokio::join!(book_connection_future, bid_connection_future, ask_connection_future);
+            
+        let book_connection = book_connection_result.expect("Failed to create redis connection");
+        let bid_connection = bid_connection_result.expect("Failed to create redis connection");
+        let ask_connection = ask_connection_result.expect("Failed to create redis connection");
 
-        match self.data.is_empty() {
-            true => {
-                println!("Snapshot data is empty");
-                Ok(())
-            },
-            false => {
-                let snapshot_data = &self.data[0];
+        if self.data.is_empty() {
+            debug!("Snapshot data is empty");
+            return Ok(());
+        }
+        
+        let snapshot_data = &self.data[0];
 
-                match snapshot_data.bids.is_empty() && snapshot_data.asks.is_empty() {
-                    true => {
-                        println!("Snapshot data is empty");
-                        Ok(())
-                    },
-                    false => {
-                        let orders = Arc::new(Mutex::new(Vec::new()));
-                        let mut open_bid_volume = BigDecimal::zero();
-                        let mut open_ask_volume = BigDecimal::zero();
+        if snapshot_data.bids.is_empty() && snapshot_data.asks.is_empty() {
+            debug!("Snapshot data has empty bids and asks");
+            return Ok(());
+        }
+        
+        // Pre-allocate orders collection with appropriate capacity
+        let total_order_count = snapshot_data.bids.len() + snapshot_data.asks.len();
+        let orders = Arc::new(Mutex::new(Vec::with_capacity(total_order_count)));
+        
+        let mut open_bid_volume = BigDecimal::zero();
+        let mut open_ask_volume = BigDecimal::zero();
 
-                        let bid_futures = async {
-                            if !snapshot_data.bids.is_empty() {
-                                let orders = Arc::clone(&orders);
-                                let mut buy_orders = Vec::new();
-                                let mut historical_orders = Vec::new();
-                                let mut pipe = redis::pipe();
+        // Process bids concurrently
+        let bid_futures = async {
+            if !snapshot_data.bids.is_empty() {
+                let orders = Arc::clone(&orders);
+                
+                // Pre-allocate all collections with appropriate capacity
+                let bid_count = snapshot_data.bids.len();
+                let mut buy_orders = Vec::with_capacity(bid_count);
+                let mut historical_orders = Vec::with_capacity(bid_count);
+                let mut pipe = redis::pipe();
+                pipe.atomic();
+                
+                // Process bids and collect them in pre-allocated vectors
+                for bid in snapshot_data.bids.iter() {
+                    let price_level = &bid.limit_price;
+                    let buy_quantity = &bid.order_qty;
+                    let unique_id = &bid.order_id;
+                    let timestamp = bid.timestamp;
 
-                                for bid in snapshot_data.bids.iter() {
-                                    let price_level = &bid.limit_price;
-                                    let buy_quantity = &bid.order_qty;
-                                    let unique_id = &bid.order_id;
-                                    let timestamp = bid.timestamp;
+                    open_bid_volume += buy_quantity;
 
-                                    open_bid_volume += buy_quantity;
+                    let message = Order {
+                        unique_id: unique_id.clone(),
+                        symbol: order_book.symbol.clone(),
+                        exchange: order_book.exchange.clone(),
+                        price_level: price_level.to_f32().unwrap_or(0.0),
+                        quantity: buy_quantity.to_f32().unwrap_or(0.0),
+                        side: SIDE_BUY.to_string(),
+                        event: EVENT_NEW.to_string(),
+                    };
 
-                                    let message = Order {
-                                        unique_id: unique_id.clone(),
-                                        symbol: order_book.symbol.clone(),
-                                        exchange: order_book.exchange.clone(),
-                                        price_level: price_level.to_f32().unwrap(),
-                                        quantity: buy_quantity.to_f32().unwrap(),
-                                        side: "buy".to_string(),
-                                        event: "new".to_string(),
-                                    };
+                    let order = NewOpenBuyOrder::new(
+                        timestamp.clone(),
+                        &order_book.symbol,
+                        &order_book.exchange,
+                        order_book.security_id,
+                        order_book.exchange_id,
+                        order_book.buy_order_book_id,
+                        unique_id,
+                        price_level,
+                        buy_quantity,
+                    );
 
-                                    let order = NewOpenBuyOrder::new(
-                                        timestamp.clone(),
-                                        &order_book.symbol,
-                                        &order_book.exchange,
-                                        order_book.security_id,
-                                        order_book.exchange_id,
-                                        order_book.buy_order_book_id,
-                                        unique_id,
-                                        price_level,
-                                        buy_quantity,
-                                    );
+                    let historical_order = NewHistoricalOrder::new(
+                        timestamp.clone(),
+                        unique_id,
+                        EVENT_NEW,
+                        SIDE_BUY,
+                        price_level,
+                        buy_quantity,
+                        None,
+                        None,
+                        STATUS_OPEN,
+                        &order_book.exchange,
+                        &order_book.symbol,
+                    );
 
-                                    let historical_order = NewHistoricalOrder::new(
-                                        timestamp.clone(),
-                                        &unique_id,
-                                        "new",
-                                        "buy",
-                                        price_level,
-                                        buy_quantity,
-                                        None,
-                                        None,
-                                        "open",
-                                        &order_book.exchange,
-                                        &order_book.symbol,
-                                    );
+                    // Prepare key once for reuse
+                    let key = format!("buy_order:{}", order.unique_id);
+                    
+                    pipe.cmd("HSET")
+                        .arg(key)
+                        .arg("symbol").arg(&order.symbol)
+                        .arg("exchange").arg(&order.exchange)
+                        .arg("security_id").arg(&order.security_id.to_string())
+                        .arg("exchange_id").arg(&order.exchange_id.to_string())
+                        .arg("buy_order_book_id").arg(&order.buy_order_book_id.to_string())
+                        .arg("unique_id").arg(&order.unique_id)
+                        .arg("price_level").arg(&order.price_level.to_string())
+                        .arg("buy_quantity").arg(&order.buy_quantity.to_string());
 
-                                    pipe.atomic()
-                                        .cmd("HSET")
-                                        .arg(format!("buy_order:{}", order.unique_id))
-                                        .arg("symbol")
-                                        .arg(&order.symbol)
-                                        .arg("exchange")
-                                        .arg(&order.exchange)
-                                        .arg("security_id")
-                                        .arg(&order.security_id.to_string())
-                                        .arg("exchange_id")
-                                        .arg(&order.exchange_id.to_string())
-                                        .arg("buy_order_book_id")
-                                        .arg(&order.buy_order_book_id.to_string())
-                                        .arg("unique_id")
-                                        .arg(&order.unique_id)
-                                        .arg("price_level")
-                                        .arg(&order.price_level.to_string())
-                                        .arg("buy_quantity")
-                                        .arg(&order.buy_quantity.to_string());
+                    buy_orders.push(order);
+                    orders.lock().unwrap().push(message);
+                    historical_orders.push(historical_order);
+                }
 
-                                    buy_orders.push(order);
-                                    orders.lock().unwrap().push(message);
-                                    historical_orders.push(historical_order);
-                                }
-
-                                let result = Retry::spawn(retry_strategy.clone(), || async {
-                                    match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
-                                        Ok(_) => {
-                                            println!("Added buy orders to redis");
-                                            Ok(())
-                                        },
-                                        Err(e) => {
-                                            println!("Failed to add buy orders to redis: {}", e);
-                                            Err(e)
-                                        },
-                                    }
-                                }).await;
-
-                                if let Err(e) = result {
-                                    println!("All retries failed for redis commands: {}", e);
-                                }                    
-
-                                match create_open_buy_orders(postgres_pool.clone(), buy_orders).await {
-                                    Ok(_) => println!("Added buy orders to postgres"),
-                                    Err(e) => println!("Failed to add buy orders to postgres: {}", e),
-                                };
-
-                                match create_historical_orders(postgres_pool.clone(), historical_orders).await {
-                                    Ok(_) => println!("Added historical orders to postgres"),
-                                    Err(e) => println!("Failed to add historical orders to postgres: {}", e),
-                                };
-                            }
-                        };
-
-                        let ask_futures = async {
-                            if !snapshot_data.asks.is_empty() {
-                                let orders = Arc::clone(&orders);
-                                let mut sell_orders = Vec::new();
-                                let mut historical_orders = Vec::new();
-                                let mut pipe = redis::pipe();
-                                for ask in snapshot_data.asks.iter() {
-                                    let price_level = &ask.limit_price;
-                                    let sell_quantity = &ask.order_qty;
-                                    let unique_id = &ask.order_id;
-                                    let timestamp = ask.timestamp;
-
-                                    open_ask_volume += sell_quantity;
-
-                                    let message = Order {
-                                        unique_id: ask.order_id.clone(),
-                                        symbol: order_book.symbol.clone(),
-                                        exchange: order_book.exchange.clone(),
-                                        price_level: price_level.to_f32().unwrap(),
-                                        quantity: sell_quantity.to_f32().unwrap(),
-                                        side: "sell".to_string(),
-                                        event: "new".to_string(),
-                                    };
-
-                                    let order = NewOpenSellOrder::new(
-                                        timestamp.clone(),
-                                        &order_book.symbol,
-                                        &order_book.exchange,
-                                        order_book.security_id,
-                                        order_book.exchange_id,
-                                        order_book.sell_order_book_id,
-                                        unique_id,
-                                        price_level,
-                                        sell_quantity,
-                                    );
-
-                                    let historical_order = NewHistoricalOrder::new(
-                                        timestamp.clone(),
-                                        &unique_id,
-                                        "new",
-                                        "sell",
-                                        price_level,
-                                        sell_quantity,
-                                        None,
-                                        None,
-                                        "open",
-                                        &order_book.exchange,
-                                        &order_book.symbol,
-                                    );
-
-                                    pipe.atomic()
-                                        .cmd("HSET")
-                                        .arg(format!("sell_order:{}", order.unique_id))
-                                        .arg("symbol")
-                                        .arg(&order.symbol)
-                                        .arg("exchange")
-                                        .arg(&order.exchange)
-                                        .arg("security_id")
-                                        .arg(&order.security_id.to_string())
-                                        .arg("exchange_id")
-                                        .arg(&order.exchange_id.to_string())
-                                        .arg("sell_order_book_id")
-                                        .arg(&order.sell_order_book_id.to_string())
-                                        .arg("unique_id")
-                                        .arg(&order.unique_id)
-                                        .arg("price_level")
-                                        .arg(&order.price_level.to_string())
-                                        .arg("sell_quantity")
-                                        .arg(&order.sell_quantity.to_string());
-
-                                    sell_orders.push(order);
-                                    orders.lock().unwrap().push(message);
-                                    historical_orders.push(historical_order);
-                                }
-
-                                let result = Retry::spawn(retry_strategy.clone(), || async {
-                                    match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
-                                        Ok(_) => {
-                                            println!("Added sell orders to redis");
-                                            Ok(())
-                                        },
-                                        Err(e) => {
-                                            println!("Failed to add sell orders to redis: {}", e);
-                                            Err(e)
-                                        },
-                                    }
-                                }).await;
-
-                                if let Err(e) = result {
-                                    println!("All retries failed for redis commands: {}", e);
-                                }  
-
-                                match create_open_sell_orders(postgres_pool.clone(), sell_orders).await {
-                                    Ok(_) => println!("Added sell orders to postgres"),
-                                    Err(e) => println!("Failed to add sell orders to postgres: {}", e),
-                                };
-
-                                match create_historical_orders(postgres_pool.clone(), historical_orders).await {
-                                    Ok(_) => println!("Added historical orders to postgres"),
-                                    Err(e) => println!("Failed to add historical orders to postgres: {}", e),
-                                };
-                            }
-                        };
-
-                        tokio::join!(bid_futures, ask_futures);
-                        
-                        let orders = Orders {
-                            orders: orders.lock().unwrap().clone()
-                        };
-                        let market_message = MarketMessage {
-                            payload: Some(market_message::Payload::OrdersPaylaod(orders)),
-                        };
-                        let topics = &config.topics;
-                        let message = PublishRequest {
-                            topics: topics.clone(),
-                            payload: Some(publish_request::Payload::MarketPayload(market_message)),
-                        };
-                        
-                        
-                        let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
-                        let mut publisher = Publisher::new(&addr).await?;
-                        
-                        publisher.publish(&message.topics, message.payload).await?;
-
-
-                        let total_volume = open_bid_volume + open_ask_volume;
-
-                        println!("Total volume: {}", total_volume);
-
-                        match cmd("HSET")
-                            .arg(format!("order_book:{}", order_book.order_book_id))
-                            .arg("created_at")
-                            .arg(&order_book.created_at.to_string())
-                            .arg("updated_at")
-                            .arg(&order_book.updated_at.expect("").to_string())
-                            .arg("symbol")
-                            .arg(&order_book.symbol)
-                            .arg("exchange")
-                            .arg(&order_book.exchange)
-                            .arg("security_id")
-                            .arg(&order_book.security_id.to_string())
-                            .arg("exchange_id")
-                            .arg(&order_book.exchange_id.to_string())
-                            .arg("buy_order_book_id")
-                            .arg(&order_book.buy_order_book_id.to_string())
-                            .arg("sell_order_book_id")
-                            .arg(&order_book.sell_order_book_id.to_string())
-                            .arg("total_volume")
-                            .arg(&total_volume.to_string())
-                            .query_async::<_, ()>(&mut book_connection)
-                            .await
-                        {
-                            Ok(_) => {
-                                println!("Added order book to redis");
-                            }
-                            Err(e) => {
-                                println!("Failed to add order book to redis: {}", e);
-                            }
-                        }
-
-                        let result = Retry::spawn(retry_strategy.clone(), || async {
-                            match cmd("HSET")
-                            .arg(format!("order_book:{}", order_book.order_book_id))
-                            .arg("created_at")
-                            .arg(&order_book.created_at.to_string())
-                            .arg("updated_at")
-                            .arg(&order_book.updated_at.expect("").to_string())
-                            .arg("symbol")
-                            .arg(&order_book.symbol)
-                            .arg("exchange")
-                            .arg(&order_book.exchange)
-                            .arg("security_id")
-                            .arg(&order_book.security_id.to_string())
-                            .arg("exchange_id")
-                            .arg(&order_book.exchange_id.to_string())
-                            .arg("buy_order_book_id")
-                            .arg(&order_book.buy_order_book_id.to_string())
-                            .arg("sell_order_book_id")
-                            .arg(&order_book.sell_order_book_id.to_string())
-                            .arg("total_volume")
-                            .arg(&total_volume.to_string())
-                            .query_async::<_, ()>(&mut book_connection.clone())
-                            .await
-                        {
-                            Ok(_) => {
-                                println!("Added order book to redis");
-                                Ok(())
-                            }
-                            Err(e) => {
-                                println!("Failed to add order book to redis: {}", e);
-                                Err(e)
-                            }
-                        }
-                        }).await;
-
-                        if let Err(e) = result {
-                            println!("All retries failed for redis commands: {}", e);
-                        }  
-                        
-                        match update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume).await {
-                            Ok(_) => println!("Updated order book in postgres"),
-                            Err(e) => println!("Failed to update order book in postgres: {}", e),
-                        };
-                        Ok(())
+                // Execute Redis pipe
+                let result = Retry::spawn(retry_strategy.clone(), || async {
+                    match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
+                        Ok(_) => {
+                            debug!("Added buy orders to redis");
+                            Ok(())
+                        },
+                        Err(e) => {
+                            warn!("Failed to add buy orders to redis: {}", e);
+                            Err(e)
+                        },
                     }
+                }).await;
+
+                if let Err(e) = result {
+                    error!("All retries failed for redis commands: {}", e);
+                }                    
+
+                // Execute database operations concurrently
+                let create_buy_orders_future = create_open_buy_orders(postgres_pool.clone(), buy_orders);
+                let create_historical_future = create_historical_orders(postgres_pool.clone(), historical_orders);
+                
+                let (buy_result, historical_result) = tokio::join!(create_buy_orders_future, create_historical_future);
+                
+                if let Err(e) = buy_result {
+                    error!("Failed to add buy orders to postgres: {}", e);
+                } else {
+                    debug!("Added buy orders to postgres");
+                }
+                
+                if let Err(e) = historical_result {
+                    error!("Failed to add historical orders to postgres: {}", e);
+                } else {
+                    debug!("Added historical orders to postgres");
                 }
             }
+        };
+
+        // Process asks concurrently
+        let ask_futures = async {
+            if !snapshot_data.asks.is_empty() {
+                let orders = Arc::clone(&orders);
+                
+                // Pre-allocate all collections with appropriate capacity
+                let ask_count = snapshot_data.asks.len();
+                let mut sell_orders = Vec::with_capacity(ask_count);
+                let mut historical_orders = Vec::with_capacity(ask_count);
+                let mut pipe = redis::pipe();
+                pipe.atomic();
+                
+                for ask in snapshot_data.asks.iter() {
+                    let price_level = &ask.limit_price;
+                    let sell_quantity = &ask.order_qty;
+                    let unique_id = &ask.order_id;
+                    let timestamp = ask.timestamp;
+
+                    open_ask_volume += sell_quantity;
+
+                    let message = Order {
+                        unique_id: ask.order_id.clone(),
+                        symbol: order_book.symbol.clone(),
+                        exchange: order_book.exchange.clone(),
+                        price_level: price_level.to_f32().unwrap_or(0.0),
+                        quantity: sell_quantity.to_f32().unwrap_or(0.0),
+                        side: SIDE_SELL.to_string(),
+                        event: EVENT_NEW.to_string(),
+                    };
+
+                    let order = NewOpenSellOrder::new(
+                        timestamp.clone(),
+                        &order_book.symbol,
+                        &order_book.exchange,
+                        order_book.security_id,
+                        order_book.exchange_id,
+                        order_book.sell_order_book_id,
+                        unique_id,
+                        price_level,
+                        sell_quantity,
+                    );
+
+                    let historical_order = NewHistoricalOrder::new(
+                        timestamp.clone(),
+                        unique_id,
+                        EVENT_NEW,
+                        SIDE_SELL,
+                        price_level,
+                        sell_quantity,
+                        None,
+                        None,
+                        STATUS_OPEN,
+                        &order_book.exchange,
+                        &order_book.symbol,
+                    );
+
+                    // Prepare key once for reuse
+                    let key = format!("sell_order:{}", order.unique_id);
+                    
+                    pipe.cmd("HSET")
+                        .arg(key)
+                        .arg("symbol").arg(&order.symbol)
+                        .arg("exchange").arg(&order.exchange)
+                        .arg("security_id").arg(&order.security_id.to_string())
+                        .arg("exchange_id").arg(&order.exchange_id.to_string())
+                        .arg("sell_order_book_id").arg(&order.sell_order_book_id.to_string())
+                        .arg("unique_id").arg(&order.unique_id)
+                        .arg("price_level").arg(&order.price_level.to_string())
+                        .arg("sell_quantity").arg(&order.sell_quantity.to_string());
+
+                    sell_orders.push(order);
+                    orders.lock().unwrap().push(message);
+                    historical_orders.push(historical_order);
+                }
+
+                // Execute Redis pipe
+                let result = Retry::spawn(retry_strategy.clone(), || async {
+                    match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
+                        Ok(_) => {
+                            debug!("Added sell orders to redis");
+                            Ok(())
+                        },
+                        Err(e) => {
+                            warn!("Failed to add sell orders to redis: {}", e);
+                            Err(e)
+                        },
+                    }
+                }).await;
+
+                if let Err(e) = result {
+                    error!("All retries failed for redis commands: {}", e);
+                }  
+
+                // Execute database operations concurrently
+                let create_sell_orders_future = create_open_sell_orders(postgres_pool.clone(), sell_orders);
+                let create_historical_future = create_historical_orders(postgres_pool.clone(), historical_orders);
+                
+                let (sell_result, historical_result) = tokio::join!(create_sell_orders_future, create_historical_future);
+                
+                if let Err(e) = sell_result {
+                    error!("Failed to add sell orders to postgres: {}", e);
+                } else {
+                    debug!("Added sell orders to postgres");
+                }
+                
+                if let Err(e) = historical_result {
+                    error!("Failed to add historical orders to postgres: {}", e);
+                } else {
+                    debug!("Added historical orders to postgres");
+                }
+            }
+        };
+
+        // Execute bid and ask processing concurrently
+        tokio::join!(bid_futures, ask_futures);
+        
+        // Prepare orders message
+        let orders_data = {
+            let locked_orders = orders.lock().unwrap();
+            locked_orders.clone()
+        };
+        
+        let message_orders = Orders {
+            orders: orders_data
+        };
+        
+        let market_message = MarketMessage {
+            payload: Some(market_message::Payload::OrdersPaylaod(message_orders)),
+        };
+        
+        let topics = &config.topics;
+        let message = PublishRequest {
+            topics: topics.clone(),
+            payload: Some(publish_request::Payload::MarketPayload(market_message)),
+        };
+        
+        // Connect to publisher and send message in parallel with other work
+        let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
+        let publish_future = async {
+            match Publisher::new(&addr).await {
+                Ok(mut publisher) => {
+                    if let Err(e) = publisher.publish(&message.topics, message.payload).await {
+                        error!("Failed to publish message: {}", e);
+                    } else {
+                        debug!("Successfully published order messages");
+                    }
+                },
+                Err(e) => {
+                    error!("Failed to create publisher: {}", e);
+                }
+            }
+        };
+
+        // Calculate total volume
+        let total_volume = open_bid_volume.clone() + open_ask_volume.clone();
+        debug!("Total volume: {}", total_volume);
+
+        // Update orderbook in Redis and Postgres concurrently with publishing
+        let orderbook_key = format!("order_book:{}", order_book.order_book_id);
+        
+        let redis_future = Retry::spawn(retry_strategy.clone(), || async {
+            match cmd("HSET")
+                .arg(&orderbook_key)
+                .arg("created_at").arg(&order_book.created_at.to_string())
+                .arg("updated_at").arg(&order_book.updated_at.expect("").to_string())
+                .arg("symbol").arg(&order_book.symbol)
+                .arg("exchange").arg(&order_book.exchange)
+                .arg("security_id").arg(&order_book.security_id.to_string())
+                .arg("exchange_id").arg(&order_book.exchange_id.to_string())
+                .arg("buy_order_book_id").arg(&order_book.buy_order_book_id.to_string())
+                .arg("sell_order_book_id").arg(&order_book.sell_order_book_id.to_string())
+                .arg("total_volume").arg(&total_volume.to_string())
+                .query_async::<_, ()>(&mut book_connection.clone())
+                .await
+            {
+                Ok(_) => {
+                    debug!("Added order book to redis");
+                    Ok(())
+                }
+                Err(e) => {
+                    warn!("Failed to add order book to redis: {}", e);
+                    Err(e)
+                }
+            }
+        });
+        
+        let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume.clone());
+        
+        // Wait for all remaining operations
+        let (publish_result, redis_result, postgres_result) = 
+            tokio::join!(publish_future, redis_future, postgres_future);
+        
+        if let Err(e) = redis_result {
+            error!("All retries failed for redis commands: {}", e);
         }
+        
+        if let Err(e) = postgres_result {
+            error!("Failed to update order book in postgres: {}", e);
+        } else {
+            debug!("Updated order book in postgres");
+        }
+        
+        Ok(())
     }
 }
 
