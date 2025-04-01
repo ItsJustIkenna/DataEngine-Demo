@@ -29,12 +29,11 @@ use tokio_retry::{
     },
     Retry
 };
-use tracing::{info, error, warn, debug};
+use tracing::{error, warn, debug};
 
 use super::trade_data::TradeData;
 
 // Constants for optimization
-const INITIAL_CAPACITY: usize = 32;
 const EVENT_TRADE: &str = "trade";
 const STATUS_FILLED: &str = "filled";
 

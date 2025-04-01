@@ -49,11 +49,10 @@ use tokio_retry::{
     },
     Retry
 };
-use tracing::{info, error, warn, debug};
+use tracing::{error, warn, debug};
 
 // Pre-allocate capacity for collections
 const INITIAL_ORDERS_CAPACITY: usize = 100;
-const INITIAL_ORDER_CAPACITY: usize = 32;
 const ZERO_STR: &str = "0";
 const EVENT_ADD: &str = "add";
 const EVENT_MODIFY: &str = "modify";

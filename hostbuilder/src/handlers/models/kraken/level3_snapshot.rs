@@ -29,11 +29,8 @@ use tokio_retry::{
     },
     Retry
 };
-use tracing::{info, error, warn, debug};
+use tracing::{error, warn, debug};
 
-// Pre-allocate capacity for collections
-const INITIAL_ORDERS_CAPACITY: usize = 100;
-const BID_ASK_BATCH_SIZE: usize = 64;
 
 // Common strings to avoid allocations
 const SIDE_BUY: &str = "buy";
@@ -398,7 +395,7 @@ impl Level3Snapshot {
         let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume.clone());
         
         // Wait for all remaining operations
-        let (publish_result, redis_result, postgres_result) = 
+        let (_, redis_result, postgres_result) = 
             tokio::join!(publish_future, redis_future, postgres_future);
         
         if let Err(e) = redis_result {
