@@ -1,6 +1,6 @@
 use std::{
     str::FromStr,
-    sync::{Arc, Mutex}
+    sync::Arc
 };
 
 use anyhow::{
@@ -35,13 +35,14 @@ use deadpool_redis::{
     Manager
 };
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
-use publisher::{Publisher, PublisherTrait};
+use publisher::Publisher;
 use redis::cmd;
 use redis_utils::get_redis_connection;
 use serde::{
     Deserialize,
     Serialize
 };
+use tokio::sync::Mutex;
 use tokio_retry::{
     strategy::{
         jitter,
@@ -83,6 +84,7 @@ impl Level3Update {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
+        publisher: Arc<Mutex<Publisher>>,
         order_book: &OrderBook,
     ) -> Result<()> {
         // Use fewer retry attempts for lower latency
@@ -213,7 +215,7 @@ impl Level3Update {
                             .arg("buy_quantity").arg(&order.buy_quantity.to_string());
 
                         buy_orders.push(order);
-                        orders.lock().unwrap().push(message);
+                        orders.lock().await.push(message);
                         historical_orders.push(historical_order);
                     },
                     EVENT_MODIFY => {
@@ -294,7 +296,7 @@ impl Level3Update {
                             .arg("buy_quantity").arg(&bid.order_qty.to_string());
 
                         modify_orders.push((unique_id, price_level, new_buy_quantity));
-                        orders.lock().unwrap().push(message);
+                        orders.lock().await.push(message);
                         historical_orders.push(historical_order);
                     },
                     EVENT_DELETE => {
@@ -341,7 +343,7 @@ impl Level3Update {
                         bid_volume -= &bid.order_qty;
 
                         delete_orders.push(&bid.order_id);
-                        orders.lock().unwrap().push(message);
+                        orders.lock().await.push(message);
                         historical_orders.push(historical_order);
                     },
                     _ => {}
@@ -481,7 +483,7 @@ impl Level3Update {
                             .arg("sell_quantity").arg(&order.sell_quantity.to_string());
 
                         sell_orders.push(order);
-                        orders.lock().unwrap().push(message);
+                        orders.lock().await.push(message);
                         historical_orders.push(historical_order);
                     },
                     EVENT_MODIFY => {
@@ -560,7 +562,7 @@ impl Level3Update {
                             .arg("sell_quantity").arg(&ask.order_qty.to_string());
 
                         modify_orders.push((unique_id, price_level, new_sell_quantity));
-                        orders.lock().unwrap().push(message);
+                        orders.lock().await.push(message);
                         historical_orders.push(historical_order);
                     },
                     EVENT_DELETE => {
@@ -606,7 +608,7 @@ impl Level3Update {
                         ask_volume -= &ask.order_qty;
 
                         delete_orders.push(&ask.order_id);
-                        orders.lock().unwrap().push(message);
+                        orders.lock().await.push(message);
                         historical_orders.push(historical_order);
                     },
                     _ => {}
@@ -697,7 +699,7 @@ impl Level3Update {
 
         // Prepare message outside the lock to minimize lock time
         let orders_data = {
-            let locked_orders = orders.lock().unwrap();
+            let locked_orders = orders.lock().await;
             locked_orders.clone()
         };
         
@@ -717,9 +719,11 @@ impl Level3Update {
         };
         
         // Connect to publisher and send message
-        let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
-        let mut publisher = Publisher::new(&addr).await?;
-        publisher.publish(&message.topics, message.payload).await?;
+        if let Err(e) = publisher.lock().await.publish(&message.topics, message.payload) {
+            error!("Failed to publish message: {:?}", e);
+        } else {
+            debug!("Successfully published order messages");
+        }
 
         // Update total volume
         total_volume += bid_volume + ask_volume;

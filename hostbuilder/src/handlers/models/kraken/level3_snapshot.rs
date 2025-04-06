@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Result;
 use bigdecimal::{BigDecimal, Zero, ToPrimitive};
@@ -15,13 +15,14 @@ use deadpool_redis::{
     Manager
 };
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
-use publisher::{Publisher, PublisherTrait};
+use publisher::Publisher;
 use redis::cmd;
 use redis_utils::get_redis_connection;
 use serde::{
     Deserialize,
     Serialize
 };
+use tokio::sync::Mutex;
 use tokio_retry::{
     strategy::{
         jitter,
@@ -56,6 +57,7 @@ impl Level3Snapshot {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
+        publisher: Arc<Mutex<Publisher>>,
         order_book: &OrderBook,
     ) -> Result<()> {
         // Reduce retry attempts for lower latency
@@ -164,7 +166,7 @@ impl Level3Snapshot {
                         .arg("buy_quantity").arg(&order.buy_quantity.to_string());
 
                     buy_orders.push(order);
-                    orders.lock().unwrap().push(message);
+                    orders.lock().await.push(message);
                     historical_orders.push(historical_order);
                 }
 
@@ -277,7 +279,7 @@ impl Level3Snapshot {
                         .arg("sell_quantity").arg(&order.sell_quantity.to_string());
 
                     sell_orders.push(order);
-                    orders.lock().unwrap().push(message);
+                    orders.lock().await.push(message);
                     historical_orders.push(historical_order);
                 }
 
@@ -324,7 +326,7 @@ impl Level3Snapshot {
         
         // Prepare orders message
         let orders_data = {
-            let locked_orders = orders.lock().unwrap();
+            let locked_orders = orders.lock().await;
             locked_orders.clone()
         };
         
@@ -343,19 +345,11 @@ impl Level3Snapshot {
         };
         
         // Connect to publisher and send message in parallel with other work
-        let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
         let publish_future = async {
-            match Publisher::new(&addr).await {
-                Ok(mut publisher) => {
-                    if let Err(e) = publisher.publish(&message.topics, message.payload).await {
-                        error!("Failed to publish message: {}", e);
-                    } else {
-                        debug!("Successfully published order messages");
-                    }
-                },
-                Err(e) => {
-                    error!("Failed to create publisher: {}", e);
-                }
+            if let Err(e) = publisher.lock().await.publish(&message.topics, message.payload) {
+                error!("Failed to publish message: {:?}", e);
+            } else {
+                debug!("Successfully published order messages");
             }
         };
 

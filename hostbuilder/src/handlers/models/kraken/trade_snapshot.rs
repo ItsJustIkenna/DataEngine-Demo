@@ -12,12 +12,13 @@ use deadpool_redis::{
     Manager
 };
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, PublishRequest, Trade, Trades};
-use publisher::{Publisher, PublisherTrait};
+use publisher::Publisher;
 use redis_utils::get_redis_connection;
 use serde::{
     Deserialize,
     Serialize
 };
+use tokio::sync::Mutex;
 use tokio_retry::{
     strategy::{
         jitter,
@@ -51,6 +52,7 @@ impl TradeSnapshot {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
+        publisher: Arc<Mutex<Publisher>>,
         order_book: &OrderBook
     ) -> Result<()> {
         // Reduce retry attempts for lower latency
@@ -154,15 +156,9 @@ impl TradeSnapshot {
         let postgres_future = create_historical_orders(postgres_pool.clone(), trades);
         
         let publisher_future = async {
-            let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
-            match Publisher::new(&addr).await {
-                Ok(mut publisher) => {
-                    match publisher.publish(&message.topics, message.payload).await {
-                        Ok(_) => debug!("Published trade messages successfully"),
-                        Err(e) => error!("Failed to publish trade messages: {}", e),
-                    }
-                },
-                Err(e) => error!("Failed to create publisher: {}", e),
+            match publisher.lock().await.publish(&message.topics, message.payload) {
+                Ok(_) => debug!("Published trade messages successfully"),
+                Err(e) => error!("Failed to publish trade messages: {:?}", e),
             }
         };
         
