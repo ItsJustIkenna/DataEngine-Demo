@@ -1,3 +1,9 @@
+pub mod balances_snapshot;
+pub mod balances_sub_ack;
+pub mod balances_unsub_ack;
+pub mod balances_update;
+pub mod balances_subscribe;
+pub mod balances_unsubscribe;
 pub mod heartbeat;
 pub mod level3_snapshot;
 pub mod level3_sub_ack;
@@ -15,3 +21,4 @@ pub mod trade_unsubscribe;
 pub mod trade_unsub_ack;
 pub mod trade_update;
 pub mod token_response;
+pub mod fast_parser;

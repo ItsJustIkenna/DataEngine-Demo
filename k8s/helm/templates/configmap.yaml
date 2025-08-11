@@ -1,0 +1,167 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "data-engine.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "data-engine.labels" . | nindent 4 }}
+data:
+  # Application Configuration
+  LOG_LEVEL: {{ .Values.config.log_level | quote }}
+  RUST_LOG: {{ .Values.config.rust_log | quote }}
+  TOKIO_WORKER_THREADS: {{ .Values.config.tokio_worker_threads | quote }}
+  MAX_CONNECTIONS: {{ .Values.config.max_connections | quote }}
+  CONNECTION_TIMEOUT: {{ .Values.config.connection_timeout | quote }}
+  
+  # Database Configuration (non-sensitive)
+  {{- if .Values.postgresql.enabled }}
+  POSTGRES_HOST: {{ include "data-engine.postgresql.fullname" . | quote }}
+  POSTGRES_PORT: {{ .Values.postgresql.primary.service.ports.postgresql | quote }}
+  POSTGRES_DB: {{ .Values.postgresql.auth.database | quote }}
+  {{- else if .Values.externalDatabase.enabled }}
+  POSTGRES_HOST: {{ .Values.externalDatabase.host | quote }}
+  POSTGRES_PORT: {{ .Values.externalDatabase.port | quote }}
+  POSTGRES_DB: {{ .Values.externalDatabase.database | quote }}
+  {{- end }}
+  
+  # Redis Configuration (non-sensitive)
+  {{- if .Values.redis.enabled }}
+  REDIS_HOST: {{ include "data-engine.redis.fullname" . }}-master
+  REDIS_PORT: {{ .Values.redis.master.service.ports.redis | quote }}
+  {{- else if .Values.externalRedis.enabled }}
+  REDIS_HOST: {{ .Values.externalRedis.host | quote }}
+  REDIS_PORT: {{ .Values.externalRedis.port | quote }}
+  {{- end }}
+  
+  # Performance Configuration
+  {{- if .Values.performance.hugepages.enabled }}
+  HUGEPAGES_SIZE: {{ .Values.performance.hugepages.size | quote }}
+  {{- end }}
+  {{- if .Values.performance.cpuAffinity.enabled }}
+  CPU_AFFINITY: {{ .Values.performance.cpuAffinity.cpuSet | quote }}
+  {{- end }}
+  
+  # Main application configuration file
+  config.yaml: |
+    # DataEngine Configuration
+    # Generated from Helm values - DO NOT EDIT MANUALLY
+    
+    environment: {{ .Values.config.environment }}
+    
+    # Exchange configurations
+    exchanges:
+    {{- range .Values.config.exchanges }}
+      - name: {{ .name | quote }}
+        enabled: {{ .enabled }}
+        symbols:
+        {{- range .symbols }}
+          - {{ . | quote }}
+        {{- end }}
+        depth: {{ .depth }}
+        websocket_token: {{ .websocket_token | quote }}
+        websockets:
+        {{- range .websockets }}
+          - channel: {{ .channel | quote }}
+            endpoint: {{ .endpoint | quote }}
+            {{- if .compression }}
+            compression: {{ .compression }}
+            {{- end }}
+            {{- if .heartbeat_interval }}
+            heartbeat_interval: {{ .heartbeat_interval | quote }}
+            {{- end }}
+        {{- end }}
+        {{- if .rate_limits }}
+        rate_limits:
+          requests_per_second: {{ .rate_limits.requests_per_second }}
+          burst_size: {{ .rate_limits.burst_size }}
+          window_size: {{ .rate_limits.window_size | quote }}
+        {{- end }}
+        timeout: {{ .timeout | quote }}
+        {{- if .retry_config }}
+        retry_config:
+          max_attempts: {{ .retry_config.max_attempts }}
+          initial_delay: {{ .retry_config.initial_delay | quote }}
+          max_delay: {{ .retry_config.max_delay | quote }}
+          backoff_multiplier: {{ .retry_config.backoff_multiplier }}
+          jitter_enabled: {{ .retry_config.jitter_enabled }}
+        {{- end }}
+    {{- end }}
+    
+    # Message broker configuration
+    message_broker:
+      address: {{ .Values.config.message_broker.address | quote }}
+      port: {{ .Values.config.message_broker.port }}
+      max_connections: {{ .Values.config.message_broker.max_connections }}
+      buffer_size: {{ .Values.config.message_broker.buffer_size }}
+      compression_enabled: {{ .Values.config.message_broker.compression_enabled }}
+      batch_size: {{ .Values.config.message_broker.batch_size }}
+      flush_interval: {{ .Values.config.message_broker.flush_interval | quote }}
+    
+    # Topics for message routing
+    topics:
+    {{- range .Values.config.topics }}
+      - {{ . | quote }}
+    {{- end }}
+    
+    # Database configuration
+    database:
+      postgres_url: {{ .Values.config.database.postgres_url | quote }}
+      redis_url: {{ .Values.config.database.redis_url | quote }}
+      max_connections: {{ .Values.config.database.max_connections }}
+      connection_timeout: {{ .Values.config.database.connection_timeout | quote }}
+      query_timeout: {{ .Values.config.database.query_timeout | quote }}
+      retry_attempts: {{ .Values.config.database.retry_attempts }}
+      backup_enabled: {{ .Values.config.database.backup_enabled }}
+    
+    # Redis configuration
+    redis:
+      cluster_mode: {{ .Values.config.redis.cluster_mode }}
+      cluster_nodes: {{ .Values.config.redis.cluster_nodes | toJson }}
+      password: {{ .Values.config.redis.password }}
+      db_index: {{ .Values.config.redis.db_index }}
+      key_prefix: {{ .Values.config.redis.key_prefix | quote }}
+      ttl_seconds: {{ .Values.config.redis.ttl_seconds }}
+    
+    # Performance configuration
+    performance:
+      worker_threads: {{ .Values.performance.worker_threads }}
+      cpu_affinity_enabled: {{ .Values.performance.cpu_affinity_enabled }}
+      cpu_cores: {{ .Values.performance.cpu_cores | toJson }}
+      memory_limit_mb: {{ .Values.performance.memory_limit_mb }}
+      gc_threshold_mb: {{ .Values.performance.gc_threshold_mb }}
+      metrics_enabled: {{ .Values.performance.metrics_enabled }}
+      metrics_interval: {{ .Values.performance.metrics_interval | quote }}
+      simd_enabled: {{ .Values.performance.simd_enabled }}
+    
+    # Security configuration
+    security:
+      api_key_required: {{ .Values.config.security.api_key_required }}
+      request_signing_required: {{ .Values.config.security.request_signing_required }}
+      rate_limiting_enabled: {{ .Values.config.security.rate_limiting_enabled }}
+      max_requests_per_minute: {{ .Values.config.security.max_requests_per_minute }}
+      blocked_ips: {{ .Values.config.security.blocked_ips | toJson }}
+      allowed_ips: {{ .Values.config.security.allowed_ips | toJson }}
+      encryption_enabled: {{ .Values.config.security.encryption_enabled }}
+    
+    # Monitoring configuration
+    monitoring:
+      health_check_enabled: {{ .Values.monitoring.health_check_enabled }}
+      health_check_interval: {{ .Values.monitoring.health_check_interval | quote }}
+      metrics_retention_days: {{ .Values.monitoring.metrics_retention_days }}
+      alerting_enabled: {{ .Values.monitoring.alerting_enabled }}
+      alert_thresholds:
+        cpu_usage_percent: {{ .Values.monitoring.alert_thresholds.cpu_usage_percent }}
+        memory_usage_percent: {{ .Values.monitoring.alert_thresholds.memory_usage_percent }}
+        latency_ms: {{ .Values.monitoring.alert_thresholds.latency_ms }}
+        error_rate_percent: {{ .Values.monitoring.alert_thresholds.error_rate_percent }}
+        connection_failures: {{ .Values.monitoring.alert_thresholds.connection_failures }}
+    
+    # Logging configuration
+    logging:
+      level: {{ .Values.logging.level | quote }}
+      format: {{ .Values.logging.format | quote }}
+      output: {{ .Values.logging.outputs | toJson }}
+      file_path: {{ .Values.logging.file_path | quote }}
+      max_file_size_mb: {{ .Values.logging.max_file_size_mb }}
+      max_files: {{ .Values.logging.max_files }}
+      structured_logging: {{ .Values.logging.structured_logging }}

@@ -1,0 +1,109 @@
+# DataEngine Development Configuration
+# Development-friendly settings with debug features enabled
+
+environment: Development
+
+# Exchange configurations
+exchanges:
+  - name: "Kraken"
+    enabled: true
+    symbols: ["BTC/USD", "ETH/USD"]
+    depth: 10
+    websocket_token: "https://api.kraken.com/0/private/GetWebSocketsToken"
+    websockets:
+      - channel: "level3"
+        endpoint: "wss://ws.kraken.com"
+        compression: false
+        heartbeat_interval: "10s"
+      - channel: "trade"
+        endpoint: "wss://ws.kraken.com"
+        compression: false
+        heartbeat_interval: "10s"
+    rate_limits:
+      requests_per_second: 5
+      burst_size: 10
+      window_size: "60s"
+    timeout: "15s"
+    retry_config:
+      max_attempts: 2
+      initial_delay: "50ms"
+      max_delay: "2s"
+      backoff_multiplier: 1.5
+      jitter_enabled: false
+
+# Message broker configuration
+message_broker:
+  address: "localhost"
+  port: 8080
+  max_connections: 100
+  buffer_size: 1024
+  compression_enabled: false
+  batch_size: 10
+  flush_interval: "100ms"
+
+# Topics for message routing
+topics:
+  - "market.data.kraken"
+
+# Database configuration
+database:
+  postgres_url: "postgresql://localhost:5432/trading_dev"
+  redis_url: "redis://localhost:6379"
+  max_connections: 10
+  connection_timeout: "5s"
+  query_timeout: "10s"
+  retry_attempts: 2
+  backup_enabled: false
+
+# Redis configuration
+redis:
+  cluster_mode: false
+  cluster_nodes: []
+  password: null
+  db_index: 1
+  key_prefix: "dataengine:dev:"
+  ttl_seconds: 300
+
+# Performance configuration
+performance:
+  worker_threads: 4
+  cpu_affinity_enabled: false
+  cpu_cores: [0, 1, 2, 3]
+  memory_limit_mb: 2048
+  gc_threshold_mb: 256
+  metrics_enabled: true
+  metrics_interval: "5s"
+  simd_enabled: false
+
+# Security configuration
+security:
+  api_key_required: false
+  request_signing_required: false
+  rate_limiting_enabled: false
+  max_requests_per_minute: 10000
+  blocked_ips: []
+  allowed_ips: []
+  encryption_enabled: false
+
+# Monitoring configuration
+monitoring:
+  health_check_enabled: true
+  health_check_interval: "10s"
+  metrics_retention_days: 7
+  alerting_enabled: false
+  alert_thresholds:
+    cpu_usage_percent: 90.0
+    memory_usage_percent: 90.0
+    latency_ms: 500.0
+    error_rate_percent: 10.0
+    connection_failures: 20
+
+# Logging configuration
+logging:
+  level: "debug"
+  format: "text"
+  output: ["stdout"]
+  file_path: null
+  max_file_size_mb: 50
+  max_files: 5
+  structured_logging: false

@@ -57,7 +57,7 @@ impl Level3Snapshot {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        publisher: Arc<Mutex<Publisher>>,
+        publisher: Arc<Mutex<Publisher>>, // Keep Mutex for compatibility
         order_book: &OrderBook,
     ) -> Result<()> {
         // Reduce retry attempts for lower latency

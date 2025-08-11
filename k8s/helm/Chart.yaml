@@ -1,0 +1,42 @@
+apiVersion: v2
+name: data-engine
+description: High-Performance DataEngine for Cryptocurrency Market Data Processing
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/Nwagbara-Group-LLC/DataEngine
+sources:
+  - https://github.com/Nwagbara-Group-LLC/DataEngine
+maintainers:
+  - name: Nwagbara Group LLC
+    email: support@nwagbaragroup.com
+keywords:
+  - trading
+  - market-data
+  - cryptocurrency
+  - high-performance
+  - websocket
+  - timeseries
+annotations:
+  category: Analytics
+  licenses: MIT
+
+dependencies:
+  - name: redis
+    version: "17.15.6"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: postgresql
+    version: "12.12.10"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: prometheus
+    version: "23.4.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: monitoring.prometheus.enabled
+    alias: prometheus
+  - name: grafana
+    version: "6.60.6"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: monitoring.grafana.enabled
+    alias: grafana

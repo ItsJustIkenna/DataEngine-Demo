@@ -1,0 +1,111 @@
+# DataEngine Enhanced Configuration
+# Production-ready configuration with all subsystems
+
+environment: Production
+
+# Exchange configurations
+exchanges:
+  - name: "Kraken"
+    enabled: true
+    symbols: ["BTC/USD", "ETH/USD", "BTC/EUR", "ETH/EUR"]
+    depth: 100
+    websocket_token: "https://api.kraken.com/0/private/GetWebSocketsToken"
+    websockets:
+      - channel: "level3"
+        endpoint: "wss://ws.kraken.com"
+        compression: true
+        heartbeat_interval: "30s"
+      - channel: "trade"
+        endpoint: "wss://ws.kraken.com"
+        compression: true
+        heartbeat_interval: "30s"
+    rate_limits:
+      requests_per_second: 10
+      burst_size: 20
+      window_size: "60s"
+    timeout: "30s"
+    retry_config:
+      max_attempts: 3
+      initial_delay: "100ms"
+      max_delay: "5s"
+      backoff_multiplier: 2.0
+      jitter_enabled: true
+
+# Message broker configuration
+message_broker:
+  address: "localhost"
+  port: 8080
+  max_connections: 1000
+  buffer_size: 8192
+  compression_enabled: true
+  batch_size: 100
+  flush_interval: "10ms"
+
+# Topics for message routing
+topics:
+  - "market.data.kraken"
+  - "trading.orders"
+  - "portfolio.updates"
+
+# Database configuration
+database:
+  postgres_url: "postgresql://localhost:5432/trading"
+  redis_url: "redis://localhost:6379"
+  max_connections: 50
+  connection_timeout: "10s"
+  query_timeout: "30s"
+  retry_attempts: 3
+  backup_enabled: true
+
+# Redis configuration
+redis:
+  cluster_mode: false
+  cluster_nodes: []
+  password: null
+  db_index: 0
+  key_prefix: "dataengine:"
+  ttl_seconds: 3600
+
+# Performance configuration
+performance:
+  worker_threads: 8
+  cpu_affinity_enabled: true
+  cpu_cores: [0, 1, 2, 3, 4, 5, 6, 7]
+  memory_limit_mb: 8192
+  gc_threshold_mb: 1024
+  metrics_enabled: true
+  metrics_interval: "10s"
+  simd_enabled: true
+
+# Security configuration
+security:
+  api_key_required: true
+  request_signing_required: true
+  rate_limiting_enabled: true
+  max_requests_per_minute: 1000
+  blocked_ips: []
+  allowed_ips: []
+  encryption_enabled: true
+
+# Monitoring configuration
+monitoring:
+  health_check_enabled: true
+  health_check_interval: "30s"
+  metrics_retention_days: 30
+  alerting_enabled: true
+  alert_thresholds:
+    cpu_usage_percent: 80.0
+    memory_usage_percent: 85.0
+    latency_ms: 100.0
+    error_rate_percent: 5.0
+    connection_failures: 10
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  output: ["stdout", "file"]
+  file_path: "/var/log/dataengine/app.log"
+  max_file_size_mb: 100
+  max_files: 10
+  structured_logging: true

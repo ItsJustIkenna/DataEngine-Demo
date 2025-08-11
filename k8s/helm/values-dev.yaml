@@ -1,0 +1,38 @@
+# Development Environment Configuration
+# Optimized for development with reduced resource usage
+
+# Override base values for development
+replicaCount: 1
+
+# Reduced resources for development
+resources:
+  limits:
+    cpu: "500m"
+    memory: "1Gi"
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+
+# Disable autoscaling in development
+autoscaling:
+  enabled: false
+
+# Development-specific configuration
+config:
+  log_level: "debug"
+  rust_log: "data_engine=debug,hostbuilder=debug,performance=debug"
+  tokio_worker_threads: 4
+
+# Enable ingress for local development
+ingress:
+  enabled: true
+  className: "nginx"
+  hosts:
+    - host: data-engine-dev.local
+      paths:
+        - path: /
+          pathType: Prefix
+
+# Disable network policies for easier development
+networkPolicy:
+  enabled: false

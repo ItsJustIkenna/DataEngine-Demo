@@ -7,5 +7,23 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
+config = { path = "../config" }
 hostbuilder = { path = "../hostbuilder" }
+performance = { path = "../performance" }
 tokio = { version = "1.38.0", features = ["full"] }
+# Ultra-high performance allocator
+mimalloc = { version = "0.1", default-features = false }
+# Tracing for performance monitoring
+tracing = "0.1.41"
+tracing-subscriber = "0.3"
+
+# Platform-specific dependencies for process priority
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_System_Threading", 
+    "Win32_System_Diagnostics_Debug",
+    "Win32_Foundation"
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

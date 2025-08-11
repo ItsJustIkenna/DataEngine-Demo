@@ -1,0 +1,81 @@
+{{- if .Values.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "data-engine.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "data-engine.labels" . | nindent 4 }}
+    {{- with .Values.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  {{- if and (eq .Values.service.type "LoadBalancer") .Values.service.loadBalancerIP }}
+  loadBalancerIP: {{ .Values.service.loadBalancerIP }}
+  {{- end }}
+  {{- if and (eq .Values.service.type "LoadBalancer") .Values.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges:
+    {{- range .Values.service.loadBalancerSourceRanges }}
+    - {{ . }}
+    {{- end }}
+  {{- end }}
+  {{- if and (eq .Values.service.type "ClusterIP") .Values.service.clusterIP }}
+  clusterIP: {{ .Values.service.clusterIP }}
+  {{- end }}
+  {{- if .Values.service.sessionAffinity }}
+  sessionAffinity: {{ .Values.service.sessionAffinity }}
+  {{- end }}
+  {{- if .Values.service.sessionAffinityConfig }}
+  sessionAffinityConfig:
+    {{- toYaml .Values.service.sessionAffinityConfig | nindent 4 }}
+  {{- end }}
+  ports:
+    {{- range .Values.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ .protocol | default "TCP" }}
+      {{- if and (eq $.Values.service.type "NodePort") .nodePort }}
+      nodePort: {{ .nodePort }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.monitoring.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.monitoring.metrics.port }}
+      targetPort: {{ .Values.monitoring.metrics.port }}
+      protocol: TCP
+    {{- end }}
+  selector:
+    {{- include "data-engine.selectorLabels" . | nindent 4 }}
+---
+{{- if .Values.monitoring.metrics.enabled }}
+# Headless service for metrics scraping
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "data-engine.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "data-engine.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: {{ .Values.monitoring.metrics.port | quote }}
+    prometheus.io/path: {{ .Values.monitoring.metrics.path | quote }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: metrics
+      port: {{ .Values.monitoring.metrics.port }}
+      targetPort: {{ .Values.monitoring.metrics.port }}
+      protocol: TCP
+  selector:
+    {{- include "data-engine.selectorLabels" . | nindent 4 }}
+{{- end }}
+{{- end }}

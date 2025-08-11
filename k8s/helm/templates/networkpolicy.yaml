@@ -1,0 +1,67 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "data-engine.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "data-engine.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "data-engine.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  {{- if .Values.networkPolicy.ingress }}
+  - Ingress
+  {{- end }}
+  {{- if .Values.networkPolicy.egress }}
+  - Egress
+  {{- end }}
+  {{- if .Values.networkPolicy.ingress }}
+  ingress:
+    {{- if not .Values.networkPolicy.ingress }}
+    # Default ingress rules - allow from same namespace and ingress controllers
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: {{ .Release.Namespace }}
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: ingress-nginx
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+    {{- else }}
+    {{- toYaml .Values.networkPolicy.ingress | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.networkPolicy.egress }}
+  egress:
+    {{- if not .Values.networkPolicy.egress }}
+    # Default egress rules - allow DNS, database, and external APIs
+    - to: []
+      ports:
+      - protocol: UDP
+        port: 53
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: {{ .Release.Namespace }}
+      ports:
+      - protocol: TCP
+        port: 5432  # PostgreSQL
+      - protocol: TCP  
+        port: 6379  # Redis
+    - to: []
+      ports:
+      - protocol: TCP
+        port: 443   # HTTPS for external APIs
+      - protocol: TCP
+        port: 80    # HTTP for external APIs
+    {{- else }}
+    {{- toYaml .Values.networkPolicy.egress | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

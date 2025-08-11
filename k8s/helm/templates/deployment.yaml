@@ -1,0 +1,280 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "data-engine.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "data-engine.labels" . | nindent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "data-engine.selectorLabels" . | nindent 6 }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "data-engine.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "data-engine.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.performance.cpuAffinity.enabled }}
+      runtimeClassName: performance
+      {{- end }}
+      initContainers:
+        - name: wait-for-dependencies
+          image: busybox:1.35
+          command: ['sh', '-c']
+          args:
+            - |
+              echo "Waiting for dependencies to be ready..."
+              {{- if .Values.postgresql.enabled }}
+              until nc -z {{ include "data-engine.postgresql.fullname" . }} {{ .Values.postgresql.primary.service.ports.postgresql }}; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              {{- end }}
+              {{- if .Values.redis.enabled }}
+              until nc -z {{ include "data-engine.redis.fullname" . }}-master {{ .Values.redis.master.service.ports.redis }}; do
+                echo "Waiting for Redis..."
+                sleep 2
+              done
+              {{- end }}
+              echo "All dependencies are ready!"
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+        {{- if .Values.persistence.enabled }}
+        - name: init-permissions
+          image: busybox:1.35
+          command: ['sh', '-c', 'chown -R 1000:1000 /data && chmod -R 755 /data']
+          volumeMounts:
+            - name: data-storage
+              mountPath: /data
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+        {{- end }}
+      containers:
+        - name: data-engine
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            {{- if .Values.monitoring.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.monitoring.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          env:
+            # Application configuration
+            - name: CONFIG_PATH
+              value: "/app/config/config.yaml"
+            - name: LOG_LEVEL
+              value: {{ .Values.config.log_level | quote }}
+            - name: RUST_LOG
+              value: {{ .Values.config.rust_log | quote }}
+            - name: TOKIO_WORKER_THREADS
+              value: {{ .Values.config.tokio_worker_threads | quote }}
+            
+            # Database configuration
+            {{- if .Values.postgresql.enabled }}
+            - name: DATABASE_URL
+              value: "postgresql://{{ .Values.postgresql.auth.username }}:$(POSTGRES_PASSWORD)@{{ include "data-engine.postgresql.fullname" . }}:{{ .Values.postgresql.primary.service.ports.postgresql }}/{{ .Values.postgresql.auth.database }}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.postgresql.secretName" . }}
+                  key: postgres-password
+            {{- else if .Values.externalDatabase.enabled }}
+            - name: DATABASE_URL
+              value: "postgresql://{{ .Values.externalDatabase.username }}:$(DATABASE_PASSWORD)@{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}"
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}-database
+                  key: password
+            {{- end }}
+            
+            # Redis configuration
+            {{- if .Values.redis.enabled }}
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@{{ include "data-engine.redis.fullname" . }}-master:{{ .Values.redis.master.service.ports.redis }}"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.redis.secretName" . }}
+                  key: redis-password
+            {{- else if .Values.externalRedis.enabled }}
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@{{ .Values.externalRedis.host }}:{{ .Values.externalRedis.port }}"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}-redis
+                  key: password
+            {{- end }}
+            
+            # Performance tuning
+            {{- if .Values.performance.hugepages.enabled }}
+            - name: MALLOC_CONF
+              value: "thp:always"
+            {{- end }}
+            
+            # Monitoring
+            {{- if .Values.monitoring.metrics.enabled }}
+            - name: METRICS_PORT
+              value: {{ .Values.monitoring.metrics.port | quote }}
+            - name: METRICS_PATH
+              value: {{ .Values.monitoring.metrics.path | quote }}
+            {{- end }}
+            
+            # Custom environment variables
+            {{- range $key, $value := .Values.extraEnvVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            
+            # Environment variables from secrets
+            {{- range $key, $value := .Values.extraEnvVarsSecret }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $value.secretName }}
+                  key: {{ $value.secretKey }}
+            {{- end }}
+          
+          {{- if .Values.healthcheck.enabled }}
+          {{- with .Values.healthcheck.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.healthcheck.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.healthcheck.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config
+              readOnly: true
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: cache-volume  
+              mountPath: /app/cache
+            {{- if .Values.persistence.enabled }}
+            - name: data-storage
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
+            {{- if .Values.secrets.tls.cert }}
+            - name: tls-volume
+              mountPath: /app/tls
+              readOnly: true
+            {{- end }}
+            {{- range .Values.volumeMounts }}
+            - {{- toYaml . | nindent 14 }}
+            {{- end }}
+        
+        {{- if .Values.monitoring.enabled }}
+        # Sidecar container for monitoring
+        - name: monitoring-agent
+          image: prom/node-exporter:v1.6.1
+          ports:
+            - name: metrics
+              containerPort: 9100
+              protocol: TCP
+          args:
+            - '--path.procfs=/host/proc'
+            - '--path.sysfs=/host/sys'
+            - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+          volumeMounts:
+            - name: proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: sys
+              mountPath: /host/sys
+              readOnly: true
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+        {{- end }}
+      
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "data-engine.fullname" . }}
+        - name: tmp-volume
+          emptyDir: {}
+        - name: cache-volume
+          emptyDir: {}
+        {{- if .Values.persistence.enabled }}
+        - name: data-storage
+          persistentVolumeClaim:
+            claimName: {{ include "data-engine.fullname" . }}-data
+        {{- end }}
+        {{- if .Values.secrets.tls.cert }}
+        - name: tls-volume
+          secret:
+            secretName: {{ include "data-engine.fullname" . }}-tls
+        {{- end }}
+        {{- if .Values.monitoring.enabled }}
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        {{- end }}
+        {{- range .Values.extraVolumes }}
+        - {{- toYaml . | nindent 10 }}
+        {{- end }}

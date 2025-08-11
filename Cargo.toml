@@ -1,3 +1,39 @@
 [workspace]
+resolver = "2"
+members = ["config", "hostbuilder", "program", "performance"]
 
-members = [ "config","hostbuilder", "program"]
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "fat"  # Fat LTO for maximum optimization
+panic = "abort"
+strip = true
+# Aggressive optimization flags
+overflow-checks = false
+debug = false
+debug-assertions = false
+incremental = false
+
+# Ultra-aggressive profile for maximum performance
+[profile.ultra]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+overflow-checks = false
+debug = false
+debug-assertions = false
+
+[profile.release.package.bigdecimal]
+opt-level = 3
+
+[profile.release.package.serde_json]
+opt-level = 3
+
+[profile.release.package.tokio]
+opt-level = 3
+
+[profile.release.package.redis]
+opt-level = 3

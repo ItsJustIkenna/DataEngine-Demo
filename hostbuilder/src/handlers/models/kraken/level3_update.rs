@@ -42,7 +42,7 @@ use serde::{
     Deserialize,
     Serialize
 };
-use tokio::sync::Mutex;
+use tokio::sync::Mutex; // Keep Mutex for compatibility
 use tokio_retry::{
     strategy::{
         jitter,
@@ -52,8 +52,8 @@ use tokio_retry::{
 };
 use tracing::{error, warn, debug};
 
-// Pre-allocate capacity for collections
-const INITIAL_ORDERS_CAPACITY: usize = 100;
+// Ultra-high performance constants - optimized for cache lines
+const INITIAL_ORDERS_CAPACITY: usize = 512; // Increased for better performance
 const ZERO_STR: &str = "0";
 const EVENT_ADD: &str = "add";
 const EVENT_MODIFY: &str = "modify";
@@ -84,23 +84,25 @@ impl Level3Update {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        publisher: Arc<Mutex<Publisher>>,
+        publisher: Arc<tokio::sync::Mutex<Publisher>>, // Keep Mutex for compatibility
         order_book: &OrderBook,
     ) -> Result<()> {
-        // Use fewer retry attempts for lower latency
-        let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
+        // Reduced retry attempts for ultra-low latency - only 1 retry
+        let retry_strategy = ExponentialBackoff::from_millis(2).map(jitter).take(1);
 
-        // Fetch connections early and concurrently
-        let book_connection_future = get_redis_connection(&redis_pool);
-        let bid_connection_future = get_redis_connection(&redis_pool);
-        let ask_connection_future = get_redis_connection(&redis_pool);
+        // Pre-fetch connections concurrently
+        let connection_futures = (
+            get_redis_connection(&redis_pool),
+            get_redis_connection(&redis_pool), 
+            get_redis_connection(&redis_pool)
+        );
         
-        let (book_connection_result, bid_connection_result, ask_connection_result) = 
-            tokio::join!(book_connection_future, bid_connection_future, ask_connection_future);
+        let (book_connection, bid_connection, ask_connection) = 
+            tokio::join!(connection_futures.0, connection_futures.1, connection_futures.2);
             
-        let book_connection = book_connection_result.expect("Failed to create redis connection");
-        let bid_connection = bid_connection_result.expect("Failed to create redis connection");
-        let ask_connection = ask_connection_result.expect("Failed to create redis connection");
+        let book_connection = book_connection?;
+        let bid_connection = bid_connection?;
+        let ask_connection = ask_connection?;
 
         if self.data.is_empty() {
             debug!("Data is empty");
@@ -114,7 +116,7 @@ impl Level3Update {
             return Ok(());
         }
 
-        // Use a pre-allocated Vec to avoid reallocation during processing
+        // Use a pre-allocated Vec with larger capacity
         let orders = Arc::new(Mutex::new(Vec::with_capacity(INITIAL_ORDERS_CAPACITY)));
         
         // Fetch total volume concurrently while other work is being done

@@ -23,6 +23,13 @@ use super::level3_update::Level3Update;
 use super::trade_unsub_ack::TradeUnsubscribeAcknowledgement;
 use super::trade_snapshot::TradeSnapshot;
 use super::trade_update::TradeUpdate;
+use super::balances_snapshot::BalanceSnapshot;
+use super::balances_update::BalanceUpdate;
+use super::balances_unsub_ack::BalancesUnsubscribeAcknowledgement;
+use super::balances_sub_ack::BalancesSubscribeAcknowledgement;
+use super::balances_subscribe::BalancesSubscribe;
+use super::balances_unsubscribe::BalancesUnsubscribe;
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Response {
@@ -41,6 +48,12 @@ pub enum Response {
     TradeUnsubscribeAck(TradeUnsubscribeAcknowledgement),
     TradeSnapshot(TradeSnapshot),
     TradeUpdate(TradeUpdate),
+    BalanceSnapshot(BalanceSnapshot),
+    BalanceUpdate(BalanceUpdate),
+    BalancesSubscribe(BalancesSubscribe),
+    BalancesUnsubscribe(BalancesUnsubscribe),
+    BalancesSubscribeAck(BalancesSubscribeAcknowledgement),
+    BalancesUnsubscribeAck(BalancesUnsubscribeAcknowledgement),
 }
 
 pub fn parse_message(msg: &str) -> Result<Response> {
@@ -109,6 +122,44 @@ pub fn parse_message(msg: &str) -> Result<Response> {
     {
         let update = TradeUpdate::from_json(&json_msg)?;
         Ok(Response::TradeUpdate(update))
+    } else if json_msg.get("channel").is_some()
+        && json_msg["channel"] == "balances"
+        && json_msg.get("type").is_some()
+        && json_msg["type"] == "snapshot"
+    {
+        let snapshot = BalanceSnapshot::from_json(&json_msg)?;
+        Ok(Response::BalanceSnapshot(snapshot))
+    } else if json_msg.get("channel").is_some()
+        && json_msg["channel"] == "balances"
+        && json_msg.get("type").is_some()
+        && json_msg["type"] == "update"
+    {
+        let update = BalanceUpdate::from_json(&json_msg)?;
+        Ok(Response::BalanceUpdate(update))
+    } else if json_msg.get("method").is_some()
+        && json_msg["method"] == "subscribe"
+        && json_msg.get("params").is_some()
+    {
+        let subscribe = BalancesSubscribe::from_json(&json_msg)?;
+        Ok(Response::BalancesSubscribe(subscribe))
+    } else if json_msg.get("method").is_some()
+        && json_msg["method"] == "subscribe"
+        && json_msg.get("result").is_some()
+    {
+        let subscribe_ack = BalancesSubscribeAcknowledgement::from_json(&json_msg)?;
+        Ok(Response::BalancesSubscribeAck(subscribe_ack))
+    } else if json_msg.get("method").is_some()
+        && json_msg["method"] == "unsubscribe"
+        && json_msg.get("params").is_some()
+    {
+        let unsubscribe = BalancesUnsubscribe::from_json(&json_msg)?;
+        Ok(Response::BalancesUnsubscribe(unsubscribe))
+    } else if json_msg.get("method").is_some()
+        && json_msg["method"] == "unsubscribe"
+        && json_msg.get("result").is_some()
+    {
+        let unsubscribe_ack = BalancesUnsubscribeAcknowledgement::from_json(&json_msg)?;
+        Ok(Response::BalancesUnsubscribeAck(unsubscribe_ack))
     } else {
         Err(anyhow!("Failed to parse message: {:?}", json_msg))
     }

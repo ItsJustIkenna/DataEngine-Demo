@@ -1,6 +1,7 @@
 use std::{
-    collections::HashMap, sync::Arc
+    sync::Arc
 };
+use std::collections::HashMap;
 
 use databaseschema::{
     models::{

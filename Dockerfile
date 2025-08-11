@@ -4,7 +4,7 @@ ARG RUST_VERSION=1.82.0
 ARG APP_NAME=program
 
 ################################################################################
-# Stage 1: Build the application
+# Stage 1: Build the application with optimizations
 FROM rust:${RUST_VERSION}-slim-bullseye AS build
 ARG APP_NAME
 
@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Set performance-optimized environment variables
+ENV RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C panic=abort"
+ENV RUST_BACKTRACE=0
 
 # Set the working directory inside the container
 WORKDIR /app
