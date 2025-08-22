@@ -35,6 +35,7 @@ pub struct EnhancedConfig {
     pub exchanges: Vec<ExchangeConfig>,
     pub message_broker: MessageBrokerConfig,
     pub topics: Vec<String>,
+    pub topic_routing: HashMap<String, String>,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub performance: PerformanceConfig,
@@ -171,28 +172,30 @@ pub struct RetryConfigSection {
 
 impl Default for EnhancedConfig {
     fn default() -> Self {
+        let mut topic_routing = HashMap::new();
+        topic_routing.insert("trades".to_string(), "market.data.kraken.trades".to_string());
+        topic_routing.insert("balances".to_string(), "portfolio.updates.balances".to_string());
+        topic_routing.insert("balances_snapshot".to_string(), "portfolio.updates.snapshots".to_string());
+        topic_routing.insert("level3".to_string(), "market.data.kraken.level3".to_string());
+        topic_routing.insert("level3_snapshot".to_string(), "market.data.kraken.snapshots".to_string());
+        topic_routing.insert("trade_snapshot".to_string(), "market.data.kraken.trade_snapshots".to_string());
+        
         Self {
             environment: Environment::Development,
             exchanges: vec![
                 ExchangeConfig {
-                    name: "Kraken".to_string(),
+                    name: "kraken".to_string(),
                     enabled: true,
-                    symbols: vec!["BTC/USD".to_string(), "ETH/USD".to_string()],
+                    symbols: vec!["XBTUSD".to_string(), "ETHUSD".to_string()],
                     depth: 100,
-                    websocket_token: "https://api.kraken.com/0/private/GetWebSocketsToken".to_string(),
+                    websocket_token: "default_token".to_string(),
                     websockets: vec![
-                        WebSocketConfig {
-                            channel: "level3".to_string(),
-                            endpoint: "wss://ws.kraken.com".to_string(),
-                            compression: true,
-                            heartbeat_interval: Duration::from_secs(30),
-                        },
                         WebSocketConfig {
                             channel: "trade".to_string(),
                             endpoint: "wss://ws.kraken.com".to_string(),
-                            compression: true,
+                            compression: false,
                             heartbeat_interval: Duration::from_secs(30),
-                        },
+                        }
                     ],
                     rate_limits: RateLimitConfig {
                         requests_per_second: 10,
@@ -203,52 +206,56 @@ impl Default for EnhancedConfig {
                     retry_config: RetryConfigSection {
                         max_attempts: 3,
                         initial_delay: Duration::from_millis(100),
-                        max_delay: Duration::from_secs(5),
+                        max_delay: Duration::from_secs(10),
                         backoff_multiplier: 2.0,
                         jitter_enabled: true,
                     },
-                }
+                },
             ],
             message_broker: MessageBrokerConfig {
                 address: "localhost".to_string(),
-                port: 8080,
-                max_connections: 1000,
+                port: 9092,
+                max_connections: 10,
                 buffer_size: 8192,
                 compression_enabled: true,
-                batch_size: 100,
-                flush_interval: Duration::from_millis(10),
+                batch_size: 1000,
+                flush_interval: Duration::from_millis(100),
             },
-            topics: vec!["market.data.kraken".to_string()],
+            topics: vec![
+                "market.data.trades".to_string(),
+                "portfolio.updates".to_string(),
+            ],
+            topic_routing,
             database: DatabaseConfig {
-                postgres_url: "postgresql://localhost:5432/trading".to_string(),
+                postgres_url: "postgresql://localhost:5432/dataengine".to_string(),
                 redis_url: "redis://localhost:6379".to_string(),
-                max_connections: 50,
-                connection_timeout: Duration::from_secs(10),
-                query_timeout: Duration::from_secs(30),
+                max_connections: 20,
+                connection_timeout: Duration::from_secs(30),
+                query_timeout: Duration::from_secs(60),
                 retry_attempts: 3,
                 backup_enabled: false,
             },
             redis: RedisConfig {
                 cluster_mode: false,
-                cluster_nodes: vec![],
+                cluster_nodes: vec!["localhost:6379".to_string()],
                 password: None,
                 db_index: 0,
                 key_prefix: "dataengine:".to_string(),
                 ttl_seconds: 3600,
             },
             performance: PerformanceConfig {
-                worker_threads: num_cpus::get() as u32,
-                cpu_affinity_enabled: true,
-                cpu_cores: (0..num_cpus::get() as u32).collect(),
-                memory_limit_mb: 8192,
-                gc_threshold_mb: 1024,
+                worker_threads: 4,
+                cpu_affinity_enabled: false,
+                cpu_cores: vec![],
+                memory_limit_mb: 1024,
+                gc_threshold_mb: 512,
                 metrics_enabled: true,
-                metrics_interval: Duration::from_secs(10),
+                metrics_interval: Duration::from_secs(60),
                 simd_enabled: true,
             },
             security: SecurityConfigSection {
-                api_key_required: true,
-                request_signing_required: true,
+                api_key_required: false,
+                request_signing_required: false,
                 rate_limiting_enabled: true,
                 max_requests_per_minute: 1000,
                 blocked_ips: vec![],
@@ -258,12 +265,12 @@ impl Default for EnhancedConfig {
             monitoring: MonitoringConfig {
                 health_check_enabled: true,
                 health_check_interval: Duration::from_secs(30),
-                metrics_retention_days: 30,
-                alerting_enabled: true,
+                metrics_retention_days: 7,
+                alerting_enabled: false,
                 alert_thresholds: AlertThresholds {
                     cpu_usage_percent: 80.0,
                     memory_usage_percent: 85.0,
-                    latency_ms: 100.0,
+                    latency_ms: 1000.0,
                     error_rate_percent: 5.0,
                     connection_failures: 10,
                 },
@@ -274,7 +281,7 @@ impl Default for EnhancedConfig {
                 output: vec!["stdout".to_string()],
                 file_path: None,
                 max_file_size_mb: 100,
-                max_files: 10,
+                max_files: 5,
                 structured_logging: true,
             },
             last_modified: None,
@@ -556,6 +563,7 @@ impl ConfigManager {
 pub struct Config {
     pub message_broker: MessageBroker,
     pub topics: Vec<String>,
+    pub topic_routing: HashMap<String, String>,
     pub exchanges: Vec<Exchange>,
 }
 
@@ -592,12 +600,21 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Self {
+        let mut topic_routing = HashMap::new();
+        topic_routing.insert("trades".to_string(), "market.data.kraken.trades".to_string());
+        topic_routing.insert("balances".to_string(), "portfolio.updates.balances".to_string());
+        topic_routing.insert("balances_snapshot".to_string(), "portfolio.updates.snapshots".to_string());
+        topic_routing.insert("level3".to_string(), "market.data.kraken.level3".to_string());
+        topic_routing.insert("level3_snapshot".to_string(), "market.data.kraken.snapshots".to_string());
+        topic_routing.insert("trade_snapshot".to_string(), "market.data.kraken.trade_snapshots".to_string());
+        
         Self {
             message_broker: MessageBroker {
                 address: "localhost".to_string(),
                 port: 8080,
             },
             topics: vec!["market.data.kraken".to_string()],
+            topic_routing,
             exchanges: vec![
                 Exchange {
                     name: "Kraken".to_string(),
@@ -629,6 +646,7 @@ impl From<EnhancedConfig> for Config {
                 port: enhanced.message_broker.port,
             },
             topics: enhanced.topics,
+            topic_routing: enhanced.topic_routing,
             exchanges: enhanced.exchanges.into_iter().map(|e| Exchange {
                 name: e.name,
                 websocket_token: e.websocket_token,

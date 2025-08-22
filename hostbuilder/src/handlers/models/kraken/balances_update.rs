@@ -77,7 +77,7 @@ impl BalanceUpdate {
         redis_pool: Arc<Pool<Manager, Connection>>,
         _postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        publisher: Arc<Mutex<Publisher>>,
+        _publisher: Arc<Mutex<Publisher>>,
         order_book: &OrderBook
     ) -> Result<()> {
         // Reduce retry attempts for lower latency
@@ -121,7 +121,7 @@ impl BalanceUpdate {
         let topics = &config.topics;
         let message = PublishRequest {
             topics: topics.clone(),
-            payload: Some(publish_request::Payload::PorfolioPayload(portfolio_message)),
+            payload: Some(publish_request::Payload::PortfolioPayload(portfolio_message)),
         };
 
         // Execute Redis, Postgres and Publisher operations concurrently
@@ -138,10 +138,20 @@ impl BalanceUpdate {
             }
         });
 
-        let publisher_future = async {
-            match publisher.lock().await.publish(&message.topics, message.payload) {
-                Ok(_) => debug!("Published trade messages successfully"),
-                Err(e) => error!("Failed to publish trade messages: {:?}", e),
+        let publisher_clone = _publisher.clone();
+        let message_clone = message.clone();
+        let topic_name = config.topic_routing
+            .get("balances")
+            .cloned()
+            .unwrap_or_else(|| "portfolio.updates.balances".to_string());
+        let publisher_future = async move {
+            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                Ok(_) => {
+                    debug!("Successfully published portfolio message");
+                },
+                Err(e) => {
+                    error!("Failed to publish portfolio message: {:?}", e);
+                }
             }
         };
 

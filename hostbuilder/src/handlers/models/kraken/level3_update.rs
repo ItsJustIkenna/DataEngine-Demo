@@ -84,7 +84,7 @@ impl Level3Update {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        publisher: Arc<tokio::sync::Mutex<Publisher>>, // Keep Mutex for compatibility
+        _publisher: Arc<tokio::sync::Mutex<Publisher>>, // Keep Mutex for compatibility
         order_book: &OrderBook,
     ) -> Result<()> {
         // Reduced retry attempts for ultra-low latency - only 1 retry
@@ -711,7 +711,7 @@ impl Level3Update {
         
         // Create market message and publish request
         let market_message = MarketMessage {
-            payload: Some(market_message::Payload::OrdersPaylaod(message_orders)),
+            payload: Some(market_message::Payload::OrdersPayload(message_orders)),
         };
         
         let topics = &config.topics;
@@ -720,12 +720,23 @@ impl Level3Update {
             payload: Some(publish_request::Payload::MarketPayload(market_message)),
         };
         
-        // Connect to publisher and send message
-        if let Err(e) = publisher.lock().await.publish(&message.topics, message.payload) {
-            error!("Failed to publish message: {:?}", e);
-        } else {
-            debug!("Successfully published order messages");
-        }
+        // Publish message using the new Publisher API
+        let publisher_clone = _publisher.clone();
+        let message_clone = message.clone();
+        let topic_name = config.topic_routing
+            .get("level3")
+            .cloned()
+            .unwrap_or_else(|| "market.data.kraken.level3".to_string());
+        let publisher_future = async move {
+            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                Ok(_) => {
+                    debug!("Successfully published level3 update message");
+                },
+                Err(e) => {
+                    error!("Failed to publish level3 update message: {:?}", e);
+                }
+            }
+        };
 
         // Update total volume
         total_volume += bid_volume + ask_volume;
@@ -764,8 +775,11 @@ impl Level3Update {
             error!("All retries failed for redis commands: {}", e);
         }
         
-        // Update Postgres
-        match update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume).await {
+        // Update Postgres and publish message in parallel
+        let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume);
+        let (postgres_result, _) = tokio::join!(postgres_future, publisher_future);
+        
+        match postgres_result {
             Ok(_) => {
                 debug!("Updated order book in postgres");
             }

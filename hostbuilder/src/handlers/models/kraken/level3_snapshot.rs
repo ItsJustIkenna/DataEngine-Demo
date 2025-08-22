@@ -57,7 +57,7 @@ impl Level3Snapshot {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        publisher: Arc<Mutex<Publisher>>, // Keep Mutex for compatibility
+        _publisher: Arc<Mutex<Publisher>>, // Keep Mutex for compatibility
         order_book: &OrderBook,
     ) -> Result<()> {
         // Reduce retry attempts for lower latency
@@ -335,7 +335,7 @@ impl Level3Snapshot {
         };
         
         let market_message = MarketMessage {
-            payload: Some(market_message::Payload::OrdersPaylaod(message_orders)),
+            payload: Some(market_message::Payload::OrdersPayload(message_orders)),
         };
         
         let topics = &config.topics;
@@ -345,11 +345,20 @@ impl Level3Snapshot {
         };
         
         // Connect to publisher and send message in parallel with other work
-        let publish_future = async {
-            if let Err(e) = publisher.lock().await.publish(&message.topics, message.payload) {
-                error!("Failed to publish message: {:?}", e);
-            } else {
-                debug!("Successfully published order messages");
+        let publisher_clone = _publisher.clone();
+        let message_clone = message.clone();
+        let topic_name = config.topic_routing
+            .get("level3_snapshot")
+            .cloned()
+            .unwrap_or_else(|| "market.data.kraken.snapshots".to_string());
+        let publish_future = async move {
+            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                Ok(_) => {
+                    debug!("Successfully published level3 snapshot message");
+                },
+                Err(e) => {
+                    error!("Failed to publish level3 snapshot message: {:?}", e);
+                }
             }
         };
 

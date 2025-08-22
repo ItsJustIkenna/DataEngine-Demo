@@ -103,6 +103,12 @@ data:
       - {{ . | quote }}
     {{- end }}
     
+    # Topic routing configuration for publishers
+    topic_routing:
+      {{- range $key, $value := .Values.config.topic_routing }}
+      {{ $key }}: {{ $value | quote }}
+      {{- end }}
+    
     # Database configuration
     database:
       postgres_url: {{ .Values.config.database.postgres_url | quote }}

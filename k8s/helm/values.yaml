@@ -259,6 +259,15 @@ config:
     - "trading.orders"
     - "portfolio.updates"
   
+  # Topic routing configuration for publishers
+  topic_routing:
+    trades: "market.data.kraken.trades"
+    balances: "portfolio.updates.balances"
+    balances_snapshot: "portfolio.updates.snapshots"
+    level3: "market.data.kraken.level3"
+    level3_snapshot: "market.data.kraken.snapshots"
+    trade_snapshot: "market.data.kraken.trade_snapshots"
+  
   # Database configuration
   database:
     postgres_url: "postgresql://localhost:5432/trading"

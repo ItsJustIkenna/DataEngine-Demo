@@ -52,7 +52,7 @@ impl TradeSnapshot {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        publisher: Arc<Mutex<Publisher>>,
+        _publisher: Arc<Mutex<Publisher>>,
         order_book: &OrderBook
     ) -> Result<()> {
         // Reduce retry attempts for lower latency
@@ -155,10 +155,20 @@ impl TradeSnapshot {
         
         let postgres_future = create_historical_orders(postgres_pool.clone(), trades);
         
-        let publisher_future = async {
-            match publisher.lock().await.publish(&message.topics, message.payload) {
-                Ok(_) => debug!("Published trade messages successfully"),
-                Err(e) => error!("Failed to publish trade messages: {:?}", e),
+        let publisher_clone = _publisher.clone();
+        let message_clone = message.clone();
+        let topic_name = config.topic_routing
+            .get("trade_snapshot")
+            .cloned()
+            .unwrap_or_else(|| "market.data.kraken.trade_snapshots".to_string());
+        let publisher_future = async move {
+            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                Ok(_) => {
+                    debug!("Successfully published trade snapshot message");
+                },
+                Err(e) => {
+                    error!("Failed to publish trade snapshot message: {:?}", e);
+                }
             }
         };
         
