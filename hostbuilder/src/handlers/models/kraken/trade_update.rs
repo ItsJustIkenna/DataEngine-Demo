@@ -4,10 +4,8 @@ use anyhow::Result;
 use bigdecimal::ToPrimitive;
 use config::Config;
 use databaseschema::{
-    models::{historical_order::NewHistoricalOrder, order_book::OrderBook, trade::NewTrade},
-    ops::{historical_order_ops::create_historical_orders, 
-        trades_ops::create_trades}
-    ,
+    models::{order_book::OrderBook, trade::NewTrade},
+    ops::trades_ops::create_trades,
     CustomAsyncPgConnectionManager,
 };
 use deadpool::managed::Pool;
@@ -33,10 +31,6 @@ use tokio_retry::{
 use tracing::{error, warn, debug};
 
 use super::trade_data::TradeData;
-
-// Constants for optimization
-const EVENT_TRADE: &str = "trade";
-const STATUS_FILLED: &str = "filled";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TradeUpdate {
@@ -75,7 +69,6 @@ impl TradeUpdate {
         let trade_count = self.data.len();
         let mut trades = Vec::with_capacity(trade_count);
         let mut trade_messages = Vec::with_capacity(trade_count);
-        let mut historical_trades = Vec::with_capacity(trade_count);
         let mut pipe = redis::pipe();
         pipe.atomic();
 
@@ -108,21 +101,6 @@ impl TradeUpdate {
                 &trade.price,
                 &trade.qty,
             );
-
-            let historical_trade = NewHistoricalOrder::new(
-                trade.timestamp,
-                &trade_id_str,
-                EVENT_TRADE,
-                &trade.side,
-                &trade.price,
-                &trade.qty,
-                None,
-                None,
-                STATUS_FILLED,
-                &order_book.exchange,
-                &order_book.symbol,
-            );
-
             // Format key once
             let key = format!("trade:{}", trade.trade_id);
             
@@ -138,10 +116,7 @@ impl TradeUpdate {
 
             trades.push(new_trade);
             trade_messages.push(trade_message);
-            historical_trades.push(historical_trade);
-        }
-
-        // Prepare message payload outside of any async operations
+        }        // Prepare message payload outside of any async operations
         let trade_messages_payload = Trades {
             trades: trade_messages,
         };
