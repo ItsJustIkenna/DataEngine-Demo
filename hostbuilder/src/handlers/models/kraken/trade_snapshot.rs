@@ -153,6 +153,7 @@ impl TradeSnapshot {
             }
         });
         
+        // Only store trade data in historical_orders for snapshots (not real-time trades)
         let postgres_future = create_historical_orders(postgres_pool.clone(), trades);
         
         let publisher_clone = _publisher.clone();

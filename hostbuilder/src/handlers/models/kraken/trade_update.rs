@@ -170,9 +170,9 @@ impl TradeUpdate {
             }
         });
         
-        // Prepare database operations
+        // Only store in trades table - historical_orders is redundant for trades
         let create_trades_future = create_trades(postgres_pool.clone(), trades);
-        let create_historical_future = create_historical_orders(postgres_pool.clone(), historical_trades);
+        // Removed duplicate historical_orders storage for trades
         
         // Prepare publisher operation
         let publisher_clone = _publisher.clone();
@@ -192,11 +192,10 @@ impl TradeUpdate {
             }
         };
         
-        // Execute all operations concurrently
-        let (redis_result, trades_result, historical_result, _) = tokio::join!(
+        // Execute operations concurrently - only trades table needed
+        let (redis_result, trades_result, _) = tokio::join!(
             redis_future,
             create_trades_future,
-            create_historical_future,
             publisher_future
         );
 
@@ -208,12 +207,6 @@ impl TradeUpdate {
             error!("Failed to add trades to postgres: {}", e);
         } else {
             debug!("Added trades to postgres");
-        }
-
-        if let Err(e) = historical_result {
-            error!("Failed to add historical orders to postgres: {}", e);
-        } else {
-            debug!("Added historical orders to postgres");
         }
 
         Ok(())
