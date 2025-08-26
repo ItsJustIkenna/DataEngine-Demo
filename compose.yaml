@@ -40,7 +40,7 @@ services:
       - POSTGRES_DB=dataengine
       - POSTGRES_USER=dataengine
       - POSTGRES_PASSWORD=dataengine123
-      - POSTGRES_INITDB_ARGS="--encoding=UTF8 --data-checksums"
+      - POSTGRES_INITDB_ARGS=--data-checksums
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro

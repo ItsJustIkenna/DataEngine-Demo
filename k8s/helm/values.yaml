@@ -388,10 +388,10 @@ secrets:
 postgresql:
   enabled: true
   auth:
-    postgresPassword: "dataengine123"
+    postgresPassword: "YOUR_POSTGRES_PASSWORD_HERE"
     database: "dataengine"
-    username: "dataengine"
-    password: "dataengine123"
+    username: "YOUR_POSTGRES_USERNAME_HERE"
+    password: "YOUR_POSTGRES_PASSWORD_HERE"
   primary:
     persistence:
       enabled: true
@@ -411,7 +411,7 @@ redis:
   enabled: true
   auth:
     enabled: true
-    password: "redis123"
+    password: "YOUR_REDIS_PASSWORD_HERE"
   master:
     persistence:
       enabled: true
