@@ -76,6 +76,7 @@ winapi = { version = "0.3", features = ["processthreadsapi", "winnt"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
+io-uring = "0.6"
 
 [build-dependencies]
 prost-build = "0.13.1"

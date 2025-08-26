@@ -99,7 +99,8 @@ where
     data: DashMap<K, CacheEntry<V>>,
     capacity: usize,
     stats: CachePadded<RwLock<CacheStats>>,
-    access_order: CachePadded<Mutex<SmallVec<[K; 64]>>>, // Cache-friendly access tracking
+    // Simple counter-based eviction instead of maintaining order
+    access_counter: CachePadded<AtomicU64>,
 }
 
 impl<K, V> OptimizedLRUCache<K, V>
@@ -112,7 +113,7 @@ where
             data: DashMap::with_capacity(capacity),
             capacity,
             stats: CachePadded::new(RwLock::new(CacheStats::new())),
-            access_order: CachePadded::new(Mutex::new(SmallVec::new())),
+            access_counter: CachePadded::new(AtomicU64::new(0)),
         }
     }
 
@@ -127,7 +128,7 @@ where
             }
 
             let value = entry.access().clone();
-            self.update_access_order(key.clone());
+            // Access time updated in entry.access() method
             self.record_hit();
             Some(value)
         } else {
@@ -145,7 +146,7 @@ where
         let entry = CacheEntry::new(value, ttl);
         let old_value = self.data.insert(key.clone(), entry);
         
-        self.update_access_order(key);
+        // No need to update access order - creation time is set in CacheEntry::new
         
         if let Some(old_entry) = old_value {
             Some(old_entry.value)
@@ -157,7 +158,6 @@ where
 
     pub fn remove(&self, key: &K) -> Option<V> {
         self.data.remove(key).map(|(_, entry)| {
-            self.remove_from_access_order(key);
             self.update_stats_on_remove();
             entry.value
         })
@@ -179,7 +179,6 @@ where
 
     pub fn clear(&self) {
         self.data.clear();
-        self.access_order.lock().clear();
         let mut stats = self.stats.write();
         stats.entries = 0;
         stats.memory_usage_bytes = 0;
@@ -216,7 +215,6 @@ where
 
         for key in keys_to_remove {
             if self.data.remove(&key).is_some() {
-                self.remove_from_access_order(&key);
                 removed += 1;
             }
         }
@@ -226,32 +224,23 @@ where
     }
 
     fn evict_lru(&self) {
-        if let Some(lru_key) = self.access_order.lock().first().cloned() {
-            if self.data.remove(&lru_key).is_some() {
-                self.remove_from_access_order(&lru_key);
+        // Find the least recently used entry by timestamp
+        let mut oldest_key: Option<K> = None;
+        let mut oldest_time = Instant::now();
+        
+        for entry in self.data.iter() {
+            if entry.last_accessed < oldest_time {
+                oldest_time = entry.last_accessed;
+                oldest_key = Some(entry.key().clone());
+            }
+        }
+        
+        if let Some(key) = oldest_key {
+            if self.data.remove(&key).is_some() {
                 let mut stats = self.stats.write();
                 stats.evictions += 1;
                 trace!("Evicted LRU cache entry");
             }
-        }
-    }
-
-    fn update_access_order(&self, key: K) {
-        let mut order = self.access_order.lock();
-        
-        // Remove key if it exists
-        if let Some(pos) = order.iter().position(|k| k == &key) {
-            order.remove(pos);
-        }
-        
-        // Add to end (most recently used)
-        order.push(key);
-    }
-
-    fn remove_from_access_order(&self, key: &K) {
-        let mut order = self.access_order.lock();
-        if let Some(pos) = order.iter().position(|k| k == key) {
-            order.remove(pos);
         }
     }
 
