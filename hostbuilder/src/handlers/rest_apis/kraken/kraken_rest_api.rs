@@ -27,17 +27,23 @@ use std::{
     env,
     time::{
         SystemTime,
-        UNIX_EPOCH
+        UNIX_EPOCH,
+        Instant
     }
 };
 use url::Url;
+use ultra_logger::LogLevel;
 
-use crate::handlers::models::kraken::{responses::{parse_message, Response}, token_response::TokenResponse};
+use crate::handlers::{
+    models::kraken::{responses::{parse_message, Response}, token_response::TokenResponse},
+    logging::{KRAKEN_REST_LOGGER, AuthEvent},
+};
 
 pub struct KrakenRestHandler;
 
 impl KrakenRestHandler {
     pub async fn authenticate(endpoint: &str) -> Result<TokenResponse> {
+        let auth_start = Instant::now();
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
@@ -65,29 +71,68 @@ impl KrakenRestHandler {
         
         match client.post(url).headers(headers).body(body).send().await {
             Ok(res) => {
+                let auth_latency = auth_start.elapsed().as_micros() as u64;
                 let body = res.text().await.expect("Failed to parse API response");
 
                 match parse_message(&body) {
                     Ok(Response::TokenResponse(api_response)) => {
                         println!("Successfully received TokenResponse: {:?}", api_response);
+                        
+                        // Log successful authentication
+                        let auth_event = AuthEvent {
+                            endpoint: endpoint.to_string(),
+                            success: true,
+                            error: None,
+                            latency_micros: Some(auth_latency),
+                        };
+                        let _ = KRAKEN_REST_LOGGER.log_auth_event(auth_event).await;
+                        
                         Ok(api_response)
                     }
                     Ok(other_response) => {
                         // Return an error because we expected a TokenResponse
-                        Err(anyhow!(
-                            "Expected TokenResponse but got {:?}",
-                            other_response
-                        ))
+                        let error_msg = format!("Expected TokenResponse but got {:?}", other_response);
+                        
+                        // Log authentication error
+                        let auth_event = AuthEvent {
+                            endpoint: endpoint.to_string(),
+                            success: false,
+                            error: Some(error_msg.clone()),
+                            latency_micros: Some(auth_latency),
+                        };
+                        let _ = KRAKEN_REST_LOGGER.log_auth_event(auth_event).await;
+                        
+                        Err(anyhow!(error_msg))
                     }
                     Err(e) => {
                         // Handle parsing error
                         println!("Error: Failed to parse message: {}", e);
+                        
+                        // Log parsing error
+                        let auth_event = AuthEvent {
+                            endpoint: endpoint.to_string(),
+                            success: false,
+                            error: Some(format!("Failed to parse response: {}", e)),
+                            latency_micros: Some(auth_latency),
+                        };
+                        let _ = KRAKEN_REST_LOGGER.log_auth_event(auth_event).await;
+                        
                         Err(e.into())
                     }
                 }
             }
             Err(e) => {
                 println!("Error: {:?}", e);
+                
+                // Log network error
+                let auth_event = AuthEvent {
+                    endpoint: endpoint.to_string(),
+                    success: false,
+                    error: Some(format!("Network error: {}", e)),
+                    latency_micros: None,
+                };
+                let _ = KRAKEN_REST_LOGGER.log_auth_event(auth_event).await;
+                
                 Err(e.into())
             }
         }

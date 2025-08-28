@@ -3,27 +3,30 @@ name = "program"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "program"
+path = "src/main.rs"
+
+[[bin]]
+name = "benchmark"
+path = "src/benchmark.rs"
 
 [dependencies]
-anyhow = "1.0.86"
-config = { path = "../config" }
+anyhow = "1.0"
+tokio = { version = "1.38", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+mimalloc = "0.1"
+fastrand = "2.0"
+num_cpus = "1.16"
+
+# Local dependencies
 hostbuilder = { path = "../hostbuilder" }
 performance = { path = "../performance" }
-tokio = { version = "1.38.0", features = ["full"] }
-# Ultra-high performance allocator
-mimalloc = { version = "0.1", default-features = false }
-# Tracing for performance monitoring
-tracing = "0.1.41"
-tracing-subscriber = "0.3"
+config = { path = "../config" }
 
-# Platform-specific dependencies for process priority
+# Windows-specific
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.52", features = [
-    "Win32_System_Threading", 
-    "Win32_System_Diagnostics_Debug",
-    "Win32_Foundation"
-] }
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
+windows-sys = { version = "0.59.0", features = ["Win32_System_Threading"] }

@@ -51,6 +51,10 @@ use tokio_retry::{
     Retry
 };
 use tracing::{error, warn, debug};
+use std::time::Instant;
+
+// Import the Kraken logger
+use crate::handlers::logging::{KRAKEN_ORDERBOOK_LOGGER, OrderBookUpdateLog};
 
 // Ultra-high performance constants - optimized for cache lines
 const INITIAL_ORDERS_CAPACITY: usize = 512; // Increased for better performance
@@ -87,6 +91,8 @@ impl Level3Update {
         _publisher: Arc<tokio::sync::Mutex<Publisher>>, // Keep Mutex for compatibility
         order_book: &OrderBook,
     ) -> Result<()> {
+        let start_time = Instant::now();
+        
         // Reduced retry attempts for ultra-low latency - only 1 retry
         let retry_strategy = ExponentialBackoff::from_millis(2).map(jitter).take(1);
 
@@ -106,6 +112,19 @@ impl Level3Update {
 
         if self.data.is_empty() {
             debug!("Data is empty");
+            
+            // Log empty update
+            let log_update = OrderBookUpdateLog {
+                symbol: order_book.symbol.clone(),
+                update_type: "empty_update".to_string(),
+                bids_count: 0,
+                asks_count: 0,
+                processing_time_micros: start_time.elapsed().as_micros() as u64,
+                total_volume: BigDecimal::zero(),
+                error: None,
+            };
+            let _ = KRAKEN_ORDERBOOK_LOGGER.log_orderbook_update(log_update).await;
+            
             return Ok(());
         }
         
@@ -113,6 +132,18 @@ impl Level3Update {
 
         if update_data.bids.is_empty() && update_data.asks.is_empty() {
             debug!("Both bids and asks are empty");
+            
+            // Log empty bids/asks
+            let log_update = OrderBookUpdateLog {
+                symbol: update_data.symbol.clone(),
+                update_type: "empty_bids_asks".to_string(),
+                bids_count: 0,
+                asks_count: 0,
+                processing_time_micros: start_time.elapsed().as_micros() as u64,
+                total_volume: BigDecimal::zero(),
+                error: None,
+            };
+            let _ = KRAKEN_ORDERBOOK_LOGGER.log_orderbook_update(log_update).await;
             return Ok(());
         }
 
@@ -777,15 +808,41 @@ impl Level3Update {
         }
         
         // Update Postgres and publish message in parallel
-        let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume);
+        let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume.clone());
         let (postgres_result, _) = tokio::join!(postgres_future, publisher_future);
         
         match postgres_result {
             Ok(_) => {
                 debug!("Updated order book in postgres");
+                
+                // Log successful order book update processing
+                let processing_time = start_time.elapsed().as_micros() as u64;
+                let log_update = OrderBookUpdateLog {
+                    symbol: update_data.symbol.clone(),
+                    update_type: "level3_update".to_string(),
+                    bids_count: update_data.bids.len(),
+                    asks_count: update_data.asks.len(),
+                    processing_time_micros: processing_time,
+                    total_volume: total_volume.clone(),
+                    error: None,
+                };
+                let _ = KRAKEN_ORDERBOOK_LOGGER.log_orderbook_update(log_update).await;
             }
             Err(e) => {
                 error!("Failed to update order book in postgres: {}", e);
+                
+                // Log failed order book update processing
+                let processing_time = start_time.elapsed().as_micros() as u64;
+                let log_update = OrderBookUpdateLog {
+                    symbol: update_data.symbol.clone(),
+                    update_type: "level3_update".to_string(),
+                    bids_count: update_data.bids.len(),
+                    asks_count: update_data.asks.len(),
+                    processing_time_micros: processing_time,
+                    total_volume: total_volume.clone(),
+                    error: Some(e.to_string()),
+                };
+                let _ = KRAKEN_ORDERBOOK_LOGGER.log_orderbook_update(log_update).await;
             }
         }
         

@@ -37,6 +37,8 @@ use tokio_tungstenite::{
     WebSocketStream
 };
 use dashmap::DashMap;
+use std::time::Instant;
+use ultra_logger::LogLevel;
 
 use crate::{
     endpoint::EndpointHandler,
@@ -44,7 +46,8 @@ use crate::{
         models::kraken::{
             responses::{parse_message, Response},
             fast_parser::FastMessageParser,
-        }
+        },
+        logging::{KRAKEN_WEBSOCKET_LOGGER, WebSocketEvent, CriticalError},
     }
 };
 use performance::{CpuAffinityManager, cpu_affinity::{set_high_priority, prefault_stack}};
@@ -65,13 +68,39 @@ pub struct KrakenWebSocketHandler {
 impl KrakenWebSocketHandler {
     pub async fn new(endpoint: &str, order_books: HashMap<String, OrderBook>, subscribe_message: &Value, unsubscribe_message: &Value, redis_pool: Arc<Pool<Manager, Connection>>, postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>) -> Result<Self> {
         // Use default config for now, optimize later
+        let connection_start = Instant::now();
         let (ws_stream, _) = match connect_async(endpoint).await {
             Ok(val) => {
+                let latency = connection_start.elapsed().as_micros() as u64;
                 tracing::info!("Connected to endpoint: {}", endpoint);
+                
+                // Log successful WebSocket connection
+                let connection_event = WebSocketEvent {
+                    endpoint: endpoint.to_string(),
+                    action: "connect".to_string(),
+                    connection_id: None,
+                    message: format!("Successfully connected to Kraken WebSocket at {}", endpoint),
+                    level: LogLevel::Info,
+                    latency_micros: Some(latency),
+                };
+                let _ = KRAKEN_WEBSOCKET_LOGGER.log_websocket_event(connection_event).await;
+                
                 val
             }
             Err(e) => {
                 tracing::error!("Failed to connect to endpoint: {}", e);
+                
+                // Log WebSocket connection failure
+                let connection_event = WebSocketEvent {
+                    endpoint: endpoint.to_string(),
+                    action: "connect_failed".to_string(),
+                    connection_id: None,
+                    message: format!("Failed to connect to Kraken WebSocket: {}", e),
+                    level: LogLevel::Error,
+                    latency_micros: None,
+                };
+                let _ = KRAKEN_WEBSOCKET_LOGGER.log_websocket_event(connection_event).await;
+                
                 return Err(e.into());
             }
         };
@@ -239,11 +268,33 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                     },
                                     Err(e) => {
                                         tracing::error!("Failed to parse message: {}", e);
+                                        
+                                        // Log critical parsing error
+                                        let parse_error = CriticalError {
+                                            component: "KrakenWebSocketHandler".to_string(),
+                                            error_code: "MESSAGE_PARSE_ERROR".to_string(),
+                                            error_message: format!("Failed to parse WebSocket message: {}", e),
+                                            stack_trace: Some(format!("{:?}", e)),
+                                            context: Some(format!("Message length: {}", text.len())),
+                                        };
+                                        let _ = KRAKEN_WEBSOCKET_LOGGER.log_critical_error(parse_error).await;
                                     }
                                 }
                             },
                             Some(Ok(Message::Close(_))) => {
                                 tracing::info!("WebSocket connection closed");
+                                
+                                // Log WebSocket disconnect
+                                let disconnect_event = WebSocketEvent {
+                                    endpoint: "kraken-websocket".to_string(),
+                                    action: "disconnect".to_string(),
+                                    connection_id: None,
+                                    message: "WebSocket connection closed by server".to_string(),
+                                    level: LogLevel::Info,
+                                    latency_micros: None,
+                                };
+                                let _ = KRAKEN_WEBSOCKET_LOGGER.log_websocket_event(disconnect_event).await;
+                                
                                 break;
                             },
                             Some(Ok(Message::Ping(data))) => {

@@ -3,6 +3,9 @@ use serde::{
     Deserialize,
     Serialize
 };
+use std::time::Instant;
+
+use crate::handlers::logging::{KRAKEN_SUBSCRIPTION_LOGGER, SubscriptionLog};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level3Subscribe {
@@ -14,6 +17,27 @@ impl Level3Subscribe {
     pub fn from_json(json: &serde_json::Value) -> Result<Level3Subscribe> {
         let subscribe: Level3Subscribe = serde_json::from_value(json.clone())?;
         Ok(subscribe)
+    }
+
+    /// Process subscription request and log it
+    pub async fn process_subscription(&self) -> Result<()> {
+        let start = Instant::now();
+        
+        // Log each symbol subscription separately
+        for symbol in &self.params.symbol {
+            let log_entry = SubscriptionLog {
+                channel: self.params.channel.clone(),
+                action: "subscribe".to_string(),
+                symbol: Some(symbol.clone()),
+                success: true, // Assume success for now, could be enhanced with actual result
+                processing_time_micros: start.elapsed().as_micros() as u64,
+                error: None,
+            };
+            
+            let _ = KRAKEN_SUBSCRIPTION_LOGGER.log_subscription(log_entry).await;
+        }
+        
+        Ok(())
     }
 }
 

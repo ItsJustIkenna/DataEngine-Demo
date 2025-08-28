@@ -29,6 +29,10 @@ use tokio_retry::{
     Retry
 };
 use tracing::{error, warn, debug};
+use std::time::Instant;
+
+// Import the Kraken logger
+use crate::handlers::logging::{KRAKEN_TRADE_LOGGER, TradeProcessingLog};
 
 use super::trade_data::TradeData;
 
@@ -53,6 +57,8 @@ impl TradeUpdate {
         _publisher: Arc<Mutex<Publisher>>,
         order_book: &OrderBook
     ) -> Result<()> {
+        let start_time = Instant::now();
+        
         // Reduce retry attempts for lower latency
         let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
         
@@ -176,14 +182,47 @@ impl TradeUpdate {
             publisher_future
         );
 
+        let processing_time = start_time.elapsed().as_micros() as u64;
+
         if let Err(e) = redis_result {
             error!("Failed to add trades to redis after retries: {}", e);
         }
 
-        if let Err(e) = trades_result {
-            error!("Failed to add trades to postgres: {}", e);
-        } else {
-            debug!("Added trades to postgres");
+        match trades_result {
+            Ok(_) => {
+                debug!("Added trades to postgres");
+                
+                // Log successful trade processing for each trade
+                for trade in self.data.iter() {
+                    let log_trade = TradeProcessingLog {
+                        symbol: trade.symbol.clone(),
+                        trade_id: trade.trade_id.to_string(),
+                        side: trade.side.clone(),
+                        price: trade.price.to_f32().unwrap_or(0.0),
+                        quantity: trade.qty.to_f32().unwrap_or(0.0),
+                        processing_time_micros: processing_time,
+                        error: None,
+                    };
+                    let _ = KRAKEN_TRADE_LOGGER.log_trade_processing(log_trade).await;
+                }
+            }
+            Err(e) => {
+                error!("Failed to add trades to postgres: {}", e);
+                
+                // Log failed trade processing for each trade
+                for trade in self.data.iter() {
+                    let log_trade = TradeProcessingLog {
+                        symbol: trade.symbol.clone(),
+                        trade_id: trade.trade_id.to_string(),
+                        side: trade.side.clone(),
+                        price: trade.price.to_f32().unwrap_or(0.0),
+                        quantity: trade.qty.to_f32().unwrap_or(0.0),
+                        processing_time_micros: processing_time,
+                        error: Some(e.to_string()),
+                    };
+                    let _ = KRAKEN_TRADE_LOGGER.log_trade_processing(log_trade).await;
+                }
+            }
         }
 
         Ok(())

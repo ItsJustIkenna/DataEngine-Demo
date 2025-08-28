@@ -27,6 +27,9 @@ use tokio_retry::{
     Retry
 };
 use tracing::{error, warn, debug};
+use std::time::Instant;
+
+use crate::handlers::logging::{KRAKEN_SNAPSHOT_LOGGER, SnapshotProcessingLog};
 
 use super::trade_data::TradeData;
 
@@ -55,6 +58,8 @@ impl TradeSnapshot {
         _publisher: Arc<Mutex<Publisher>>,
         order_book: &OrderBook
     ) -> Result<()> {
+        let start = Instant::now();
+        
         // Reduce retry attempts for lower latency
         let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
         
@@ -64,8 +69,23 @@ impl TradeSnapshot {
 
         if self.data.is_empty() {
             debug!("Trade data is empty");
+            
+            // Log empty snapshot
+            let log_entry = SnapshotProcessingLog {
+                symbol: "UNKNOWN".to_string(),
+                snapshot_type: "trade_snapshot".to_string(),
+                data_count: 0,
+                processing_time_micros: start.elapsed().as_micros() as u64,
+                data_size_bytes: 0,
+                error: Some("Trade snapshot data is empty".to_string()),
+            };
+            let _ = KRAKEN_SNAPSHOT_LOGGER.log_snapshot_processing(log_entry).await;
+            
             return Ok(());
         }
+
+        let symbol = &self.data[0].symbol;
+        let mut processing_error: Option<String> = None;
         
         // Pre-allocate arrays with capacity based on data size
         let trade_count = self.data.len();
@@ -184,13 +204,29 @@ impl TradeSnapshot {
 
         if let Err(e) = redis_result {
             error!("Failed to add trades to redis after retries: {}", e);
+            processing_error = Some(format!("Redis error: {}", e));
         }
 
         if let Err(e) = postgres_result {
             error!("Failed to add historical orders to postgres: {}", e);
+            if processing_error.is_none() {
+                processing_error = Some(format!("Postgres error: {}", e));
+            }
         } else {
             debug!("Added historical orders to postgres");
         }
+
+        // Log trade snapshot processing completion
+        let data_size = std::mem::size_of_val(&self.data);
+        let log_entry = SnapshotProcessingLog {
+            symbol: symbol.clone(),
+            snapshot_type: "trade_snapshot".to_string(),
+            data_count: self.data.len(),
+            processing_time_micros: start.elapsed().as_micros() as u64,
+            data_size_bytes: data_size,
+            error: processing_error,
+        };
+        let _ = KRAKEN_SNAPSHOT_LOGGER.log_snapshot_processing(log_entry).await;
 
         Ok(())
     }

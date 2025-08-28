@@ -27,6 +27,9 @@ use tokio_retry::{
     Retry
 };
 use tracing::{error, warn, debug};
+use std::time::Instant;
+
+use crate::handlers::logging::{KRAKEN_BALANCE_LOGGER, BalanceUpdateLog, KRAKEN_SNAPSHOT_LOGGER, SnapshotProcessingLog};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BalanceSnapshot {
@@ -71,6 +74,9 @@ impl BalanceSnapshot {
         _publisher: Arc<Mutex<Publisher>>,
         order_book: &OrderBook
     ) -> Result<()> {
+        let start = Instant::now();
+        let mut processing_error: Option<String> = None;
+        
         // Reduce retry attempts for lower latency
         let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
 

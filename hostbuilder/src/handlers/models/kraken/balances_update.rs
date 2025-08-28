@@ -28,6 +28,9 @@ use tokio_retry::{
     Retry
 };
 use tracing::{error, warn, debug};
+use std::time::Instant;
+
+use crate::handlers::logging::{KRAKEN_BALANCE_LOGGER, BalanceUpdateLog};
 
 
 #[derive(Debug, Serialize, Deserialize)]
