@@ -40,7 +40,7 @@ impl FastMessageParser {
     #[inline(always)]
     pub fn detect_channel_fast(data: &[u8]) -> Option<&'static str> {
         // Use SIMD-style byte pattern matching for ultra-fast channel detection
-        if data.len() < 20 { return None; }
+        if data.len() < 10 { return None; } // Minimum length for a meaningful JSON message
         
         // Look for "level3" pattern
         if memmem_fast(data, b"level3") {

@@ -21,7 +21,7 @@
 //! 
 //! // Set CPU affinity for trading thread
 //! let affinity_manager = CpuAffinityManager::new();
-//! affinity_manager.pin_to_core(0)?;
+//! let _ = affinity_manager.pin_to_core(0); // Note: requires root privileges
 //! ```
 
 pub mod metrics;
