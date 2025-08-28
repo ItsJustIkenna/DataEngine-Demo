@@ -80,17 +80,18 @@ impl TradeSnapshot {
             let price_f32 = trade.price.to_f32().unwrap_or(0.0);
             let qty_f32 = trade.qty.to_f32().unwrap_or(0.0);
             let trade_id_str = trade.trade_id.to_string();
-            let timestamp_rfc = trade.timestamp.to_rfc2822();
+            let timestamp_i64 = trade.timestamp.timestamp();
 
             let trade_message = Trade {
                 symbol: trade.symbol.clone(),
                 exchange: order_book.exchange.clone(),
                 side: trade.side.clone(),
                 price: price_f32,
+                quantity: qty_f32,
                 qty: qty_f32,
                 ord_type: trade.ord_type.clone(),
-                timestamp: timestamp_rfc.clone(),
-                trade_id: trade.trade_id,
+                timestamp: timestamp_i64,
+                trade_id: trade_id_str.clone(),
             };
 
             let historical_trade = NewHistoricalOrder::new(
@@ -118,7 +119,7 @@ impl TradeSnapshot {
                 .arg("qty").arg(&trade.qty.to_string())
                 .arg("ord_type").arg(&trade.ord_type)
                 .arg("trade_id").arg(&trade_id_str)
-                .arg("timestamp").arg(&timestamp_rfc);
+                .arg("timestamp").arg(&timestamp_i64.to_string());
 
             trades.push(historical_trade);
             trade_messages.push(trade_message);
@@ -130,12 +131,13 @@ impl TradeSnapshot {
         };
 
         let market_message = MarketMessage {
+            market_id: "kraken_trades".to_string(),
             payload: Some(market_message::Payload::TradesPayload(trade_messages_payload)),
         };
 
         let topics = &config.topics;
         let message = PublishRequest {
-            topics: topics.clone(),
+            topic: topics[0].clone(), // Use first topic as string
             payload: Some(publish_request::Payload::MarketPayload(market_message)),
         };
         

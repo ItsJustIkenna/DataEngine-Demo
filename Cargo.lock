@@ -2205,8 +2205,10 @@ dependencies = [
  "protocol",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
  "tracing",
+ "winapi",
 ]
 
 [[package]]

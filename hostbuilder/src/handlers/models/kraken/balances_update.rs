@@ -103,24 +103,28 @@ impl BalanceUpdate {
         for balance in self.data.iter() {
             println!("Asset: {}, Balance: {}", balance.asset, balance.balance);
             let wallet = Wallet {
+                user_id: "default_user".to_string(),
                 symbol: balance.asset.clone(),
-                balance: balance.amount.to_f32().unwrap_or(0.0)
+                balance: balance.amount.to_f32().unwrap_or(0.0),
+                currency: balance.asset.clone(),
+                last_updated: chrono::Utc::now().timestamp(),
             };
             balances.push(wallet.clone());
         }
 
-        let wallets_payload = Wallets {
+        let wallets_payload = protocol::generated::WalletData {
             exchange: order_book.exchange.clone(),
             wallets: balances.clone(),
         };
 
         let portfolio_message = PortfolioMessage {
+            portfolio_id: "kraken_balances_update".to_string(),
             payload: Some(portfolio_message::Payload::WalletsPayload(wallets_payload)),
         };
 
         let topics = &config.topics;
         let message = PublishRequest {
-            topics: topics.clone(),
+            topic: topics[0].clone(), // Use first topic as string
             payload: Some(publish_request::Payload::PortfolioPayload(portfolio_message)),
         };
 

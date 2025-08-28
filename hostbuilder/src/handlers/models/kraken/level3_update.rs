@@ -711,12 +711,13 @@ impl Level3Update {
         
         // Create market message and publish request
         let market_message = MarketMessage {
+            market_id: "kraken_level3_update".to_string(),
             payload: Some(market_message::Payload::OrdersPayload(message_orders)),
         };
         
         let topics = &config.topics;
         let message = PublishRequest {
-            topics: topics.clone(),
+            topic: topics[0].clone(), // Use first topic as string
             payload: Some(publish_request::Payload::MarketPayload(market_message)),
         };
         

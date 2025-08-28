@@ -97,8 +97,11 @@ impl BalanceSnapshot {
                 println!("Wallet Type: {}, ID: {}, Balance: {}", wallet.r#type, wallet.id, wallet.balance);
                 
                 let wallet = Wallet {
+                    user_id: "default_user".to_string(),
                     symbol: balance.asset.clone(),
-                    balance: wallet.balance.to_f32().unwrap_or(0.0)
+                    balance: wallet.balance.to_f32().unwrap_or(0.0),
+                    currency: balance.asset.clone(),
+                    last_updated: chrono::Utc::now().timestamp(),
                 };
 
                 // Use key once
@@ -113,18 +116,19 @@ impl BalanceSnapshot {
             }
         }
 
-        let wallets_payload = Wallets {
+        let wallets_payload = protocol::generated::WalletData {
             exchange: order_book.exchange.clone(),
             wallets: balances.clone(),
         };
 
         let portfolio_message = PortfolioMessage {
+            portfolio_id: "kraken_balances".to_string(),
             payload: Some(portfolio_message::Payload::WalletsPayload(wallets_payload)),
         };
 
         let topics = &config.topics;
         let message = PublishRequest {
-            topics: topics.clone(),
+            topic: topics[0].clone(), // Use first topic as string
             payload: Some(publish_request::Payload::PortfolioPayload(portfolio_message)),
         };
 
