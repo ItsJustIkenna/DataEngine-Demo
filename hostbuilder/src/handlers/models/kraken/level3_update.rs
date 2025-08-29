@@ -180,7 +180,7 @@ impl Level3Update {
             let mut historical_orders = Vec::with_capacity(bid_capacity);
             let mut buy_orders = Vec::with_capacity(bid_capacity);
             let mut modify_orders = Vec::with_capacity(bid_capacity);
-            let mut delete_orders = Vec::with_capacity(bid_capacity);
+            let mut delete_orders: Vec<String> = Vec::with_capacity(bid_capacity);
             
             // Pre-allocate Redis pipeline
             let mut pipe = redis::pipe();
@@ -375,7 +375,7 @@ impl Level3Update {
 
                         bid_volume -= &bid.order_qty;
 
-                        delete_orders.push(&bid.order_id);
+                        delete_orders.push(bid.order_id.clone());
                         orders.lock().await.push(message);
                         historical_orders.push(historical_order);
                     },
@@ -449,7 +449,7 @@ impl Level3Update {
             let mut historical_orders = Vec::with_capacity(ask_capacity);
             let mut sell_orders = Vec::with_capacity(ask_capacity);
             let mut modify_orders = Vec::with_capacity(ask_capacity);
-            let mut delete_orders = Vec::with_capacity(ask_capacity);
+            let mut delete_orders: Vec<String> = Vec::with_capacity(ask_capacity);
             
             // Pre-allocate Redis pipeline
             let mut pipe = redis::pipe();
@@ -640,7 +640,7 @@ impl Level3Update {
 
                         ask_volume -= &ask.order_qty;
 
-                        delete_orders.push(&ask.order_id);
+                        delete_orders.push(ask.order_id.clone());
                         orders.lock().await.push(message);
                         historical_orders.push(historical_order);
                     },
