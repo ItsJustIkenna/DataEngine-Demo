@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tokio::sync::Mutex; // Add tokio::sync::Mutex for optional publisher
 
 use anyhow::Result;
 use bigdecimal::ToPrimitive;
@@ -18,7 +19,6 @@ use serde::{
     Deserialize,
     Serialize
 };
-use tokio::sync::Mutex;
 use tokio_retry::{
     strategy::{
         jitter,
@@ -55,7 +55,7 @@ impl TradeSnapshot {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        _publisher: Arc<Mutex<Publisher>>,
+        _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook
     ) -> Result<()> {
         let start = Instant::now();
@@ -178,29 +178,45 @@ impl TradeSnapshot {
         // Only store trade data in historical_orders for snapshots (not real-time trades)
         let postgres_future = create_historical_orders(postgres_pool.clone(), trades);
         
-        let publisher_clone = _publisher.clone();
-        let message_clone = message.clone();
-        let topic_name = config.topic_routing
-            .get("trade_snapshot")
-            .cloned()
-            .unwrap_or_else(|| "market.data.kraken.trade_snapshots".to_string());
-        let publisher_future = async move {
-            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
-                Ok(_) => {
-                    debug!("Successfully published trade snapshot message");
-                },
-                Err(e) => {
-                    error!("Failed to publish trade snapshot message: {:?}", e);
+        // Handle publisher conditionally for database-only mode
+        let publisher_future = if let Some(publisher_ref) = _publisher {
+            let publisher_clone = Arc::clone(&publisher_ref);
+            let message_clone = message.clone();
+            let topic_name = config.topic_routing
+                .get("trade_snapshot")
+                .cloned()
+                .unwrap_or_else(|| "market.data.kraken.trade_snapshots".to_string());
+                
+            Some(async move {
+                match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                    Ok(_) => {
+                        debug!("Successfully published trade snapshot message");
+                    },
+                    Err(e) => {
+                        error!("Failed to publish trade snapshot message: {:?}", e);
+                    }
                 }
-            }
+            })
+        } else {
+            debug!("🔒 DATABASE-ONLY MODE: Skipping message broker publishing for trade snapshot");
+            None
         };
         
         // Wait for all futures to complete
-        let (redis_result, postgres_result, _) = tokio::join!(
-            redis_future,
-            postgres_future,
-            publisher_future
-        );
+        let (redis_result, postgres_result) = if let Some(pub_future) = publisher_future {
+            let (redis_result, postgres_result, _) = tokio::join!(
+                redis_future,
+                postgres_future,
+                pub_future
+            );
+            (redis_result, postgres_result)
+        } else {
+            let (redis_result, postgres_result) = tokio::join!(
+                redis_future,
+                postgres_future
+            );
+            (redis_result, postgres_result)
+        };
 
         if let Err(e) = redis_result {
             error!("Failed to add trades to redis after retries: {}", e);

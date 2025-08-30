@@ -88,7 +88,7 @@ impl Level3Update {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        _publisher: Arc<tokio::sync::Mutex<Publisher>>, // Keep Mutex for compatibility
+        _publisher: Option<Arc<tokio::sync::Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook,
     ) -> Result<()> {
         let start_time = Instant::now();
@@ -760,12 +760,14 @@ impl Level3Update {
             .cloned()
             .unwrap_or_else(|| "market.data.kraken.level3".to_string());
         let publisher_future = async move {
-            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
-                Ok(_) => {
-                    debug!("Successfully published level3 update message");
-                },
-                Err(e) => {
-                    error!("Failed to publish level3 update message: {:?}", e);
+            if let Some(ref publisher_clone) = publisher_clone {
+                match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                    Ok(_) => {
+                        debug!("Successfully published level3 update message");
+                    },
+                    Err(e) => {
+                        error!("Failed to publish level3 update message: {:?}", e);
+                    }
                 }
             }
         };

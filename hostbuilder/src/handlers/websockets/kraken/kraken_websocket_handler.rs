@@ -39,6 +39,7 @@ use tokio_tungstenite::{
 use dashmap::DashMap;
 use std::time::Instant;
 use ultra_logger::LogLevel;
+use tracing::info; // Add tracing info macro
 
 use crate::{
     endpoint::EndpointHandler,
@@ -57,7 +58,7 @@ pub struct KrakenWebSocketHandler {
     config: Config,
     writer: RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>,
     reader: RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
-    publisher: Arc<tokio::sync::Mutex<Publisher>>, // Keep Mutex for compatibility 
+    publisher: Option<Arc<tokio::sync::Mutex<Publisher>>>, // Optional for database-only mode
     unsubscribe_message: Value,
     order_books: DashMap<String, OrderBook>, // Use DashMap for concurrent access
     redis_pool: Arc<Pool<Manager, Connection>>,
@@ -121,10 +122,25 @@ impl KrakenWebSocketHandler {
 
         let addr = format!("{}:{}", config.message_broker.address, config.message_broker.port);
         let publisher_config = PublisherConfig::new(&addr);
-        let publisher = Arc::new(tokio::sync::Mutex::new(
-            Publisher::new(publisher_config)
-                .map_err(|e| anyhow::anyhow!("Failed to create publisher: {:?}", e))?
-        ));
+        
+        // Check if database-only mode is enabled
+        let database_only_mode = env::var("DATABASE_ONLY_MODE")
+            .unwrap_or_else(|_| "false".to_string())
+            .to_lowercase() == "true"
+            || env::var("DISABLE_MESSAGE_BROKER")
+                .unwrap_or_else(|_| "false".to_string())
+                .to_lowercase() == "true";
+        
+        let publisher = if database_only_mode {
+            // In database-only mode, create a no-op publisher or handle gracefully
+            info!("🔒 DATABASE-ONLY MODE: Message broker publishing disabled");
+            None
+        } else {
+            Some(Arc::new(tokio::sync::Mutex::new(
+                Publisher::new(publisher_config)
+                    .map_err(|e| anyhow::anyhow!("Failed to create publisher: {:?}", e))?
+            )))
+        };
         
         // Convert HashMap to DashMap for concurrent access
         let order_books_map = DashMap::new();
@@ -191,7 +207,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                     Arc::clone(&self.redis_pool), 
                                                     Arc::clone(&self.postgres_pool), 
                                                     &self.config, 
-                                                    Arc::clone(&self.publisher), 
+                                                    self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                     &order_book
                                                 ).await {
                                                     tracing::error!("Failed to process order book update: {}", e);
@@ -211,7 +227,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
-                                                Arc::clone(&self.publisher), 
+                                                self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
                                                 tracing::error!("Failed to process order book snapshot: {}", e);
@@ -225,7 +241,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
-                                                Arc::clone(&self.publisher), 
+                                                self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
                                                 tracing::error!("Failed to process order book update: {}", e);
@@ -239,7 +255,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
-                                                Arc::clone(&self.publisher), 
+                                                self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
                                                 tracing::error!("Failed to process trade snapshot: {}", e);
@@ -253,7 +269,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
-                                                Arc::clone(&self.publisher), 
+                                                self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
                                                 tracing::error!("Failed to process trade update: {}", e);

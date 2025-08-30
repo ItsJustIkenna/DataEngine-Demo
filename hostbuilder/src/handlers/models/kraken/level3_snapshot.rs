@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tokio::sync::Mutex; // Add tokio::sync::Mutex for optional publisher
 
 use anyhow::Result;
 use bigdecimal::{BigDecimal, Zero, ToPrimitive};
@@ -22,7 +23,6 @@ use serde::{
     Deserialize,
     Serialize
 };
-use tokio::sync::Mutex;
 use tokio_retry::{
     strategy::{
         jitter,
@@ -60,7 +60,7 @@ impl Level3Snapshot {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        _publisher: Arc<Mutex<Publisher>>, // Keep Mutex for compatibility
+        _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook,
     ) -> Result<()> {
         let start = Instant::now();
@@ -365,22 +365,28 @@ impl Level3Snapshot {
             payload: Some(publish_request::Payload::MarketPayload(market_message)),
         };
         
-        // Connect to publisher and send message in parallel with other work
-        let publisher_clone = _publisher.clone();
-        let message_clone = message.clone();
-        let topic_name = config.topic_routing
-            .get("level3_snapshot")
-            .cloned()
-            .unwrap_or_else(|| "market.data.kraken.snapshots".to_string());
-        let publish_future = async move {
-            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
-                Ok(_) => {
-                    debug!("Successfully published level3 snapshot message");
-                },
-                Err(e) => {
-                    error!("Failed to publish level3 snapshot message: {:?}", e);
+        // Connect to publisher and send message in parallel with other work (if enabled)
+        let publish_future = if let Some(publisher_ref) = _publisher {
+            let publisher_clone = Arc::clone(&publisher_ref);
+            let message_clone = message.clone();
+            let topic_name = config.topic_routing
+                .get("level3_snapshot")
+                .cloned()
+                .unwrap_or_else(|| "market.data.kraken.snapshots".to_string());
+                
+            Some(async move {
+                match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                    Ok(_) => {
+                        debug!("Successfully published level3 snapshot message");
+                    },
+                    Err(e) => {
+                        error!("Failed to publish level3 snapshot message: {:?}", e);
+                    }
                 }
-            }
+            })
+        } else {
+            debug!("🔒 DATABASE-ONLY MODE: Skipping message broker publishing for level3 snapshot");
+            None
         };
 
         // Calculate total volume
@@ -418,9 +424,16 @@ impl Level3Snapshot {
         
         let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume.clone());
         
-        // Wait for all remaining operations
-        let (_, redis_result, postgres_result) = 
-            tokio::join!(publish_future, redis_future, postgres_future);
+        // Wait for all operations (conditionally including publish_future)
+        let (redis_result, postgres_result) = if let Some(pub_future) = publish_future {
+            let (_, redis_result, postgres_result) = 
+                tokio::join!(pub_future, redis_future, postgres_future);
+            (redis_result, postgres_result)
+        } else {
+            let (redis_result, postgres_result) = 
+                tokio::join!(redis_future, postgres_future);
+            (redis_result, postgres_result)
+        };
         
         if let Err(e) = redis_result {
             error!("All retries failed for redis commands: {}", e);

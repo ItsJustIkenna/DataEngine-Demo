@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tokio::sync::Mutex; // Add tokio::sync::Mutex for optional publisher
 
 use anyhow::Result;
 use bigdecimal::ToPrimitive;
@@ -20,7 +21,6 @@ use serde::{
     Deserialize,
     Serialize
 };
-use tokio::sync::Mutex;
 use tokio_retry::{
     strategy::{
         jitter,
@@ -54,7 +54,7 @@ impl TradeUpdate {
         redis_pool: Arc<Pool<Manager, Connection>>,
         postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
         config: &Config,
-        _publisher: Arc<Mutex<Publisher>>,
+        _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook
     ) -> Result<()> {
         let start_time = Instant::now();
@@ -157,30 +157,45 @@ impl TradeUpdate {
         let create_trades_future = create_trades(postgres_pool.clone(), trades);
         // Removed duplicate historical_orders storage for trades
         
-        // Prepare publisher operation
-        let publisher_clone = _publisher.clone();
-        let message_clone = message.clone();
-        let topic_name = config.topic_routing
-            .get("trades")
-            .cloned()
-            .unwrap_or_else(|| "market.data.kraken.trades".to_string());
-        let publisher_future = async move {
-            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
-                Ok(_) => {
-                    debug!("Successfully published trade message");
-                },
-                Err(e) => {
-                    error!("Failed to publish trade message: {:?}", e);
+        // Handle publisher conditionally for database-only mode
+        let publisher_future = if let Some(publisher_ref) = _publisher {
+            let publisher_clone = Arc::clone(&publisher_ref);
+            let message_clone = message.clone();
+            let topic_name = config.topic_routing
+                .get("trades")
+                .cloned()
+                .unwrap_or_else(|| "market.data.kraken.trades".to_string());
+                
+            Some(async move {
+                match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                    Ok(_) => {
+                        debug!("Successfully published trade message");
+                    },
+                    Err(e) => {
+                        error!("Failed to publish trade message: {:?}", e);
+                    }
                 }
-            }
+            })
+        } else {
+            debug!("🔒 DATABASE-ONLY MODE: Skipping message broker publishing for trade update");
+            None
         };
         
         // Execute operations concurrently - only trades table needed
-        let (redis_result, trades_result, _) = tokio::join!(
-            redis_future,
-            create_trades_future,
-            publisher_future
-        );
+        let (redis_result, trades_result) = if let Some(pub_future) = publisher_future {
+            let (redis_result, trades_result, _) = tokio::join!(
+                redis_future,
+                create_trades_future,
+                pub_future
+            );
+            (redis_result, trades_result)
+        } else {
+            let (redis_result, trades_result) = tokio::join!(
+                redis_future,
+                create_trades_future
+            );
+            (redis_result, trades_result)
+        };
 
         let processing_time = start_time.elapsed().as_micros() as u64;
 

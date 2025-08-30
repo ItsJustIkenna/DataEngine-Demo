@@ -206,6 +206,16 @@ config:
   log_level: "info"
   rust_log: "data_engine=info,hostbuilder=debug,performance=warn"
   
+  # =============================================================================
+  # Deployment Mode Configuration
+  # =============================================================================
+  
+  # Database-Only Mode (disable message broker publishing)
+  # Set to true for data collection without real-time distribution
+  database_only_mode: false
+  disable_message_broker: false
+  disable_publisher: false
+  
   # Performance tuning
   tokio_worker_threads: 8
   max_connections: 1000

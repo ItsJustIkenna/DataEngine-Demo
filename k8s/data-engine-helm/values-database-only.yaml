@@ -1,0 +1,276 @@
+# =============================================================================
+# DataEngine Helm Chart Values - Database-Only Mode
+# Optimized for data collection and storage without message broker publishing
+# =============================================================================
+
+# Inherit from base values.yaml and override specific configurations
+appName: data-engine-db-only
+
+# =============================================================================
+# Database-Only Mode Configuration
+# =============================================================================
+config:
+  # Enable database-only mode (disables message broker publishing)
+  database_only_mode: true
+  disable_message_broker: true
+  disable_publisher: true
+  
+  # Environment configuration
+  environment: "Production"
+  log_level: "info"
+  rust_log: "data_engine=info,hostbuilder=debug"
+  
+  # Performance tuning (optimized for database-only operations)
+  tokio_worker_threads: 6  # Reduced since no message broker threads needed
+  max_connections: 1000
+  connection_timeout: 30
+  buffer_size: 8192
+  batch_size: 100
+  flush_interval: "10ms"
+  compression_enabled: true
+  
+  # Exchange configuration (same as full mode)
+  exchanges:
+    - name: "Kraken"
+      enabled: true
+      websocket_token: 'https://api.kraken.com/0/private/GetWebSocketsToken'
+      symbols: ["BTC/USD", "ETH/USD", "BTC/EUR", "ETH/EUR"]
+      depth: 100
+      websockets:
+        - channel: "level3"
+          endpoint: "wss://ws.kraken.com"
+          compression: true
+          heartbeat_interval: "30s"
+        - channel: "trade"
+          endpoint: "wss://ws.kraken.com"
+          compression: true
+          heartbeat_interval: "30s"
+      rate_limits:
+        requests_per_second: 10
+        burst_size: 20
+        window_size: "60s"
+      timeout: "30s"
+      retry_config:
+        max_attempts: 3
+        initial_delay: "100ms"
+        max_delay: "5s"
+        backoff_multiplier: 2.0
+        jitter_enabled: true
+  
+  # Message broker configuration (disabled but kept for compatibility)
+  message_broker:
+    enabled: false
+    address: "disabled"
+    port: 8080
+    max_connections: 0
+    buffer_size: 0
+    compression_enabled: false
+    batch_size: 0
+    flush_interval: "0ms"
+  
+  # Topics (disabled in database-only mode)
+  topics: []
+  
+  # Topic routing (disabled in database-only mode)
+  topic_routing: {}
+  
+  # Database configuration (enhanced for database-only mode)
+  database:
+    postgres_url: "postgresql://postgres:5432/trading_data"
+    redis_url: "redis://redis:6379"
+    max_connections: 100  # Increased for database-only mode
+    connection_timeout: "10s"
+    query_timeout: "30s"
+    retry_attempts: 3
+    backup_enabled: true
+    # Database-only optimizations
+    connection_pool_size: 50
+    statement_cache_size: 1000
+    batch_insert_size: 1000
+  
+  # Redis configuration (enhanced for database-only caching)
+  redis:
+    cluster_mode: false
+    cluster_nodes: []
+    password: null
+    db_index: 0
+    key_prefix: "dataengine:"
+    ttl_seconds: 3600
+    # Database-only optimizations
+    max_connections: 50
+    pipeline_size: 100
+    connection_pool_size: 20
+
+# =============================================================================
+# Resource Management (Optimized for Database-Only)
+# =============================================================================
+
+# Reduced resource requirements since no message broker processing
+resources:
+  limits:
+    cpu: "1500m"      # Reduced from 2000m
+    memory: "3Gi"     # Reduced from 4Gi
+  requests:
+    cpu: "750m"       # Reduced from 1000m  
+    memory: "1.5Gi"   # Reduced from 2Gi
+
+# =============================================================================
+# Service Configuration (Minimal for Database-Only)
+# =============================================================================
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internal"
+
+# Ingress (typically disabled for database-only mode)
+ingress:
+  enabled: false
+
+# =============================================================================
+# Health Checks (Database-focused)
+# =============================================================================
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+startupProbe:
+  httpGet:
+    path: /startup
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+  successThreshold: 1
+
+# =============================================================================
+# Security Configuration
+# =============================================================================
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# =============================================================================
+# Monitoring & Observability (Database-focused)
+# =============================================================================
+
+monitoring:
+  enabled: true
+  prometheus:
+    scrape: true
+    path: "/metrics"
+    port: 9090
+  grafana:
+    dashboards:
+      database_performance: true
+      redis_metrics: true
+      application_health: true
+      # Message broker dashboards disabled
+      message_broker_metrics: false
+      topic_metrics: false
+
+# =============================================================================
+# Environment Variables (Database-Only Mode)
+# =============================================================================
+
+env:
+  DATABASE_ONLY_MODE: "true"
+  DISABLE_MESSAGE_BROKER: "true" 
+  DISABLE_PUBLISHER: "true"
+  RUST_LOG: "data_engine=info,hostbuilder=debug"
+  LOG_LEVEL: "info"
+
+# =============================================================================
+# Deployment Strategy (Conservative for Database-Only)
+# =============================================================================
+
+replicaCount: 2
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# =============================================================================
+# Node Scheduling (Database-optimized)
+# =============================================================================
+
+nodeSelector:
+  workload-type: "database-intensive"
+
+tolerations:
+- key: "database-workload"
+  operator: "Equal"
+  value: "true"
+  effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - data-engine
+        topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      preference:
+        matchExpressions:
+        - key: node-type
+          operator: In
+          values:
+          - database-optimized

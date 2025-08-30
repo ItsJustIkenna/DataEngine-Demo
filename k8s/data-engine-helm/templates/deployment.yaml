@@ -117,6 +117,26 @@ spec:
             - name: TOKIO_WORKER_THREADS
               value: {{ .Values.config.tokio_worker_threads | quote }}
             
+            # Database-Only Mode Configuration
+            {{- if .Values.config.database_only_mode }}
+            - name: DATABASE_ONLY_MODE
+              value: "true"
+            {{- end }}
+            {{- if .Values.config.disable_message_broker }}
+            - name: DISABLE_MESSAGE_BROKER
+              value: "true"
+            {{- end }}
+            {{- if .Values.config.disable_publisher }}
+            - name: DISABLE_PUBLISHER
+              value: "true"
+            {{- end }}
+            
+            # Additional environment variables from values
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            
             # Database configuration
             {{- if .Values.postgresql.enabled }}
             - name: DATABASE_URL

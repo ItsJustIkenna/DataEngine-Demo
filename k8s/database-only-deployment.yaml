@@ -1,0 +1,239 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dataengine-database-only
+  namespace: trading-platform
+  labels:
+    app: dataengine
+    mode: database-only
+    version: v1.0.0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dataengine
+      mode: database-only
+  template:
+    metadata:
+      labels:
+        app: dataengine
+        mode: database-only
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: dataengine
+        image: ghcr.io/nwagbara-group-llc/dataengine:latest
+        imagePullPolicy: Always
+        env:
+        # Database-only mode configuration
+        - name: DATABASE_ONLY_MODE
+          value: "true"
+        - name: DISABLE_MESSAGE_BROKER
+          value: "true"
+        - name: MESSAGE_BROKER_ENABLED
+          value: "false"
+        
+        # Database configuration
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: dataengine-secrets
+              key: database-url
+        - name: POSTGRES_HOST
+          value: "postgres-service"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "trading_data"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: dataengine-secrets
+              key: postgres-user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: dataengine-secrets
+              key: postgres-password
+        
+        # Redis configuration
+        - name: REDIS_URL
+          value: "redis://redis-service:6379"
+        - name: REDIS_HOST
+          value: "redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+        
+        # Exchange configuration
+        - name: KRAKEN_WS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: dataengine-secrets
+              key: kraken-ws-token
+        
+        # Performance settings
+        - name: CPU_CORES
+          value: "0,1,2,3"
+        - name: THREAD_PRIORITY
+          value: "high"
+        - name: RUST_LOG
+          value: "info"
+        
+        # Config path
+        - name: CONFIG_PATH
+          value: "/app/config/database-only-config.yaml"
+        
+        ports:
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        - name: logs-volume
+          mountPath: /app/logs
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      
+      volumes:
+      - name: config-volume
+        configMap:
+          name: dataengine-config
+      - name: logs-volume
+        emptyDir: {}
+      
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-type
+                operator: In
+                values: ["high-performance"]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: ["dataengine"]
+              topologyKey: kubernetes.io/hostname
+      
+      tolerations:
+      - key: "high-performance"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dataengine-database-only-service
+  namespace: trading-platform
+  labels:
+    app: dataengine
+    mode: database-only
+spec:
+  selector:
+    app: dataengine
+    mode: database-only
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dataengine-config
+  namespace: trading-platform
+data:
+  database-only-config.yaml: |
+    environment: production
+    
+    exchanges:
+      - name: kraken
+        enabled: true
+        symbols: ["BTCUSD", "ETHUSD", "ADAUSD", "SOLUSD"]
+        depth: 1000
+        websocket_token: "${KRAKEN_WS_TOKEN}"
+        websockets:
+          - channel: "level3"
+            endpoint: "wss://ws.kraken.com"
+            compression: false
+            heartbeat_interval: "30s"
+    
+    message_broker:
+      address: "localhost"
+      port: 8080
+      enabled: false  # Disabled for database-only mode
+      max_connections: 0
+      buffer_size: 0
+      compression_enabled: false
+      batch_size: 0
+      flush_interval: "0s"
+    
+    database:
+      postgres_url: "${DATABASE_URL}"
+      redis_url: "${REDIS_URL}"
+      max_connections: 20
+      connection_timeout: "30s"
+      query_timeout: "10s"
+      retry_attempts: 3
+      backup_enabled: true
+    
+    performance:
+      thread_pool_size: 8
+      buffer_pool_size: 1000
+      simd_enabled: true
+      kernel_bypass: true
+      cpu_affinity: [0, 1, 2, 3]
+      memory_pool_size: "64MB"
+    
+    monitoring:
+      metrics_enabled: true
+      metrics_port: 8080
+      health_check_enabled: true
+      performance_logging: true
+    
+    logging:
+      level: "info"
+      format: "json"
+      output: "stdout"
+      file_rotation: true
