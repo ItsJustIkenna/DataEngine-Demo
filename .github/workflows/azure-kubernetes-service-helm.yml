@@ -74,6 +74,12 @@ jobs:
         with:
           repository: Nwagbara-Group-LLC/redisutils
           path: redisutils
+      
+      - name: Checkout LoggingEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/LoggingEngine
+          path: LoggingEngine
 
       # Logs in with your Azure credentials
       - name: Azure login
