@@ -26,7 +26,7 @@ use tokio_retry::{
     },
     Retry
 };
-use tracing::{error, warn, debug};
+use crate::logging_facade::KRAKEN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 use std::time::Instant;
 
 use crate::handlers::logging::{KRAKEN_SNAPSHOT_LOGGER, SnapshotProcessingLog};
@@ -68,7 +68,7 @@ impl TradeSnapshot {
         let trade_connection = trade_connection_future.await.expect("Failed to create redis connection");
 
         if self.data.is_empty() {
-            debug!("Trade data is empty");
+            log_debug!(KRAKEN_LOGGER, "Trade data is empty");
             
             // Log empty snapshot
             let log_entry = SnapshotProcessingLog {
@@ -165,11 +165,11 @@ impl TradeSnapshot {
         let redis_future = Retry::spawn(retry_strategy, || async {
             match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
                 Ok(_) => {
-                    debug!("Added trades to redis");
+                    log_debug!(KRAKEN_LOGGER, "Added trades to redis");
                     Ok(())
                 }
                 Err(e) => {
-                    warn!("Failed to add trades to redis: {}", e);
+                    log_warn!(KRAKEN_LOGGER, "Failed to add trades to redis: {}", e);
                     Err(e)
                 }
             }
@@ -190,15 +190,15 @@ impl TradeSnapshot {
             Some(async move {
                 match publisher_clone.lock().await.publish(message_clone, &topic_name) {
                     Ok(_) => {
-                        debug!("Successfully published trade snapshot message");
+                        log_debug!(KRAKEN_LOGGER, "Successfully published trade snapshot message");
                     },
                     Err(e) => {
-                        error!("Failed to publish trade snapshot message: {:?}", e);
+                        log_error!(KRAKEN_LOGGER, "Failed to publish trade snapshot message: {:?}", e);
                     }
                 }
             })
         } else {
-            debug!("🔒 DATABASE-ONLY MODE: Skipping message broker publishing for trade snapshot");
+            log_debug!(KRAKEN_LOGGER, "🔒 DATABASE-ONLY MODE: Skipping message broker publishing for trade snapshot");
             None
         };
         
@@ -219,17 +219,17 @@ impl TradeSnapshot {
         };
 
         if let Err(e) = redis_result {
-            error!("Failed to add trades to redis after retries: {}", e);
+            log_error!(KRAKEN_LOGGER, "Failed to add trades to redis after retries: {}", e);
             processing_error = Some(format!("Redis error: {}", e));
         }
 
         if let Err(e) = postgres_result {
-            error!("Failed to add historical orders to postgres: {}", e);
+            log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
             if processing_error.is_none() {
                 processing_error = Some(format!("Postgres error: {}", e));
             }
         } else {
-            debug!("Added historical orders to postgres");
+            log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
         }
 
         // Log trade snapshot processing completion

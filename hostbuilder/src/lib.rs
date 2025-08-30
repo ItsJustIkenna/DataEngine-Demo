@@ -4,6 +4,7 @@ pub mod endpoint;
 pub mod get_info;
 pub mod handlers;
 pub mod kernel_bypass;
+pub mod logging_facade;
 pub mod monitoring;
 pub mod order_book;
 pub mod resilience;
@@ -14,6 +15,8 @@ pub mod ultra_metrics;
 pub mod api_endpoints;
 
 use anyhow::Result;
+use crate::logging_facade::MAIN_LOGGER;
+
 use async_trait::async_trait;
 use config::Config;
 use databaseschema::{
@@ -158,7 +161,7 @@ impl HostedObjectTrait for HostedObject {
                 )
                 .await {
                     Ok(kraken_exchange) => {
-                        tracing::info!("Successfully retrieved exchange: {}", kraken_exchange.exchange);
+                        log_info!(MAIN_LOGGER, "Successfully retrieved exchange: {}", kraken_exchange.exchange);
                         let auth_endpoint = exchange.websocket_token.clone();
                         let api_response = KrakenRestHandler::authenticate(&auth_endpoint).await?;
 
@@ -172,7 +175,7 @@ impl HostedObjectTrait for HostedObject {
                             )
                             .await {
                                 Ok(securities) => {
-                                    tracing::info!("Successfully retrieved securities: {:?}", securities);
+                                    log_info!(MAIN_LOGGER, "Successfully retrieved securities: {:?}", securities);
                                     match get_orderbooks(
                                         Arc::clone(&self.redis_pool),
                                         Arc::clone(&self.postgres_pool),
@@ -181,14 +184,14 @@ impl HostedObjectTrait for HostedObject {
                                     )
                                     .await {
                                         Ok(orderbooks) => {
-                                            tracing::info!("Successfully retrieved orderbooks");
+                                            log_info!(MAIN_LOGGER, "Successfully retrieved orderbooks");
                                             let orderbooks = orderbooks.clone();
                                             let shutdown_tx = shutdown_tx.clone();
                                             let redis_pool = Arc::clone(&self.redis_pool);
                                             let postgres_pool = Arc::clone(&self.postgres_pool);
                                             let symbols = exchange.symbols.clone();
                                             let handle = tokio::spawn(async move {
-                                                tracing::info!("Connecting to {:?}", &websocket.endpoint);
+                                                log_info!(MAIN_LOGGER, "Connecting to {:?}", &websocket.endpoint);
             
                                                 match websocket.channel.as_str() {
                                                     "level3" => {
@@ -227,14 +230,14 @@ impl HostedObjectTrait for HostedObject {
                                                                 match handler.listen(shutdown_tx.subscribe()).await
                                                                 {
                                                                     Ok(_) => {
-                                                                        tracing::info!(
+                                                                        log_info!(MAIN_LOGGER, 
                                                                             "Listening to Kraken level 3"
                                                                         );
                                                                     }
-                                                                    Err(e) => tracing::error!("Failed to listen: {}", e),
+                                                                    Err(e) => log_error!(MAIN_LOGGER, "Failed to listen: {}", e),
                                                                 }
                                                             }
-                                                            Err(e) => tracing::error!("Failed to create handler: {}", e),
+                                                            Err(e) => log_error!(MAIN_LOGGER, "Failed to create handler: {}", e),
                                                         }
                                                     }
                                                     "trade" => {

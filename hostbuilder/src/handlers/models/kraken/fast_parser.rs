@@ -1,4 +1,6 @@
 use anyhow::Result;
+use crate::logging_facade::KRAKEN_LOGGER;
+use crate::log_warn;
 use simd_json::{self, OwnedValue};
 use ahash::AHashMap;
 
@@ -29,7 +31,7 @@ impl FastMessageParser {
             Ok(value) => Ok(value),
             Err(e) => {
                 // Fallback to standard JSON parser
-                tracing::warn!("SIMD JSON parsing failed, falling back to std: {}", e);
+                log_warn!(KRAKEN_LOGGER, "SIMD JSON parsing failed, falling back to std: {}", e);
                 let value: serde_json::Value = serde_json::from_str(text)?;
                 Ok(simd_json::to_owned_value(&mut value.to_string().into_bytes())?)
             }
@@ -189,3 +191,4 @@ mod tests {
         assert!(!memmem_fast(b"hello world", b"level3"));
     }
 }
+

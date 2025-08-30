@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{info, warn};
+use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 
 use crate::caching::CacheManager;
 use crate::kernel_bypass::KernelBypassManager;
@@ -37,18 +37,18 @@ impl DataPipeline {
         // Initialize kernel bypass for ultra-low latency
         let kernel_bypass = match KernelBypassManager::new().await {
             Ok(kb) => {
-                info!("Kernel bypass networking initialized for sub-microsecond latency");
+                log_info!(MAIN_LOGGER, "Kernel bypass networking initialized for sub-microsecond latency");
                 Some(Arc::new(kb))
             }
             Err(e) => {
-                warn!("Failed to initialize kernel bypass: {}. Falling back to standard networking", e);
+                log_warn!(MAIN_LOGGER, "Failed to initialize kernel bypass: {}. Falling back to standard networking", e);
                 None
             }
         };
         
         // Set CPU affinity for this thread to core 0 (isolated core)
         if let Err(e) = set_thread_affinity(vec![0]) {
-            warn!("Failed to set CPU affinity: {}", e);
+            log_warn!(MAIN_LOGGER, "Failed to set CPU affinity: {}", e);
         }
         
         Ok(Self {
@@ -268,7 +268,7 @@ impl DataPipeline {
         let order_book = Arc::new(LockFreeOrderBook::new(symbol.to_string())?);
         self.order_books.insert(symbol.to_string(), order_book.clone());
         
-        info!("Created new lock-free order book for symbol: {}", symbol);
+        log_info!(MAIN_LOGGER, "Created new lock-free order book for symbol: {}", symbol);
         
         Ok(order_book)
     }
@@ -315,3 +315,4 @@ pub struct DataPipelineStats {
     pub errors: u64,
     pub active_order_books: usize,
 }
+

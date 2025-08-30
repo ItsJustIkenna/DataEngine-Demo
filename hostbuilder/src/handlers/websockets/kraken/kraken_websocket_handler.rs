@@ -39,7 +39,7 @@ use tokio_tungstenite::{
 use dashmap::DashMap;
 use std::time::Instant;
 use ultra_logger::LogLevel;
-use tracing::info; // Add tracing info macro
+use crate::logging_facade::KRAKEN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug}; // Add tracing info macro
 
 use crate::{
     endpoint::EndpointHandler,
@@ -73,7 +73,7 @@ impl KrakenWebSocketHandler {
         let (ws_stream, _) = match connect_async(endpoint).await {
             Ok(val) => {
                 let latency = connection_start.elapsed().as_micros() as u64;
-                tracing::info!("Connected to endpoint: {}", endpoint);
+                log_info!(KRAKEN_LOGGER, "Connected to endpoint: {}", endpoint);
                 
                 // Log successful WebSocket connection
                 let connection_event = WebSocketEvent {
@@ -89,7 +89,7 @@ impl KrakenWebSocketHandler {
                 val
             }
             Err(e) => {
-                tracing::error!("Failed to connect to endpoint: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to connect to endpoint: {}", e);
                 
                 // Log WebSocket connection failure
                 let connection_event = WebSocketEvent {
@@ -133,7 +133,7 @@ impl KrakenWebSocketHandler {
         
         let publisher = if database_only_mode {
             // In database-only mode, create a no-op publisher or handle gracefully
-            info!("🔒 DATABASE-ONLY MODE: Message broker publishing disabled");
+            log_info!(KRAKEN_LOGGER, "🔒 DATABASE-ONLY MODE: Message broker publishing disabled");
             None
         } else {
             Some(Arc::new(tokio::sync::Mutex::new(
@@ -173,17 +173,17 @@ impl EndpointHandler for KrakenWebSocketHandler {
         tokio::spawn(async move {
             // Pin WebSocket handler to dedicated high-priority core
             if let Err(e) = cpu_manager.pin_websocket_handler() {
-                tracing::warn!("Failed to set CPU affinity: {}", e);
+                log_warn!(KRAKEN_LOGGER, "Failed to set CPU affinity: {}", e);
             }
             
             // Set maximum priority for critical trading thread
             if let Err(e) = set_high_priority() {
-                tracing::warn!("Failed to set high priority: {}", e);
+                log_warn!(KRAKEN_LOGGER, "Failed to set high priority: {}", e);
             }
             
             // Pre-fault memory to avoid page faults in critical path
             if let Err(e) = prefault_stack(8) {
-                tracing::warn!("Failed to prefault stack: {}", e);
+                log_warn!(KRAKEN_LOGGER, "Failed to prefault stack: {}", e);
             }
 
             tokio::select! {
@@ -210,7 +210,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                     self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                     &order_book
                                                 ).await {
-                                                    tracing::error!("Failed to process order book update: {}", e);
+                                                    log_error!(KRAKEN_LOGGER, "Failed to process order book update: {}", e);
                                                 }
                                             }
                                         }
@@ -221,7 +221,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 // Fallback to standard parsing for non-critical messages
                                 match parse_message(&text) {
                                     Ok(Response::Level3Snapshot(snapshot)) => {
-                                        tracing::debug!("Received level 3 snapshot");
+                                        log_debug!(KRAKEN_LOGGER, "Received level 3 snapshot");
                                         if let Some(order_book) = self.order_books.get(&snapshot.data[0].symbol) {
                                             if let Err(e) = snapshot.process_snapshot(
                                                 Arc::clone(&self.redis_pool), 
@@ -230,12 +230,12 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
-                                                tracing::error!("Failed to process order book snapshot: {}", e);
+                                                log_error!(KRAKEN_LOGGER, "Failed to process order book snapshot: {}", e);
                                             }
                                         }
                                     },
                                     Ok(Response::Level3Update(update)) => {
-                                        tracing::debug!("Received level 3 update");
+                                        log_debug!(KRAKEN_LOGGER, "Received level 3 update");
                                         if let Some(order_book) = self.order_books.get(&update.data[0].symbol) {
                                             if let Err(e) = update.process_update(
                                                 Arc::clone(&self.redis_pool), 
@@ -244,12 +244,12 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
-                                                tracing::error!("Failed to process order book update: {}", e);
+                                                log_error!(KRAKEN_LOGGER, "Failed to process order book update: {}", e);
                                             }
                                         }
                                     },
                                     Ok(Response::TradeSnapshot(snapshot)) => {
-                                        tracing::debug!("Received trade snapshot");
+                                        log_debug!(KRAKEN_LOGGER, "Received trade snapshot");
                                         if let Some(order_book) = self.order_books.get(&snapshot.data[0].symbol) {
                                             if let Err(e) = snapshot.process_snapshot(
                                                 Arc::clone(&self.redis_pool), 
@@ -258,12 +258,12 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
-                                                tracing::error!("Failed to process trade snapshot: {}", e);
+                                                log_error!(KRAKEN_LOGGER, "Failed to process trade snapshot: {}", e);
                                             }
                                         }
                                     },
                                     Ok(Response::TradeUpdate(update)) => {
-                                        tracing::debug!("Received trade update");
+                                        log_debug!(KRAKEN_LOGGER, "Received trade update");
                                         if let Some(order_book) = self.order_books.get(&update.data[0].symbol) {
                                             if let Err(e) = update.process_update(
                                                 Arc::clone(&self.redis_pool), 
@@ -272,7 +272,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
-                                                tracing::error!("Failed to process trade update: {}", e);
+                                                log_error!(KRAKEN_LOGGER, "Failed to process trade update: {}", e);
                                             }
                                         }
                                     },
@@ -283,7 +283,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         // Handle other message types silently
                                     },
                                     Err(e) => {
-                                        tracing::error!("Failed to parse message: {}", e);
+                                        log_error!(KRAKEN_LOGGER, "Failed to parse message: {}", e);
                                         
                                         // Log critical parsing error
                                         let parse_error = CriticalError {
@@ -298,7 +298,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 }
                             },
                             Some(Ok(Message::Close(_))) => {
-                                tracing::info!("WebSocket connection closed");
+                                log_info!(KRAKEN_LOGGER, "WebSocket connection closed");
                                 
                                 // Log WebSocket disconnect
                                 let disconnect_event = WebSocketEvent {
@@ -317,17 +317,17 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 // Send pong response
                                 if let Err(e) = handler.writer.write().await
                                     .send(Message::Pong(data)).await {
-                                    tracing::error!("Failed to send pong: {}", e);
+                                    log_error!(KRAKEN_LOGGER, "Failed to send pong: {}", e);
                                 }
                             },
                             Some(Ok(_)) => {
                                 // Handle other message types silently
                             },
                             Some(Err(e)) => {
-                                tracing::error!("Error receiving message: {}", e);
+                                log_error!(KRAKEN_LOGGER, "Error receiving message: {}", e);
                             },
                             None => {
-                                tracing::info!("WebSocket connection closed");
+                                log_info!(KRAKEN_LOGGER, "WebSocket connection closed");
                                 break;
                             }
                         }
@@ -336,11 +336,11 @@ impl EndpointHandler for KrakenWebSocketHandler {
 
                 // Handling Shutdown
                 _ = shutdown_rx.recv() => {
-                    tracing::info!("Shutting down KrakenWebSocketHandler");
+                    log_info!(KRAKEN_LOGGER, "Shutting down KrakenWebSocketHandler");
                     // Send unsubscribe message
                     if let Err(e) = handler.writer.write().await
                         .send(Message::Text(handler.unsubscribe_message.to_string())).await {
-                        tracing::error!("Failed to send unsubscribe message: {}", e);
+                        log_error!(KRAKEN_LOGGER, "Failed to send unsubscribe message: {}", e);
                     }
                 },
             }
@@ -349,3 +349,4 @@ impl EndpointHandler for KrakenWebSocketHandler {
         Ok(())
     }
 }
+

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, atomic::{AtomicBool, AtomicU64, Ordering}};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::time::{interval, timeout};
-use tracing::{error, warn, info, debug};
+use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 use anyhow::{Result, anyhow};
 
 /// Overall system health status
@@ -341,7 +341,7 @@ impl SystemHealthMonitor {
             return Err(anyhow!("Health monitor is already running"));
         }
 
-        info!("Starting system health monitor with {} checkers", self.health_checkers.len());
+        log_info!(MAIN_LOGGER, "Starting system health monitor with {} checkers", self.health_checkers.len());
         
         let mut interval = interval(self.check_interval);
         let results = Arc::clone(&self.last_check_results);
@@ -366,7 +366,7 @@ impl SystemHealthMonitor {
                 for future in check_futures {
                     match future.await {
                         Ok(result) => {
-                            debug!("Health check result for {}: {:?}", result.component, result.status);
+                            log_debug!(MAIN_LOGGER, "Health check result for {}: {:?}", result.component, result.status);
                             
                             // Update worst status
                             match result.status {
@@ -383,7 +383,7 @@ impl SystemHealthMonitor {
                             check_results.insert(result.component.clone(), result);
                         }
                         Err(e) => {
-                            error!("Health check task failed: {}", e);
+                            log_error!(MAIN_LOGGER, "Health check task failed: {}", e);
                             worst_status = HealthStatus::Critical;
                         }
                     }
@@ -402,10 +402,10 @@ impl SystemHealthMonitor {
                     
                     if old_status != worst_status {
                         match worst_status {
-                            HealthStatus::Critical => error!("System status changed to CRITICAL"),
-                            HealthStatus::Unhealthy => warn!("System status changed to UNHEALTHY"),
-                            HealthStatus::Degraded => warn!("System status changed to DEGRADED"),
-                            HealthStatus::Healthy => info!("System status changed to HEALTHY"),
+                            HealthStatus::Critical => log_error!(MAIN_LOGGER, "System status changed to CRITICAL"),
+                            HealthStatus::Unhealthy => log_warn!(MAIN_LOGGER, "System status changed to UNHEALTHY"),
+                            HealthStatus::Degraded => log_warn!(MAIN_LOGGER, "System status changed to DEGRADED"),
+                            HealthStatus::Healthy => log_info!(MAIN_LOGGER, "System status changed to HEALTHY"),
                         }
                     }
                 }
@@ -505,7 +505,7 @@ impl SystemHealthMonitor {
                     check_results.insert(result.component.clone(), result);
                 }
                 Err(e) => {
-                    error!("Health check task failed: {}", e);
+                    log_error!(MAIN_LOGGER, "Health check task failed: {}", e);
                     worst_status = HealthStatus::Critical;
                     
                     // Create error result for failed check
@@ -549,7 +549,7 @@ impl SystemHealthMonitor {
 
     pub fn stop(&self) {
         self.is_running.store(false, Ordering::SeqCst);
-        info!("System health monitor stopped");
+        log_info!(MAIN_LOGGER, "System health monitor stopped");
     }
 }
 
@@ -701,3 +701,4 @@ impl MetricsCollector {
         self.processing_count.fetch_add(1, Ordering::Relaxed);
     }
 }
+

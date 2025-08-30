@@ -30,7 +30,8 @@ use tokio_retry::{
     },
     Retry
 };
-use tracing::{error, warn, debug};
+use crate::logging_facade::KRAKEN_LOGGER;
+use crate::{log_debug, log_warn, log_error};
 use std::time::Instant;
 
 use crate::handlers::logging::{KRAKEN_SNAPSHOT_LOGGER, SnapshotProcessingLog};
@@ -81,7 +82,7 @@ impl Level3Snapshot {
         let ask_connection = ask_connection_result.expect("Failed to create redis connection");
 
         if self.data.is_empty() {
-            debug!("Snapshot data is empty");
+            log_debug!(KRAKEN_LOGGER, "Snapshot data is empty");
             
             // Log empty snapshot
             let log_entry = SnapshotProcessingLog {
@@ -103,7 +104,7 @@ impl Level3Snapshot {
         let snapshot_data = &self.data[0];
 
         if snapshot_data.bids.is_empty() && snapshot_data.asks.is_empty() {
-            debug!("Snapshot data has empty bids and asks");
+            log_debug!(KRAKEN_LOGGER, "Snapshot data has empty bids and asks");
             return Ok(());
         }
         
@@ -194,18 +195,18 @@ impl Level3Snapshot {
                 let result = Retry::spawn(retry_strategy.clone(), || async {
                     match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
                         Ok(_) => {
-                            debug!("Added buy orders to redis");
+                            log_debug!(KRAKEN_LOGGER, "Added buy orders to redis");
                             Ok(())
                         },
                         Err(e) => {
-                            warn!("Failed to add buy orders to redis: {}", e);
+                            log_warn!(KRAKEN_LOGGER, "Failed to add buy orders to redis: {}", e);
                             Err(e)
                         },
                     }
                 }).await;
 
                 if let Err(e) = result {
-                    error!("All retries failed for redis commands: {}", e);
+                    log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
                 }                    
 
                 // Execute database operations concurrently
@@ -215,15 +216,15 @@ impl Level3Snapshot {
                 let (buy_result, historical_result) = tokio::join!(create_buy_orders_future, create_historical_future);
                 
                 if let Err(e) = buy_result {
-                    error!("Failed to add buy orders to postgres: {}", e);
+                    log_error!(KRAKEN_LOGGER, "Failed to add buy orders to postgres: {}", e);
                 } else {
-                    debug!("Added buy orders to postgres");
+                    log_debug!(KRAKEN_LOGGER, "Added buy orders to postgres");
                 }
                 
                 if let Err(e) = historical_result {
-                    error!("Failed to add historical orders to postgres: {}", e);
+                    log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
                 } else {
-                    debug!("Added historical orders to postgres");
+                    log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
                 }
             }
         };
@@ -307,18 +308,18 @@ impl Level3Snapshot {
                 let result = Retry::spawn(retry_strategy.clone(), || async {
                     match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
                         Ok(_) => {
-                            debug!("Added sell orders to redis");
+                            log_debug!(KRAKEN_LOGGER, "Added sell orders to redis");
                             Ok(())
                         },
                         Err(e) => {
-                            warn!("Failed to add sell orders to redis: {}", e);
+                            log_warn!(KRAKEN_LOGGER, "Failed to add sell orders to redis: {}", e);
                             Err(e)
                         },
                     }
                 }).await;
 
                 if let Err(e) = result {
-                    error!("All retries failed for redis commands: {}", e);
+                    log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
                 }  
 
                 // Execute database operations concurrently
@@ -328,15 +329,15 @@ impl Level3Snapshot {
                 let (sell_result, historical_result) = tokio::join!(create_sell_orders_future, create_historical_future);
                 
                 if let Err(e) = sell_result {
-                    error!("Failed to add sell orders to postgres: {}", e);
+                    log_error!(KRAKEN_LOGGER, "Failed to add sell orders to postgres: {}", e);
                 } else {
-                    debug!("Added sell orders to postgres");
+                    log_debug!(KRAKEN_LOGGER, "Added sell orders to postgres");
                 }
                 
                 if let Err(e) = historical_result {
-                    error!("Failed to add historical orders to postgres: {}", e);
+                    log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
                 } else {
-                    debug!("Added historical orders to postgres");
+                    log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
                 }
             }
         };
@@ -377,21 +378,21 @@ impl Level3Snapshot {
             Some(async move {
                 match publisher_clone.lock().await.publish(message_clone, &topic_name) {
                     Ok(_) => {
-                        debug!("Successfully published level3 snapshot message");
+                        log_debug!(KRAKEN_LOGGER, "Successfully published level3 snapshot message");
                     },
                     Err(e) => {
-                        error!("Failed to publish level3 snapshot message: {:?}", e);
+                        log_error!(KRAKEN_LOGGER, "Failed to publish level3 snapshot message: {:?}", e);
                     }
                 }
             })
         } else {
-            debug!("🔒 DATABASE-ONLY MODE: Skipping message broker publishing for level3 snapshot");
+            log_debug!(KRAKEN_LOGGER, "🔒 DATABASE-ONLY MODE: Skipping message broker publishing for level3 snapshot");
             None
         };
 
         // Calculate total volume
         let total_volume = open_bid_volume.clone() + open_ask_volume.clone();
-        debug!("Total volume: {}", total_volume);
+        log_debug!(KRAKEN_LOGGER, "Total volume: {}", total_volume);
 
         // Update orderbook in Redis and Postgres concurrently with publishing
         let orderbook_key = format!("order_book:{}", order_book.order_book_id);
@@ -412,11 +413,11 @@ impl Level3Snapshot {
                 .await
             {
                 Ok(_) => {
-                    debug!("Added order book to redis");
+                    log_debug!(KRAKEN_LOGGER, "Added order book to redis");
                     Ok(())
                 }
                 Err(e) => {
-                    warn!("Failed to add order book to redis: {}", e);
+                    log_warn!(KRAKEN_LOGGER, "Failed to add order book to redis: {}", e);
                     Err(e)
                 }
             }
@@ -436,17 +437,17 @@ impl Level3Snapshot {
         };
         
         if let Err(e) = redis_result {
-            error!("All retries failed for redis commands: {}", e);
+            log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
             processing_error = Some(format!("Redis error: {}", e));
         }
         
         if let Err(e) = postgres_result {
-            error!("Failed to update order book in postgres: {}", e);
+            log_error!(KRAKEN_LOGGER, "Failed to update order book in postgres: {}", e);
             if processing_error.is_none() {
                 processing_error = Some(format!("Postgres error: {}", e));
             }
         } else {
-            debug!("Updated order book in postgres");
+            log_debug!(KRAKEN_LOGGER, "Updated order book in postgres");
         }
 
         // Log snapshot processing completion
@@ -480,3 +481,4 @@ struct SnapshotOrder {
     order_qty: BigDecimal,
     timestamp: DateTime<Utc>,
 }
+

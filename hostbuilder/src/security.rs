@@ -12,7 +12,7 @@ use hmac::{Hmac, Mac};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Sha512};
-use tracing::{debug, warn, error};
+use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
@@ -506,10 +506,10 @@ impl SecurityManager {
     fn record_security_event(&self, event: SecurityEvent) {
         // Log the event
         match event.severity {
-            SecuritySeverity::Critical => error!("Security event: {:?}", event),
-            SecuritySeverity::High => warn!("Security event: {:?}", event),
-            SecuritySeverity::Medium => warn!("Security event: {:?}", event),
-            SecuritySeverity::Low => debug!("Security event: {:?}", event),
+            SecuritySeverity::Critical => log_error!(MAIN_LOGGER, "Security event: {:?}", event),
+            SecuritySeverity::High => log_warn!(MAIN_LOGGER, "Security event: {:?}", event),
+            SecuritySeverity::Medium => log_warn!(MAIN_LOGGER, "Security event: {:?}", event),
+            SecuritySeverity::Low => log_debug!(MAIN_LOGGER, "Security event: {:?}", event),
         }
 
         // Store in event log (with size limit)
@@ -561,7 +561,7 @@ impl SecurityManager {
             self.nonce_cache.remove(&nonce);
         }
 
-        debug!("Security cleanup completed");
+        log_debug!(MAIN_LOGGER, "Security cleanup completed");
     }
 
     /// Get security statistics
@@ -719,3 +719,4 @@ mod tests {
         assert!(!manager_no_sig.check_permission("test_key2", "write"));
     }
 }
+

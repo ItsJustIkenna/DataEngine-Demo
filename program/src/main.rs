@@ -1,7 +1,9 @@
 use anyhow::Result;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{info, warn, Level};
+use hostbuilder::logging_facade::MAIN_LOGGER;
+use hostbuilder::{log_info, log_warn};
+use tracing::Level;
 use tracing_subscriber;
 
 use hostbuilder::{
@@ -33,7 +35,7 @@ async fn main() -> Result<()> {
         .with_line_number(true)
         .init();
 
-    info!("🚀 Starting DataEngine with Sub-Microsecond Optimizations");
+    log_info!(MAIN_LOGGER, "🚀 Starting DataEngine with Sub-Microsecond Optimizations");
     
     // === PHASE 1: HARDWARE OPTIMIZATION INITIALIZATION ===
     
@@ -47,7 +49,7 @@ async fn main() -> Result<()> {
             
             // Set thread to highest priority
             SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-            info!("✅ Thread priority set to TIME_CRITICAL on Windows");
+            log_info!(MAIN_LOGGER, "✅ Thread priority set to TIME_CRITICAL on Windows");
         }
     }
 
@@ -60,71 +62,71 @@ async fn main() -> Result<()> {
             // Set thread scheduling policy to real-time
             let mut param = libc::sched_param { sched_priority: 99 };
             libc::sched_setscheduler(0, libc::SCHED_FIFO, &param);
-            info!("✅ Process priority and real-time scheduling configured on Unix");
+            log_info!(MAIN_LOGGER, "✅ Process priority and real-time scheduling configured on Unix");
         }
     }
     
     // Set CPU affinity to isolated cores for maximum performance
-    info!("Setting CPU affinity to isolated cores...");
+    log_info!(MAIN_LOGGER, "Setting CPU affinity to isolated cores...");
     if let Err(e) = set_thread_affinity(vec![0, 1, 2, 3]) {
-        warn!("Failed to set CPU affinity: {}. Performance may be impacted.", e);
+        log_warn!(MAIN_LOGGER, "Failed to set CPU affinity: {}. Performance may be impacted.", e);
     } else {
-        info!("✅ CPU affinity set to cores 0-3");
+        log_info!(MAIN_LOGGER, "✅ CPU affinity set to cores 0-3");
     }
     
     // Initialize global buffer pool for zero-copy operations
-    info!("Initializing global zero-copy buffer pool...");
+    log_info!(MAIN_LOGGER, "Initializing global zero-copy buffer pool...");
     init_global_pool(1024 * 1024 * 64, 1000)?; // 64MB pool, 1000 buffers
-    info!("✅ Zero-copy buffer pool initialized (64MB)");
+    log_info!(MAIN_LOGGER, "✅ Zero-copy buffer pool initialized (64MB)");
     
     // Initialize global SIMD message parser
-    info!("Initializing SIMD-accelerated message parser...");
+    log_info!(MAIN_LOGGER, "Initializing SIMD-accelerated message parser...");
     init_global_simd_parser();
-    info!("✅ SIMD message parser initialized with AVX-512/AVX2/SSE4.2 support");
+    log_info!(MAIN_LOGGER, "✅ SIMD message parser initialized with AVX-512/AVX2/SSE4.2 support");
     
     // Initialize ultra-precision metrics
-    info!("Initializing ultra-precision metrics system...");
+    log_info!(MAIN_LOGGER, "Initializing ultra-precision metrics system...");
     init_global_ultra_metrics();
     let ultra_metrics = get_global_ultra_metrics();
-    info!("✅ Ultra-precision metrics initialized with hardware timestamp support");
+    log_info!(MAIN_LOGGER, "✅ Ultra-precision metrics initialized with hardware timestamp support");
     
     // === PHASE 2: KERNEL BYPASS NETWORKING ===
     
-    info!("Initializing kernel bypass networking...");
+    log_info!(MAIN_LOGGER, "Initializing kernel bypass networking...");
     let kernel_bypass = match KernelBypassManager::new().await {
         Ok(kb) => {
-            info!("✅ Kernel bypass networking initialized with io_uring/optimized sockets");
+            log_info!(MAIN_LOGGER, "✅ Kernel bypass networking initialized with io_uring/optimized sockets");
             Some(Arc::new(kb))
         }
         Err(e) => {
-            warn!("⚠️  Failed to initialize kernel bypass: {}. Using standard networking.", e);
+            log_warn!(MAIN_LOGGER, "⚠️  Failed to initialize kernel bypass: {}. Using standard networking.", e);
             None
         }
     };
     
     // === PHASE 3: DATA PIPELINE AND ORDER BOOK INITIALIZATION ===
     
-    info!("Initializing ultra-fast data pipeline...");
+    log_info!(MAIN_LOGGER, "Initializing ultra-fast data pipeline...");
     let mut data_pipeline = DataPipeline::new().await?;
-    info!("✅ Data pipeline initialized with lock-free order books");
+    log_info!(MAIN_LOGGER, "✅ Data pipeline initialized with lock-free order books");
     
     // Create test order books for major trading pairs
     let symbols = vec!["BTCUSD", "ETHUSD", "ADAUSD", "SOLUSD"];
     for symbol in &symbols {
         let _order_book = Arc::new(LockFreeOrderBook::new(symbol.to_string())?);
-        info!("✅ Created lock-free order book for {}", symbol);
+        log_info!(MAIN_LOGGER, "✅ Created lock-free order book for {}", symbol);
     }
     
     // === PHASE 4: PERFORMANCE VALIDATION AND BENCHMARKING ===
     
-    info!("🎯 Running sub-microsecond performance validation...");
+    log_info!(MAIN_LOGGER, "🎯 Running sub-microsecond performance validation...");
     
     // Test 1: Zero-copy buffer allocation speed
     let buffer_allocation_start = UltraPrecisionMetrics::hardware_timestamp();
     let _test_buffer = get_global_buffer()?;
     let buffer_allocation_end = UltraPrecisionMetrics::hardware_timestamp();
     let buffer_alloc_ns = buffer_allocation_end - buffer_allocation_start;
-    info!("📊 Zero-copy buffer allocation: {} cycles (~{}ns)", 
+    log_info!(MAIN_LOGGER, "📊 Zero-copy buffer allocation: {} cycles (~{}ns)", 
           buffer_alloc_ns, buffer_alloc_ns / 3); // Assuming ~3GHz
     
     // Test 2: SIMD message parsing speed
@@ -135,7 +137,7 @@ async fn main() -> Result<()> {
     let parsed_messages = simd_parser.parse_messages(test_message);
     let parse_end = UltraPrecisionMetrics::hardware_timestamp();
     let parse_ns = parse_end - parse_start;
-    info!("📊 SIMD message parsing: {} cycles (~{}ns) for {} messages", 
+    log_info!(MAIN_LOGGER, "📊 SIMD message parsing: {} cycles (~{}ns) for {} messages", 
           parse_ns, parse_ns / 3, parsed_messages.len());
     
     // Test 3: Lock-free order book operations
@@ -145,7 +147,7 @@ async fn main() -> Result<()> {
         order_book.add_order(12345, 50000.0, 1.5, OrderSide::Buy)?;
         let order_end = UltraPrecisionMetrics::hardware_timestamp();
         let order_ns = order_end - order_start;
-        info!("📊 Lock-free order insertion: {} cycles (~{}ns)", 
+        log_info!(MAIN_LOGGER, "📊 Lock-free order insertion: {} cycles (~{}ns)", 
               order_ns, order_ns / 3);
         
         // Test L1 access speed
@@ -155,19 +157,19 @@ async fn main() -> Result<()> {
         let spread = order_book.get_spread();
         let l1_end = UltraPrecisionMetrics::hardware_timestamp();
         l1_ns = l1_end - l1_start;
-        info!("📊 L1 data access (bid/ask/spread): {} cycles (~{}ns)", 
+        log_info!(MAIN_LOGGER, "📊 L1 data access (bid/ask/spread): {} cycles (~{}ns)", 
               l1_ns, l1_ns / 3);
         
         if let Some(bid) = best_bid {
-            info!("   Best Bid: ${:.2} @ {:.4}", bid.price, bid.quantity);
+            log_info!(MAIN_LOGGER, "   Best Bid: ${:.2} @ {:.4}", bid.price, bid.quantity);
         }
         if let Some(spread_value) = spread {
-            info!("   Spread: ${:.2}", spread_value);
+            log_info!(MAIN_LOGGER, "   Spread: ${:.2}", spread_value);
         }
     }
     
     // Test 4: End-to-end message processing latency
-    info!("🔥 Testing end-to-end message processing latency...");
+    log_info!(MAIN_LOGGER, "🔥 Testing end-to-end message processing latency...");
     let test_l3_message = br#"{"symbol":"BTCUSD","orderId":67890,"price":"49999.50","quantity":"2.0","side":"sell"}"#;
     
     let e2e_start = UltraPrecisionMetrics::hardware_timestamp();
@@ -175,7 +177,7 @@ async fn main() -> Result<()> {
     let e2e_end = UltraPrecisionMetrics::hardware_timestamp();
     let e2e_ns = e2e_end - e2e_start;
     
-    info!("🎯 END-TO-END LATENCY: {} cycles (~{}ns)", e2e_ns, e2e_ns / 3);
+    log_info!(MAIN_LOGGER, "🎯 END-TO-END LATENCY: {} cycles (~{}ns)", e2e_ns, e2e_ns / 3);
     
     // Record metrics for the test
     ultra_metrics.record_processing_latency_ns(e2e_ns / 3); // Convert cycles to approx ns
@@ -188,7 +190,7 @@ async fn main() -> Result<()> {
     
     // === PHASE 5: PERFORMANCE ASSESSMENT ===
     
-    info!("📈 Performance Assessment Results:");
+    log_info!(MAIN_LOGGER, "📈 Performance Assessment Results:");
     let stats = ultra_metrics.get_stats();
     
     // Calculate performance score
@@ -219,32 +221,32 @@ async fn main() -> Result<()> {
     // Ensure score is between 0 and 10
     performance_score = performance_score.max(0.0).min(10.0);
     
-    info!("🏆 FINAL PERFORMANCE SCORE: {:.1}/10.0", performance_score);
+    log_info!(MAIN_LOGGER, "🏆 FINAL PERFORMANCE SCORE: {:.1}/10.0", performance_score);
     
     if performance_score >= 9.5 {
-        info!("🔥 EXCEPTIONAL: Sub-microsecond latency achieved! Ready for production HFT.");
+        log_info!(MAIN_LOGGER, "🔥 EXCEPTIONAL: Sub-microsecond latency achieved! Ready for production HFT.");
     } else if performance_score >= 8.5 {
-        info!("✅ EXCELLENT: High-performance optimizations working effectively.");
+        log_info!(MAIN_LOGGER, "✅ EXCELLENT: High-performance optimizations working effectively.");
     } else if performance_score >= 7.0 {
-        info!("⚡ GOOD: Performance optimizations in place, minor tuning needed.");
+        log_info!(MAIN_LOGGER, "⚡ GOOD: Performance optimizations in place, minor tuning needed.");
     } else {
-        warn!("⚠️  NEEDS IMPROVEMENT: Performance optimizations require attention.");
+        log_warn!(MAIN_LOGGER, "⚠️  NEEDS IMPROVEMENT: Performance optimizations require attention.");
     }
     
     // Detailed breakdown
-    info!("Performance Breakdown:");
-    info!("  • Average Latency: {}ns (target: <1000ns)", stats.avg_latency_ns);
-    info!("  • SIMD Operations: {} ✓", stats.simd_operations);
-    info!("  • Kernel Bypass Ops: {} {}", stats.kernel_bypass_operations, 
+    log_info!(MAIN_LOGGER, "Performance Breakdown:");
+    log_info!(MAIN_LOGGER, "  • Average Latency: {}ns (target: <1000ns)", stats.avg_latency_ns);
+    log_info!(MAIN_LOGGER, "  • SIMD Operations: {} ✓", stats.simd_operations);
+    log_info!(MAIN_LOGGER, "  • Kernel Bypass Ops: {} {}", stats.kernel_bypass_operations, 
           if stats.kernel_bypass_operations > 0 { "✓" } else { "⚠️" });
-    info!("  • Zero-Copy Ops: {} ✓", stats.zero_copy_operations);
-    info!("  • Buffer Alloc Speed: ~{}ns ✓", buffer_alloc_ns / 3);
-    info!("  • SIMD Parse Speed: ~{}ns ✓", parse_ns / 3);
-    info!("  • L1 Access Speed: ~{}ns ✓", l1_ns / 3);
+    log_info!(MAIN_LOGGER, "  • Zero-Copy Ops: {} ✓", stats.zero_copy_operations);
+    log_info!(MAIN_LOGGER, "  • Buffer Alloc Speed: ~{}ns ✓", buffer_alloc_ns / 3);
+    log_info!(MAIN_LOGGER, "  • SIMD Parse Speed: ~{}ns ✓", parse_ns / 3);
+    log_info!(MAIN_LOGGER, "  • L1 Access Speed: ~{}ns ✓", l1_ns / 3);
     
     // === PHASE 6: RUN ORIGINAL HOSTED ENGINE WITH OPTIMIZATIONS ===
     
-    info!("🚀 Starting original HostedObject with sub-microsecond optimizations active!");
+    log_info!(MAIN_LOGGER, "🚀 Starting original HostedObject with sub-microsecond optimizations active!");
     
     // Start metrics reporting in background
     let metrics_handle = tokio::spawn(async move {
@@ -258,16 +260,16 @@ async fn main() -> Result<()> {
     // Initialize and run the original hosted engine
     let mut engine = HostedObject::new().await?;
     
-    info!("Features Active:");
-    info!("  ✅ Kernel Bypass Networking (io_uring/optimized sockets)");
-    info!("  ✅ Zero-Copy Memory Pools");
-    info!("  ✅ SIMD-Accelerated Message Parsing (AVX-512/AVX2/SSE4.2)");
-    info!("  ✅ Lock-Free Order Books with RCU-style updates");
-    info!("  ✅ Hardware Timestamp Precision (RDTSC)");
-    info!("  ✅ CPU Affinity to Isolated Cores");
-    info!("  ✅ Ultra-Precision Metrics Collection");
-    info!("  ✅ mimalloc Ultra-Fast Allocator");
-    info!("  ✅ Real-Time Thread Priority");
+    log_info!(MAIN_LOGGER, "Features Active:");
+    log_info!(MAIN_LOGGER, "  ✅ Kernel Bypass Networking (io_uring/optimized sockets)");
+    log_info!(MAIN_LOGGER, "  ✅ Zero-Copy Memory Pools");
+    log_info!(MAIN_LOGGER, "  ✅ SIMD-Accelerated Message Parsing (AVX-512/AVX2/SSE4.2)");
+    log_info!(MAIN_LOGGER, "  ✅ Lock-Free Order Books with RCU-style updates");
+    log_info!(MAIN_LOGGER, "  ✅ Hardware Timestamp Precision (RDTSC)");
+    log_info!(MAIN_LOGGER, "  ✅ CPU Affinity to Isolated Cores");
+    log_info!(MAIN_LOGGER, "  ✅ Ultra-Precision Metrics Collection");
+    log_info!(MAIN_LOGGER, "  ✅ mimalloc Ultra-Fast Allocator");
+    log_info!(MAIN_LOGGER, "  ✅ Real-Time Thread Priority");
     
     // Run the hosted engine with all optimizations active
     engine.run().await?;
@@ -275,7 +277,7 @@ async fn main() -> Result<()> {
     // Cancel metrics reporting
     metrics_handle.abort();
     
-    info!("🏁 DataEngine shutting down gracefully...");
+    log_info!(MAIN_LOGGER, "🏁 DataEngine shutting down gracefully...");
     
     // Final performance report
     ultra_metrics.print_performance_report();
@@ -285,8 +287,8 @@ async fn main() -> Result<()> {
                      else if final_stats.avg_latency_ns < 2000 { 9.0 }
                      else { 8.0 };
     
-    info!("🏆 FINAL PERFORMANCE ASSESSMENT: {:.1}/10.0", final_score);
-    info!("✅ Sub-microsecond trading engine validation complete!");
+    log_info!(MAIN_LOGGER, "🏆 FINAL PERFORMANCE ASSESSMENT: {:.1}/10.0", final_score);
+    log_info!(MAIN_LOGGER, "✅ Sub-microsecond trading engine validation complete!");
     
     Ok(())
 }

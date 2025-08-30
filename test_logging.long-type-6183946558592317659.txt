@@ -1,0 +1,3 @@
+dyn std::error::Error + Send + Sync
+Box<dyn std::error::Error + Send + Sync>
+Box<dyn std::error::Error>

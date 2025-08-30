@@ -26,7 +26,8 @@ use tokio_retry::{
     },
     Retry
 };
-use tracing::{error, warn, debug};
+use crate::logging_facade::KRAKEN_LOGGER;
+use crate::{log_debug, log_warn, log_error};
 use std::time::Instant;
 
 use crate::handlers::logging::{KRAKEN_BALANCE_LOGGER, BalanceUpdateLog, KRAKEN_SNAPSHOT_LOGGER, SnapshotProcessingLog};
@@ -85,7 +86,7 @@ impl BalanceSnapshot {
         let balances_connection = balances_connection_future.await.expect("Failed to create redis connection");
 
         if self.data.is_empty() {
-            debug!("balances data is empty");
+            log_debug!(KRAKEN_LOGGER, "balances data is empty");
             return Ok(());
         }
 
@@ -142,11 +143,11 @@ impl BalanceSnapshot {
         let redis_future = Retry::spawn(retry_strategy, || async {
             match pipe.query_async::<_, ()>(&mut balances_connection.clone()).await {
                 Ok(_) => {
-                    debug!("Added trades to redis");
+                    log_debug!(KRAKEN_LOGGER, "Added trades to redis");
                     Ok(())
                 }
                 Err(e) => {
-                    warn!("Failed to add trades to redis: {}", e);
+                    log_warn!(KRAKEN_LOGGER, "Failed to add trades to redis: {}", e);
                     Err(e)
                 }
             }
@@ -164,15 +165,15 @@ impl BalanceSnapshot {
             Some(async move {
                 match publisher_clone.lock().await.publish(message_clone, &topic_name) {
                     Ok(_) => {
-                        debug!("Successfully published balances snapshot message");
+                        log_debug!(KRAKEN_LOGGER, "Successfully published balances snapshot message");
                     },
                     Err(e) => {
-                        error!("Failed to publish balances snapshot message: {:?}", e);
+                        log_error!(KRAKEN_LOGGER, "Failed to publish balances snapshot message: {:?}", e);
                     }
                 }
             })
         } else {
-            debug!("🔒 DATABASE-ONLY MODE: Skipping message broker publishing for balances snapshot");
+            log_debug!(KRAKEN_LOGGER, "🔒 DATABASE-ONLY MODE: Skipping message broker publishing for balances snapshot");
             None
         };
 
@@ -188,7 +189,7 @@ impl BalanceSnapshot {
         };
 
         if let Err(e) = redis_result {
-            error!("Failed to add trades to redis after retries: {}", e);
+            log_error!(KRAKEN_LOGGER, "Failed to add trades to redis after retries: {}", e);
         }
         Ok(())
     }

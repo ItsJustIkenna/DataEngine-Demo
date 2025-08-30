@@ -28,7 +28,7 @@ use tokio_retry::{
     },
     Retry
 };
-use tracing::{error, warn, debug};
+use crate::logging_facade::KRAKEN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 use std::time::Instant;
 
 // Import the Kraken logger
@@ -67,7 +67,7 @@ impl TradeUpdate {
         let trade_connection = trade_connection_future.await.expect("Failed to create redis connection");
 
         if self.data.is_empty() {
-            debug!("Trade data is empty");
+            log_debug!(KRAKEN_LOGGER, "Trade data is empty");
             return Ok(());
         }
         
@@ -143,11 +143,11 @@ impl TradeUpdate {
         let redis_future = Retry::spawn(retry_strategy, || async {
             match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
                 Ok(_) => {
-                    debug!("Added trades to redis");
+                    log_debug!(KRAKEN_LOGGER, "Added trades to redis");
                     Ok(())
                 }
                 Err(e) => {
-                    warn!("Failed to add trades to redis: {}", e);
+                    log_warn!(KRAKEN_LOGGER, "Failed to add trades to redis: {}", e);
                     Err(e)
                 }
             }
@@ -169,15 +169,15 @@ impl TradeUpdate {
             Some(async move {
                 match publisher_clone.lock().await.publish(message_clone, &topic_name) {
                     Ok(_) => {
-                        debug!("Successfully published trade message");
+                        log_debug!(KRAKEN_LOGGER, "Successfully published trade message");
                     },
                     Err(e) => {
-                        error!("Failed to publish trade message: {:?}", e);
+                        log_error!(KRAKEN_LOGGER, "Failed to publish trade message: {:?}", e);
                     }
                 }
             })
         } else {
-            debug!("🔒 DATABASE-ONLY MODE: Skipping message broker publishing for trade update");
+            log_debug!(KRAKEN_LOGGER, "🔒 DATABASE-ONLY MODE: Skipping message broker publishing for trade update");
             None
         };
         
@@ -200,12 +200,12 @@ impl TradeUpdate {
         let processing_time = start_time.elapsed().as_micros() as u64;
 
         if let Err(e) = redis_result {
-            error!("Failed to add trades to redis after retries: {}", e);
+            log_error!(KRAKEN_LOGGER, "Failed to add trades to redis after retries: {}", e);
         }
 
         match trades_result {
             Ok(_) => {
-                debug!("Added trades to postgres");
+                log_debug!(KRAKEN_LOGGER, "Added trades to postgres");
                 
                 // Log successful trade processing for each trade
                 for trade in self.data.iter() {
@@ -222,7 +222,7 @@ impl TradeUpdate {
                 }
             }
             Err(e) => {
-                error!("Failed to add trades to postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to add trades to postgres: {}", e);
                 
                 // Log failed trade processing for each trade
                 for trade in self.data.iter() {

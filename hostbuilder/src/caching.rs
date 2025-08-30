@@ -14,7 +14,7 @@ use parking_lot::{RwLock, Mutex};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use once_cell::sync::Lazy;
-use tracing::{debug, warn, trace};
+use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 
 /// Cache entry with metadata
 #[derive(Debug, Clone)]
@@ -219,7 +219,7 @@ where
             }
         }
 
-        debug!("Cleaned up {} expired cache entries", removed);
+        log_debug!(MAIN_LOGGER, "Cleaned up {} expired cache entries", removed);
         removed
     }
 
@@ -239,7 +239,7 @@ where
             if self.data.remove(&key).is_some() {
                 let mut stats = self.stats.write();
                 stats.evictions += 1;
-                trace!("Evicted LRU cache entry");
+                log_debug!(MAIN_LOGGER, "Evicted LRU cache entry");
             }
         }
     }
@@ -430,7 +430,7 @@ impl MarketDataCache {
         let elapsed = start.elapsed();
         self.warming_stats.store(elapsed.as_nanos() as u64, Ordering::Relaxed);
         
-        debug!("Warmed cache with {} symbols in {:?}", warmed, elapsed);
+        log_debug!(MAIN_LOGGER, "Warmed cache with {} symbols in {:?}", warmed, elapsed);
     }
 
     /// Clean up expired entries across all caches
@@ -438,7 +438,7 @@ impl MarketDataCache {
         let hot_removed = self.hot_symbols.cleanup_expired();
         let trades_removed = self.recent_trades.cleanup_expired();
         
-        debug!("Cache cleanup: removed {} hot symbols, {} trade entries", 
+        log_debug!(MAIN_LOGGER, "Cache cleanup: removed {} hot symbols, {} trade entries", 
                hot_removed, trades_removed);
     }
 
@@ -459,7 +459,7 @@ impl MarketDataCache {
         self.recent_trades.clear();
         self.symbol_metadata.clear();
         self.config_cache.write().clear();
-        debug!("All caches cleared");
+        log_debug!(MAIN_LOGGER, "All caches cleared");
     }
 }
 
@@ -518,11 +518,11 @@ impl CacheMaintenanceService {
 
     pub async fn start(&self) {
         if self.is_running.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-            warn!("Cache maintenance service already running");
+            log_warn!(MAIN_LOGGER, "Cache maintenance service already running");
             return;
         }
 
-        debug!("Starting cache maintenance service");
+        log_debug!(MAIN_LOGGER, "Starting cache maintenance service");
         
         let cleanup_interval = self.cleanup_interval;
         tokio::spawn(async move {
@@ -536,11 +536,11 @@ impl CacheMaintenanceService {
                 global_cache().cleanup();
                 let elapsed = start.elapsed();
                 
-                debug!("Cache maintenance completed in {:?}", elapsed);
+                log_debug!(MAIN_LOGGER, "Cache maintenance completed in {:?}", elapsed);
                 
                 // Log cache statistics periodically
                 let stats = global_cache().get_cache_stats();
-                debug!("Cache stats: {} total entries, {:.1}% avg hit rate", 
+                log_debug!(MAIN_LOGGER, "Cache stats: {} total entries, {:.1}% avg hit rate", 
                        stats.total_entries(), stats.average_hit_rate());
             }
         });
@@ -548,7 +548,7 @@ impl CacheMaintenanceService {
 
     pub fn stop(&self) {
         self.is_running.store(0, Ordering::SeqCst);
-        debug!("Cache maintenance service stopped");
+        log_debug!(MAIN_LOGGER, "Cache maintenance service stopped");
     }
 }
 
@@ -646,3 +646,4 @@ impl CacheManager {
         self.cache.get(key).map(|entry| entry.clone())
     }
 }
+

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use tracing::{info, warn};
+use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 
 /// Ultra-precision metrics collector
 pub struct UltraPrecisionMetrics {
@@ -227,32 +227,32 @@ impl UltraPrecisionMetrics {
     pub fn print_performance_report(&self) {
         let stats = self.get_stats();
         
-        info!("=== Ultra-Precision Performance Report ===");
-        info!("Average Latency: {}ns ({:.3}µs)", stats.avg_latency_ns, stats.avg_latency_ns as f64 / 1000.0);
-        info!("Min Latency: {}ns", stats.min_latency_ns);
-        info!("Max Latency: {}ns ({:.3}µs)", stats.max_latency_ns, stats.max_latency_ns as f64 / 1000.0);
-        info!("Orders Processed: {}", stats.orders_processed);
-        info!("Trades Executed: {}", stats.trades_executed);
-        info!("L1 Updates: {}", stats.l1_updates);
-        info!("SIMD Operations: {}", stats.simd_operations);
-        info!("Kernel Bypass Ops: {}", stats.kernel_bypass_operations);
-        info!("Zero-Copy Ops: {}", stats.zero_copy_operations);
-        info!("Cache Hit Rate: {:.2}%", stats.cache_hit_rate);
+        log_info!(MAIN_LOGGER, "=== Ultra-Precision Performance Report ===");
+        log_info!(MAIN_LOGGER, "Average Latency: {}ns ({:.3}µs)", stats.avg_latency_ns, stats.avg_latency_ns as f64 / 1000.0);
+        log_info!(MAIN_LOGGER, "Min Latency: {}ns", stats.min_latency_ns);
+        log_info!(MAIN_LOGGER, "Max Latency: {}ns ({:.3}µs)", stats.max_latency_ns, stats.max_latency_ns as f64 / 1000.0);
+        log_info!(MAIN_LOGGER, "Orders Processed: {}", stats.orders_processed);
+        log_info!(MAIN_LOGGER, "Trades Executed: {}", stats.trades_executed);
+        log_info!(MAIN_LOGGER, "L1 Updates: {}", stats.l1_updates);
+        log_info!(MAIN_LOGGER, "SIMD Operations: {}", stats.simd_operations);
+        log_info!(MAIN_LOGGER, "Kernel Bypass Ops: {}", stats.kernel_bypass_operations);
+        log_info!(MAIN_LOGGER, "Zero-Copy Ops: {}", stats.zero_copy_operations);
+        log_info!(MAIN_LOGGER, "Cache Hit Rate: {:.2}%", stats.cache_hit_rate);
         
         // Performance warnings
         if stats.avg_latency_ns > 1000 {
-            warn!("Average latency {}ns exceeds sub-microsecond target", stats.avg_latency_ns);
+            log_warn!(MAIN_LOGGER, "Average latency {}ns exceeds sub-microsecond target", stats.avg_latency_ns);
         }
         
         if stats.max_latency_ns > 5000 {
-            warn!("Maximum latency {}ns indicates potential performance spikes", stats.max_latency_ns);
+            log_warn!(MAIN_LOGGER, "Maximum latency {}ns indicates potential performance spikes", stats.max_latency_ns);
         }
         
         if stats.cache_hit_rate < 95.0 {
-            warn!("Cache hit rate {:.2}% is below optimal threshold", stats.cache_hit_rate);
+            log_warn!(MAIN_LOGGER, "Cache hit rate {:.2}% is below optimal threshold", stats.cache_hit_rate);
         }
         
-        info!("==========================================");
+        log_info!(MAIN_LOGGER, "==========================================");
     }
 }
 
@@ -309,3 +309,4 @@ macro_rules! time_operation {
         result
     }};
 }
+

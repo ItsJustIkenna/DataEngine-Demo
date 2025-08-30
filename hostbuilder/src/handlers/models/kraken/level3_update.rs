@@ -50,7 +50,8 @@ use tokio_retry::{
     },
     Retry
 };
-use tracing::{error, warn, debug};
+use crate::logging_facade::KRAKEN_LOGGER;
+use crate::{log_debug, log_warn, log_error};
 use std::time::Instant;
 
 // Import the Kraken logger
@@ -111,7 +112,7 @@ impl Level3Update {
         let ask_connection = ask_connection?;
 
         if self.data.is_empty() {
-            debug!("Data is empty");
+            log_debug!(KRAKEN_LOGGER, "Data is empty");
             
             // Log empty update
             let log_update = OrderBookUpdateLog {
@@ -131,7 +132,7 @@ impl Level3Update {
         let update_data = &self.data[0];
 
         if update_data.bids.is_empty() && update_data.asks.is_empty() {
-            debug!("Both bids and asks are empty");
+            log_debug!(KRAKEN_LOGGER, "Both bids and asks are empty");
             
             // Log empty bids/asks
             let log_update = OrderBookUpdateLog {
@@ -159,11 +160,11 @@ impl Level3Update {
                 .await 
             {
                 Ok(volume) => {
-                    debug!("Successfully retrieved total volume");
+                    log_debug!(KRAKEN_LOGGER, "Successfully retrieved total volume");
                     Ok(volume)
                 },
                 Err(e) => {
-                    warn!("Failed to get total volume: {}", e);
+                    log_warn!(KRAKEN_LOGGER, "Failed to get total volume: {}", e);
                     Err(e)
                 },
             }
@@ -265,11 +266,11 @@ impl Level3Update {
                                 .query_async::<_, String>(&mut bid_connection.clone()).await 
                             {
                                 Ok(volume) => {
-                                    debug!("Successfully retrieved buy quantity");
+                                    log_debug!(KRAKEN_LOGGER, "Successfully retrieved buy quantity");
                                     Ok(volume)
                                 },
                                 Err(e) => {
-                                    warn!("Failed to get buy quantity: {}", e);
+                                    log_warn!(KRAKEN_LOGGER, "Failed to get buy quantity: {}", e);
                                     Err(e)
                                 }
                             }
@@ -278,7 +279,7 @@ impl Level3Update {
                         let buy_quantity = match buy_quantity {
                             Ok(volume) => volume,
                             Err(e) => {
-                                warn!("All retries failed for redis commands: {}", e);
+                                log_warn!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
                                 ZERO_STR.to_string()
                             }
                         };
@@ -387,18 +388,18 @@ impl Level3Update {
             let result = Retry::spawn(retry_strategy.clone(), || async {
                 match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
                     Ok(_) => {
-                        debug!("Batch added, modified, and deleted buy orders to/from redis");
+                        log_debug!(KRAKEN_LOGGER, "Batch added, modified, and deleted buy orders to/from redis");
                         Ok(())
                     }
                     Err(e) => {
-                        warn!("Failed to batch add, modify, and delete buy orders to/from redis: {}", e);
+                        log_warn!(KRAKEN_LOGGER, "Failed to batch add, modify, and delete buy orders to/from redis: {}", e);
                         Err(e)
                     }
                 }
             }).await;
 
             if let Err(e) = result {
-                error!("All retries failed for redis commands: {}", e);
+                log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
             }
 
             // Process database operations concurrently
@@ -416,27 +417,27 @@ impl Level3Update {
                 );
                 
             if let Err(e) = create_result {
-                error!("Failed to add open buy orders to postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to add open buy orders to postgres: {}", e);
             } else {
-                debug!("Added open buy orders to postgres");
+                log_debug!(KRAKEN_LOGGER, "Added open buy orders to postgres");
             }
             
             if let Err(e) = modify_result {
-                error!("Failed to modify open buy orders in postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to modify open buy orders in postgres: {}", e);
             } else {
-                debug!("Modified open buy orders in postgres");
+                log_debug!(KRAKEN_LOGGER, "Modified open buy orders in postgres");
             }
             
             if let Err(e) = delete_result {
-                error!("Failed to delete open buy orders from postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to delete open buy orders from postgres: {}", e);
             } else {
-                debug!("Deleted open buy orders from postgres");
+                log_debug!(KRAKEN_LOGGER, "Deleted open buy orders from postgres");
             }
             
             if let Err(e) = historical_result {
-                error!("Failed to add historical orders to postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
             } else {
-                debug!("Added historical orders to postgres");
+                log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
             }
 
             Ok::<(), Error>(())
@@ -532,11 +533,11 @@ impl Level3Update {
                                 .query_async::<_, String>(&mut ask_connection.clone()).await 
                             {
                                 Ok(volume) => {
-                                    debug!("Successfully retrieved sell quantity");
+                                    log_debug!(KRAKEN_LOGGER, "Successfully retrieved sell quantity");
                                     Ok(volume)
                                 },
                                 Err(e) => {
-                                    warn!("Failed to get sell quantity: {}", e);
+                                    log_warn!(KRAKEN_LOGGER, "Failed to get sell quantity: {}", e);
                                     Err(e)
                                 },
                             }
@@ -545,7 +546,7 @@ impl Level3Update {
                         let ask_quantity = match ask_quantity {
                             Ok(volume) => volume,
                             Err(e) => {
-                                warn!("All retries failed for redis commands: {}", e);
+                                log_warn!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
                                 ZERO_STR.to_string()
                             }
                         };
@@ -651,18 +652,18 @@ impl Level3Update {
             let result = Retry::spawn(retry_strategy.clone(), || async {
                 match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
                     Ok(_) => {
-                        debug!("Batch added, modified, and deleted sell orders to/from redis");
+                        log_debug!(KRAKEN_LOGGER, "Batch added, modified, and deleted sell orders to/from redis");
                         Ok(())
                     }
                     Err(e) => {
-                        warn!("Failed to batch add, modify, and delete sell orders to/from redis: {}", e);
+                        log_warn!(KRAKEN_LOGGER, "Failed to batch add, modify, and delete sell orders to/from redis: {}", e);
                         Err(e)
                     }
                 }
             }).await;
 
             if let Err(e) = result {
-                error!("All retries failed for redis commands: {}", e);
+                log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
             }
 
             // Process database operations concurrently
@@ -680,27 +681,27 @@ impl Level3Update {
                 );
                 
             if let Err(e) = create_result {
-                error!("Failed to add open sell orders to postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to add open sell orders to postgres: {}", e);
             } else {
-                debug!("Added open sell orders to postgres");
+                log_debug!(KRAKEN_LOGGER, "Added open sell orders to postgres");
             }
             
             if let Err(e) = modify_result {
-                error!("Failed to modify open sell orders in postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to modify open sell orders in postgres: {}", e);
             } else {
-                debug!("Modified open sell orders in postgres");
+                log_debug!(KRAKEN_LOGGER, "Modified open sell orders in postgres");
             }
             
             if let Err(e) = delete_result {
-                error!("Failed to delete open sell orders from postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to delete open sell orders from postgres: {}", e);
             } else {
-                debug!("Deleted open sell orders from postgres");
+                log_debug!(KRAKEN_LOGGER, "Deleted open sell orders from postgres");
             }
             
             if let Err(e) = historical_result {
-                error!("Failed to add historical orders to postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
             } else {
-                debug!("Added historical orders to postgres");
+                log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
             }
 
             Ok::<(), Error>(())
@@ -711,7 +712,7 @@ impl Level3Update {
         let total_volume_str = match total_volume_result {
             Ok(volume) => volume,
             Err(e) => {
-                warn!("All retries failed for redis commands: {}", e);
+                log_warn!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
                 ZERO_STR.to_string()
             }
         };
@@ -723,11 +724,11 @@ impl Level3Update {
         let (bid_result, ask_result) = tokio::join!(bid_futures, ask_futures);
 
         if let Err(e) = bid_result {
-            error!("Error processing bids: {}", e);
+            log_error!(KRAKEN_LOGGER, "Error processing bids: {}", e);
         }
         
         if let Err(e) = ask_result {
-            error!("Error processing asks: {}", e);
+            log_error!(KRAKEN_LOGGER, "Error processing asks: {}", e);
         }
 
         // Prepare message outside the lock to minimize lock time
@@ -763,10 +764,10 @@ impl Level3Update {
             if let Some(ref publisher_clone) = publisher_clone {
                 match publisher_clone.lock().await.publish(message_clone, &topic_name) {
                     Ok(_) => {
-                        debug!("Successfully published level3 update message");
+                        log_debug!(KRAKEN_LOGGER, "Successfully published level3 update message");
                     },
                     Err(e) => {
-                        error!("Failed to publish level3 update message: {:?}", e);
+                        log_error!(KRAKEN_LOGGER, "Failed to publish level3 update message: {:?}", e);
                     }
                 }
             }
@@ -795,18 +796,18 @@ impl Level3Update {
                 .await
             {
                 Ok(_) => {
-                    debug!("Updated order book in redis");
+                    log_debug!(KRAKEN_LOGGER, "Updated order book in redis");
                     Ok(())
                 }
                 Err(e) => {
-                    warn!("Failed to update order book in redis: {}", e);
+                    log_warn!(KRAKEN_LOGGER, "Failed to update order book in redis: {}", e);
                     Err(e)
                 }
             }
         }).await;
 
         if let Err(e) = result {
-            error!("All retries failed for redis commands: {}", e);
+            log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
         }
         
         // Update Postgres and publish message in parallel
@@ -815,7 +816,7 @@ impl Level3Update {
         
         match postgres_result {
             Ok(_) => {
-                debug!("Updated order book in postgres");
+                log_debug!(KRAKEN_LOGGER, "Updated order book in postgres");
                 
                 // Log successful order book update processing
                 let processing_time = start_time.elapsed().as_micros() as u64;
@@ -831,7 +832,7 @@ impl Level3Update {
                 let _ = KRAKEN_ORDERBOOK_LOGGER.log_orderbook_update(log_update).await;
             }
             Err(e) => {
-                error!("Failed to update order book in postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "Failed to update order book in postgres: {}", e);
                 
                 // Log failed order book update processing
                 let processing_time = start_time.elapsed().as_micros() as u64;

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use anyhow::{Result, anyhow};
-use tracing::{info, error};
+use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 
 use config::ConfigManager;
 use performance::PerformanceMetrics;
@@ -204,7 +204,7 @@ pub async fn detailed_health_check(
             Ok(Json(ApiResponse::success(health_response)))
         }
         Err(e) => {
-            error!("Failed to get health status: {}", e);
+            log_error!(MAIN_LOGGER, "Failed to get health status: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
@@ -252,7 +252,7 @@ pub async fn reset_metrics(
     State(state): State<ApiState>,
 ) -> Result<Json<ApiResponse<&'static str>>, StatusCode> {
     state.metrics.reset();
-    info!("Performance metrics reset via API");
+    log_info!(MAIN_LOGGER, "Performance metrics reset via API");
     Ok(Json(ApiResponse::success("Metrics reset successfully")))
 }
 
@@ -266,7 +266,7 @@ pub async fn get_config(
         let config_guard = match config_arc.read() {
             Ok(guard) => guard,
             Err(e) => {
-                error!("Failed to acquire config lock: {}", e);
+                log_error!(MAIN_LOGGER, "Failed to acquire config lock: {}", e);
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
@@ -276,13 +276,13 @@ pub async fn get_config(
                 match serde_json::from_str::<serde_json::Value>(&json_str) {
                     Ok(json_value) => json_value,
                     Err(e) => {
-                        error!("Failed to parse config JSON: {}", e);
+                        log_error!(MAIN_LOGGER, "Failed to parse config JSON: {}", e);
                         return Err(StatusCode::INTERNAL_SERVER_ERROR);
                     }
                 }
             }
             Err(e) => {
-                error!("Failed to serialize config: {}", e);
+                log_error!(MAIN_LOGGER, "Failed to serialize config: {}", e);
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }
         }
@@ -302,12 +302,12 @@ pub async fn update_config(
             if let Some(exchange) = config.exchanges.iter_mut().find(|e| &e.name == exchange_name) {
                 if let Some(enabled) = payload.enabled {
                     exchange.enabled = enabled;
-                    info!("Exchange {} enabled status updated to: {}", exchange_name, enabled);
+                    log_info!(MAIN_LOGGER, "Exchange {} enabled status updated to: {}", exchange_name, enabled);
                 }
                 
                 if let Some(symbols) = &payload.symbols {
                     exchange.symbols = symbols.clone();
-                    info!("Exchange {} symbols updated", exchange_name);
+                    log_info!(MAIN_LOGGER, "Exchange {} symbols updated", exchange_name);
                 }
             }
         }
@@ -316,17 +316,17 @@ pub async fn update_config(
         if let Some(perf_config) = &payload.performance {
             if let Some(worker_threads) = perf_config.worker_threads {
                 config.performance.worker_threads = worker_threads;
-                info!("Worker threads updated to: {}", worker_threads);
+                log_info!(MAIN_LOGGER, "Worker threads updated to: {}", worker_threads);
             }
             
             if let Some(cpu_affinity_enabled) = perf_config.cpu_affinity_enabled {
                 config.performance.cpu_affinity_enabled = cpu_affinity_enabled;
-                info!("CPU affinity enabled updated to: {}", cpu_affinity_enabled);
+                log_info!(MAIN_LOGGER, "CPU affinity enabled updated to: {}", cpu_affinity_enabled);
             }
             
             if let Some(metrics_enabled) = perf_config.metrics_enabled {
                 config.performance.metrics_enabled = metrics_enabled;
-                info!("Metrics enabled updated to: {}", metrics_enabled);
+                log_info!(MAIN_LOGGER, "Metrics enabled updated to: {}", metrics_enabled);
             }
         }
 
@@ -334,22 +334,22 @@ pub async fn update_config(
         if let Some(sec_config) = &payload.security {
             if let Some(api_key_required) = sec_config.api_key_required {
                 config.security.api_key_required = api_key_required;
-                info!("API key required updated to: {}", api_key_required);
+                log_info!(MAIN_LOGGER, "API key required updated to: {}", api_key_required);
             }
             
             if let Some(request_signing_required) = sec_config.request_signing_required {
                 config.security.request_signing_required = request_signing_required;
-                info!("Request signing required updated to: {}", request_signing_required);
+                log_info!(MAIN_LOGGER, "Request signing required updated to: {}", request_signing_required);
             }
             
             if let Some(rate_limiting_enabled) = sec_config.rate_limiting_enabled {
                 config.security.rate_limiting_enabled = rate_limiting_enabled;
-                info!("Rate limiting enabled updated to: {}", rate_limiting_enabled);
+                log_info!(MAIN_LOGGER, "Rate limiting enabled updated to: {}", rate_limiting_enabled);
             }
             
             if let Some(max_requests_per_minute) = sec_config.max_requests_per_minute {
                 config.security.max_requests_per_minute = max_requests_per_minute;
-                info!("Max requests per minute updated to: {}", max_requests_per_minute);
+                log_info!(MAIN_LOGGER, "Max requests per minute updated to: {}", max_requests_per_minute);
             }
         }
 
@@ -358,11 +358,11 @@ pub async fn update_config(
 
     match result {
         Ok(_) => {
-            info!("Configuration updated successfully via API");
+            log_info!(MAIN_LOGGER, "Configuration updated successfully via API");
             Ok(Json(ApiResponse::success("Configuration updated successfully")))
         }
         Err(e) => {
-            error!("Failed to update configuration: {}", e);
+            log_error!(MAIN_LOGGER, "Failed to update configuration: {}", e);
             Err(StatusCode::BAD_REQUEST)
         }
     }
@@ -378,21 +378,21 @@ pub async fn reload_config(
         let mut config_guard = match config_arc.write() {
             Ok(guard) => guard,
             Err(e) => {
-                error!("Failed to acquire config lock: {}", e);
+                log_error!(MAIN_LOGGER, "Failed to acquire config lock: {}", e);
                 return Err(StatusCode::INTERNAL_SERVER_ERROR);
             }
         };
 
         match config_guard.reload_if_changed() {
             Ok(true) => {
-                info!("Configuration reloaded successfully via API");
+                log_info!(MAIN_LOGGER, "Configuration reloaded successfully via API");
                 Ok("Configuration reloaded successfully")
             }
             Ok(false) => {
                 Ok("Configuration is already up to date")
             }
             Err(e) => {
-                error!("Failed to reload configuration: {}", e);
+                log_error!(MAIN_LOGGER, "Failed to reload configuration: {}", e);
                 Err(())
             }
         }
@@ -466,7 +466,7 @@ pub async fn start_api_server(
     let app = create_api_router(state);
     let addr = format!("{}:{}", bind_address, port);
     
-    info!("Starting API server on {}", addr);
+    log_info!(MAIN_LOGGER, "Starting API server on {}", addr);
     
     let listener = tokio::net::TcpListener::bind(&addr).await
         .map_err(|e| anyhow!("Failed to bind to {}: {}", addr, e))?;
@@ -525,3 +525,4 @@ mod tests {
         assert!(true);
     }
 }
+

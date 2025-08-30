@@ -10,7 +10,34 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use anyhow::{Result, anyhow, Context};
-use tracing::{info, warn, error};
+
+// Simple sync logging for config - we'll use println! for simplicity since config doesn't need ultra performance
+macro_rules! log_info {
+    ($msg:expr) => {
+        println!("[CONFIG-INFO] {}", $msg);
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        println!("[CONFIG-INFO] {}", format!($fmt, $($arg)*));
+    };
+}
+
+macro_rules! log_warn {
+    ($msg:expr) => {
+        println!("[CONFIG-WARN] {}", $msg);
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        println!("[CONFIG-WARN] {}", format!($fmt, $($arg)*));
+    };
+}
+
+macro_rules! log_error {
+    ($msg:expr) => {
+        eprintln!("[CONFIG-ERROR] {}", $msg);
+    };
+    ($fmt:expr, $($arg:tt)*) => {
+        eprintln!("[CONFIG-ERROR] {}", format!($fmt, $($arg)*));
+    };
+}
 use serde_yaml;
 
 /// Environment types for configuration
@@ -309,7 +336,7 @@ impl EnhancedConfig {
         // Validate configuration
         config.validate()?;
         
-        info!("Configuration loaded successfully from {}", path.display());
+        log_info!("Configuration loaded successfully from {}", path.display());
         Ok(config)
     }
 
@@ -330,7 +357,7 @@ impl EnhancedConfig {
                 "testing" | "test" => self.environment = Environment::Testing,
                 "staging" | "stage" => self.environment = Environment::Staging,
                 "production" | "prod" => self.environment = Environment::Production,
-                _ => warn!("Unknown environment '{}', using default", env),
+                _ => log_warn!("Unknown environment '{}', using default", env),
             }
         }
         
@@ -400,7 +427,7 @@ impl EnhancedConfig {
             return Err(anyhow!("Redis URL cannot be empty"));
         }
 
-        info!("Configuration validation passed");
+        log_info!("Configuration validation passed");
         Ok(())
     }
 
@@ -440,7 +467,7 @@ impl EnhancedConfig {
         fs::write(&path, yaml)
             .map_err(|e| anyhow!("Failed to write config file: {}", e))?;
         
-        info!("Configuration saved to {}", path.as_ref().display());
+        log_info!("Configuration saved to {}", path.as_ref().display());
         Ok(())
     }
 
@@ -467,7 +494,7 @@ impl EnhancedConfig {
             if let Some(ref path) = self.config_path.clone() {
                 let new_config = Self::load_from_file(path)?;
                 *self = new_config;
-                info!("Configuration reloaded from file");
+                log_info!("Configuration reloaded from file");
                 return Ok(true);
             }
         }
@@ -533,9 +560,9 @@ impl ConfigManager {
                 
                 if let Ok(mut config_guard) = config.write() {
                     match config_guard.reload_if_changed() {
-                        Ok(true) => info!("Configuration hot-reloaded successfully"),
+                        Ok(true) => log_info!("Configuration hot-reloaded successfully"),
                         Ok(false) => {}, // No change
-                        Err(e) => error!("Failed to reload configuration: {}", e),
+                        Err(e) => log_error!("Failed to reload configuration: {}", e),
                     }
                 }
             }
@@ -553,7 +580,7 @@ impl ConfigManager {
         updater(&mut config)?;
         config.validate()?;
         
-        info!("Configuration updated at runtime");
+        log_info!("Configuration updated at runtime");
         Ok(())
     }
 }

@@ -10,7 +10,7 @@ use anyhow::{anyhow, Result};
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use tracing::{error, warn, info};
+use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 
 /// Circuit breaker states
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -93,7 +93,7 @@ impl CircuitBreaker {
                 // Reset to closed state
                 self.state.store(0, Ordering::Release);
                 self.failure_count.store(0, Ordering::Relaxed);
-                info!("Circuit breaker reset to CLOSED state");
+                log_info!(MAIN_LOGGER, "Circuit breaker reset to CLOSED state");
             }
             CircuitState::Closed => {
                 // Reset failure count on success
@@ -110,7 +110,7 @@ impl CircuitBreaker {
 
         if failures >= self.failure_threshold {
             self.state.store(1, Ordering::Release); // Open
-            warn!("Circuit breaker opened after {} failures", failures);
+            log_warn!(MAIN_LOGGER, "Circuit breaker opened after {} failures", failures);
         }
     }
 
@@ -199,11 +199,11 @@ impl ResilientExecutor {
             match self.circuit_breaker.call(operation()).await {
                 Ok(result) => return Ok(result),
                 Err(e) if attempt >= self.retry_config.max_attempts => {
-                    error!("Operation failed after {} attempts: {}", attempt, e);
+                    log_error!(MAIN_LOGGER, "Operation failed after {} attempts: {}", attempt, e);
                     return Err(e);
                 }
                 Err(e) => {
-                    warn!("Attempt {} failed: {}, retrying in {:?}", attempt, e, delay);
+                    log_warn!(MAIN_LOGGER, "Attempt {} failed: {}, retrying in {:?}", attempt, e, delay);
                     
                     // Sleep with exponential backoff
                     sleep(delay).await;
@@ -314,23 +314,23 @@ impl ErrorHandler {
 
         match category {
             ErrorCategory::Transient => {
-                warn!("Transient error in {}: {}", context, error);
+                log_warn!(MAIN_LOGGER, "Transient error in {}: {}", context, error);
                 // Could implement automatic retry here
             }
             ErrorCategory::Permanent => {
-                error!("Permanent error in {}: {}", context, error);
+                log_error!(MAIN_LOGGER, "Permanent error in {}: {}", context, error);
                 // Log for investigation, don't retry
             }
             ErrorCategory::RateLimit => {
-                warn!("Rate limit in {}: {}", context, error);
+                log_warn!(MAIN_LOGGER, "Rate limit in {}: {}", context, error);
                 // Implement backoff strategy
             }
             ErrorCategory::Network => {
-                warn!("Network error in {}: {}", context, error);
+                log_warn!(MAIN_LOGGER, "Network error in {}: {}", context, error);
                 // Could trigger circuit breaker
             }
             _ => {
-                error!("Error in {}: {} (category: {:?})", context, error, category);
+                log_error!(MAIN_LOGGER, "Error in {}: {} (category: {:?})", context, error, category);
             }
         }
 
@@ -444,3 +444,4 @@ mod tests {
         assert_eq!(call_count, 3);
     }
 }
+

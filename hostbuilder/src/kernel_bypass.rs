@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 use std::time::{Instant, Duration};
 use anyhow::{Result, anyhow};
-use tracing::{info, warn};
+use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
 use socket2::{Socket, Domain, Type, Protocol};
 use std::net::SocketAddr;
 
@@ -55,16 +55,16 @@ impl KernelBypassManager {
             match IoUring::new(self.queue_depth) {
                 Ok(ring) => {
                     self.ring = Some(ring);
-                    info!("io_uring initialized with queue depth {}", self.queue_depth);
+                    log_info!(MAIN_LOGGER, "io_uring initialized with queue depth {}", self.queue_depth);
                 }
                 Err(e) => {
-                    warn!("Failed to initialize io_uring: {}, falling back to optimized sockets", e);
+                    log_warn!(MAIN_LOGGER, "Failed to initialize io_uring: {}, falling back to optimized sockets", e);
                 }
             }
         }
         
         self.is_initialized.store(true, Ordering::Release);
-        info!("Kernel bypass manager initialized");
+        log_info!(MAIN_LOGGER, "Kernel bypass manager initialized");
         Ok(())
     }
 
