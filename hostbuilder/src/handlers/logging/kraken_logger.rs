@@ -2,12 +2,14 @@ use ultra_logger::{UltraLogger, LogLevel, LogValue, LogEntry};
 use std::collections::HashMap;
 use bigdecimal::BigDecimal;
 use once_cell::sync::Lazy;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// High-performance centralized logging service for Kraken operations
 /// Optimized for minimal latency impact on critical trading paths
 pub struct KrakenLogger {
     logger: UltraLogger,
     service_name: String,
+    sequence_counter: AtomicU64,
 }
 
 impl KrakenLogger {
@@ -15,6 +17,7 @@ impl KrakenLogger {
         Self {
             logger: UltraLogger::new(format!("DataEngine-Kraken-{}", service_name)),
             service_name: service_name.to_string(),
+            sequence_counter: AtomicU64::new(0),
         }
     }
 
@@ -33,6 +36,7 @@ impl KrakenLogger {
             event.level,
             self.service_name.clone(),
             event.message,
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         // Add fields to entry
@@ -65,6 +69,7 @@ impl KrakenLogger {
             level,
             self.service_name.clone(),
             format!("Order book update processed for {}", update.symbol),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
@@ -95,6 +100,7 @@ impl KrakenLogger {
             level,
             self.service_name.clone(),
             format!("Trade processed: {} @ {} for {}", trade.quantity, trade.price, trade.symbol),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
@@ -125,6 +131,7 @@ impl KrakenLogger {
             level,
             self.service_name.clone(),
             format!("Authentication {} for {}", if event.success { "succeeded" } else { "failed" }, event.endpoint),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
@@ -149,6 +156,7 @@ impl KrakenLogger {
             LogLevel::Info,
             self.service_name.clone(),
             format!("Performance metrics for {}-{}", metrics.component, metrics.operation),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
@@ -175,6 +183,7 @@ impl KrakenLogger {
             LogLevel::Error,
             self.service_name.clone(),
             format!("CRITICAL ERROR in {}: {}", error.component, error.error_code),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
@@ -204,6 +213,7 @@ impl KrakenLogger {
             self.service_name.clone(),
             format!("{} snapshot processed for {} ({} records)", 
                    snapshot.snapshot_type, snapshot.symbol, snapshot.data_count),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
@@ -233,6 +243,7 @@ impl KrakenLogger {
             self.service_name.clone(),
             format!("Balance update for {} - New: {:.8}, Change: {:.8}", 
                    balance.asset, balance.balance, balance.balance_change),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
@@ -266,6 +277,7 @@ impl KrakenLogger {
             self.service_name.clone(),
             format!("Heartbeat received on {} - Status: {}", 
                    heartbeat.channel, heartbeat.connection_status),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
@@ -303,6 +315,7 @@ impl KrakenLogger {
                    if subscription.success { "successful" } else { "failed" },
                    subscription.channel,
                    symbol_info),
+            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
         let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
