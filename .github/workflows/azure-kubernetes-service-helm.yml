@@ -1,59 +1,104 @@
-# This workflow will build and push an application to a Azure Kubernetes Service (AKS) cluster when you push your code
-#
-# This workflow assumes you have already created the target AKS cluster and have created an Azure Container Registry (ACR)
-# The ACR should be attached to the AKS cluster
-# For instructions see:
-#   - https://docs.microsoft.com/en-us/azure/aks/kubernetes-walkthrough-portal
-#   - https://docs.microsoft.com/en-us/azure/container-registry/container-registry-get-started-portal
-#   - https://learn.microsoft.com/en-us/azure/aks/cluster-container-registry-integration?tabs=azure-cli#configure-acr-integration-for-existing-aks-clusters
-#   - https://github.com/Azure/aks-create-action
-#
-# To configure this workflow:
-#
-# 1. Set the following secrets in your repository (instructions for getting these
-#    https://docs.microsoft.com/en-us/azure/developer/github/connect-from-azure?tabs=azure-cli%2Clinux)):
-#    - AZURE_CLIENT_ID
-#    - AZURE_TENANT_ID
-#    - AZURE_SUBSCRIPTION_ID
-#
-# 2. Set the following environment variables (or replace the values below):
-#    - AZURE_CONTAINER_REGISTRY (name of your container registry / ACR)
-#    - CONTAINER_NAME (name of the container image you would like to push up to your ACR)
-#    - RESOURCE_GROUP (where your cluster is deployed)
-#    - CLUSTER_NAME (name of your AKS cluster)
-#    - IMAGE_PULL_SECRET_NAME (name of the ImagePullSecret that will be created to pull your ACR image)
-#
-# 3. Choose the appropriate render engine for the bake step https://github.com/Azure/k8s-bake. The config below assumes Helm.
-#    Set your helmChart, overrideFiles, overrides, and helm-version to suit your configuration.
-#    - CHART_PATH (path to your helm chart)
-#    - CHART_OVERRIDE_PATH (path to your helm chart with override values)
-#
-# For more information on GitHub Actions for Azure, refer to https://github.com/Azure/Actions
-# For more samples to get started with GitHub Action workflows to deploy to Azure, refer to https://github.com/Azure/actions-workflow-samples
-# For more options with the actions used below please refer to https://github.com/Azure/login
+# Secure Azure Kubernetes Service deployment workflow for DataEngine
+# This workflow implements secure deployment practices with proper secret management
 
-name: Build and deploy an app to AKS with Helm
+name: Build and deploy DataEngine to AKS with Helm (Secure)
 
 on:
   push:
     branches: ["main"]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - development
 
 env:
   AZURE_CONTAINER_REGISTRY: "prodtradingbotregistry"
   CONTAINER_NAME: "data-engine"
   RESOURCE_GROUP: "prod-aks-trading-bot-rg"
   CLUSTER_NAME: "prod-trading-bot-cluster"
-  CHART_PATH: "./data-engine-helm"
-  BASE_CHART_OVERRIDE_PATH: "./data-engine-helm/values.yaml"
-  ENV_CHART_OVERRIDE_PATH: "./data-engine-helm/values-prod.yaml"
+  CHART_PATH: "./k8s/data-engine-helm"
 
 jobs:
+  validate-secrets:
+    name: Validate Required Secrets
+    runs-on: ubuntu-latest
+    outputs:
+      secrets-valid: ${{ steps.check.outputs.valid }}
+    steps:
+      - name: Check required secrets
+        id: check
+        run: |
+          missing_secrets=""
+          
+          if [ -z "${{ secrets.AZURE_CLIENT_ID }}" ]; then
+            missing_secrets="$missing_secrets AZURE_CLIENT_ID"
+          fi
+          
+          if [ -z "${{ secrets.AZURE_TENANT_ID }}" ]; then
+            missing_secrets="$missing_secrets AZURE_TENANT_ID"
+          fi
+          
+          if [ -z "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ]; then
+            missing_secrets="$missing_secrets AZURE_SUBSCRIPTION_ID"
+          fi
+          
+          if [ -z "${{ secrets.DATABASE_URL }}" ]; then
+            missing_secrets="$missing_secrets DATABASE_URL"
+          fi
+          
+          if [ -z "${{ secrets.REDIS_PASSWORD }}" ]; then
+            missing_secrets="$missing_secrets REDIS_PASSWORD"
+          fi
+          
+          if [ -n "$missing_secrets" ]; then
+            echo "❌ Missing required secrets:$missing_secrets"
+            echo "valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "✅ All required secrets are present"
+            echo "valid=true" >> $GITHUB_OUTPUT
+          fi
+
+  determine-environment:
+    name: Determine Target Environment
+    runs-on: ubuntu-latest
+    needs: validate-secrets
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      namespace: ${{ steps.env.outputs.namespace }}
+    steps:
+      - name: Set environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          else
+            ENV="production"
+          fi
+          
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          
+          if [ "$ENV" = "production" ]; then
+            echo "namespace=trading-platform-prod" >> $GITHUB_OUTPUT
+          else
+            echo "namespace=trading-platform-dev" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "🎯 Target environment: $ENV"
+
   buildImage:
+    name: Build and Push Container Image
     permissions:
       contents: read
       id-token: write
     runs-on: ubuntu-latest
+    needs: [validate-secrets, determine-environment]
     steps:        
       # Install Azure CLI
       - name: Install Azure CLI
@@ -92,15 +137,19 @@ jobs:
       # Builds and pushes an image up to your Azure Container Registry
       - name: Build and push image to ACR
         run: |
+          echo "🏗️ Building container image..."
           az acr build --image ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ github.sha }} --registry ${{ env.AZURE_CONTAINER_REGISTRY }} -g ${{ env.RESOURCE_GROUP }} .
+          echo "✅ Image built and pushed successfully"
 
   deploy:
+    name: Deploy to Kubernetes
     permissions:
       actions: read
       contents: read
       id-token: write
     runs-on: ubuntu-latest
-    needs: [buildImage]
+    needs: [buildImage, determine-environment]
+    environment: ${{ needs.determine-environment.outputs.environment }}
     steps:
       # Checks out the repository this file is in
       - uses: actions/checkout@v4
@@ -127,26 +176,46 @@ jobs:
           cluster-name: ${{ env.CLUSTER_NAME }}
           admin: 'false'
           use-kubelogin: 'true'
-            
-      # Runs Helm to create manifest files
-      - name: Bake deployment
-        uses: azure/k8s-bake@v2
-        with:
-          renderEngine: "helm"
-          helmChart: ${{ env.CHART_PATH }}
-          overrideFiles: |
-            ${{ env.BASE_CHART_OVERRIDE_PATH }}
-            ${{ env.ENV_CHART_OVERRIDE_PATH }}
-          overrides: |
-            tag: ${{ github.sha }}
-          helm-version: "latest"
-        id: bake
 
-      # Deploys application based on manifest files from previous step
-      - name: Deploy application
-        uses: Azure/k8s-deploy@v4
-        with:
-          action: deploy
-          manifests: ${{ steps.bake.outputs.manifestsBundle }}
-          images: |
-            ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }}:${{ github.sha }}
+      # Create namespace if it doesn't exist
+      - name: Create namespace
+        run: |
+          kubectl create namespace ${{ needs.determine-environment.outputs.namespace }} --dry-run=client -o yaml | kubectl apply -f -
+          echo "✅ Namespace ${{ needs.determine-environment.outputs.namespace }} ready"
+            
+      # Deploy using Helm with secure secret injection
+      - name: Deploy with Helm (Secure)
+        run: |
+          echo "🚀 Starting secure deployment to ${{ needs.determine-environment.outputs.environment }} environment..."
+          
+          helm upgrade --install data-engine ${{ env.CHART_PATH }} \
+            --namespace ${{ needs.determine-environment.outputs.namespace }} \
+            --create-namespace \
+            --set image.repository=${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }} \
+            --set image.tag=${{ github.sha }} \
+            --set-string secrets.database.url="${{ secrets.DATABASE_URL }}" \
+            --set-string secrets.redis.password="${{ secrets.REDIS_PASSWORD }}" \
+            --set secrets.database.enabled=true \
+            --set secrets.redis.enabled=true \
+            --set externalDatabase.enabled=true \
+            --set externalDatabase.useCompleteUrl=true \
+            --set externalRedis.enabled=true \
+            --set postgresql.enabled=false \
+            --set redis.enabled=false \
+            --set environment="${{ needs.determine-environment.outputs.environment }}" \
+            --timeout 10m \
+            --wait
+          
+          echo "✅ DataEngine deployed successfully to ${{ needs.determine-environment.outputs.environment }}"
+
+      # Verify deployment
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying deployment..."
+          kubectl get pods -n ${{ needs.determine-environment.outputs.namespace }} -l app=data-engine
+          kubectl get services -n ${{ needs.determine-environment.outputs.namespace }} -l app=data-engine
+          
+          # Wait for pods to be ready
+          kubectl wait --for=condition=ready pod -l app=data-engine -n ${{ needs.determine-environment.outputs.namespace }} --timeout=300s
+          
+          echo "✅ Deployment verification complete"

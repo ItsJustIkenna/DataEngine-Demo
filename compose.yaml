@@ -8,18 +8,20 @@ services:
       context: .
       target: final
     ports:
-      - "8080:8080"  # Main API
-      - "9090:9090"  # Metrics
+      - "${SERVICE_PORT:-8080}:8080"  # Main API
+      - "${METRICS_PORT:-9090}:9090"  # Metrics
     environment:
-      - RUST_LOG=info
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=dataengine
-      - POSTGRES_USER=dataengine
-      - POSTGRES_PASSWORD=dataengine123
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=redis123
+      - RUST_LOG=${RUST_LOG:-info}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-dataengine}
+      - POSTGRES_USER=${POSTGRES_USER:-dataengine}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - API_SECRET_KEY=${API_SECRET_KEY}
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,11 +37,11 @@ services:
   postgres:
     image: timescale/timescaledb:latest-pg15
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
-      - POSTGRES_DB=dataengine
-      - POSTGRES_USER=dataengine
-      - POSTGRES_PASSWORD=dataengine123
+      - POSTGRES_DB=${POSTGRES_DB:-dataengine}
+      - POSTGRES_USER=${POSTGRES_USER:-dataengine}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_INITDB_ARGS=--data-checksums
     volumes:
       - postgres-data:/var/lib/postgresql/data

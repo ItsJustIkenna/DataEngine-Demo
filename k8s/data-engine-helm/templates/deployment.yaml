@@ -147,6 +147,13 @@ spec:
                   name: {{ include "data-engine.postgresql.secretName" . }}
                   key: postgres-password
             {{- else if .Values.externalDatabase.enabled }}
+            {{- if .Values.externalDatabase.useCompleteUrl }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}-database
+                  key: url
+            {{- else }}
             - name: DATABASE_URL
               value: "postgresql://{{ .Values.externalDatabase.username }}:$(DATABASE_PASSWORD)@{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}"
             - name: DATABASE_PASSWORD
@@ -154,6 +161,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "data-engine.fullname" . }}-database
                   key: password
+            {{- end }}
             {{- end }}
             
             # Redis configuration

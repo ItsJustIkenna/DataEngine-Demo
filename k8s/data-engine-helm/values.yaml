@@ -374,11 +374,13 @@ logging:
 secrets:
   # Database credentials
   database:
+    enabled: false  # Enable to use external database with secrets
     username: ""
     password: ""
     
   # Redis credentials  
   redis:
+    enabled: false  # Enable to use external redis with secrets
     password: ""
     
   # API keys
@@ -389,6 +391,26 @@ secrets:
   tls:
     cert: ""
     key: ""
+
+# =============================================================================
+# External Database Configuration (Alternative to embedded PostgreSQL)
+# =============================================================================
+
+# External PostgreSQL Database
+externalDatabase:
+  enabled: false
+  host: ""
+  port: 5432
+  username: "dataengine_user"
+  database: "trading_platform"
+  # Password is provided via secrets.database.password
+
+# External Redis Cache
+externalRedis:
+  enabled: false
+  host: ""
+  port: 6379
+  # Password is provided via secrets.redis.password
 
 # =============================================================================
 # Database Dependencies  
