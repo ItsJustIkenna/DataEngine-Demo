@@ -18,10 +18,10 @@ on:
           - development
 
 env:
-  AZURE_CONTAINER_REGISTRY: "prodtradingbotregistry"
+  AZURE_CONTAINER_REGISTRY: "tradingbotregistry"
   CONTAINER_NAME: "data-engine"
-  RESOURCE_GROUP: "prod-aks-trading-bot-rg"
-  CLUSTER_NAME: "prod-trading-bot-cluster"
+  RESOURCE_GROUP: "aks-trading-bot-rg"
+  CLUSTER_NAME: "trading-bot-cluster"
   CHART_PATH: "./k8s/data-engine-helm"
 
 jobs:
@@ -56,6 +56,9 @@ jobs:
             missing_secrets="$missing_secrets REDIS_PASSWORD"
           fi
           
+          # Note: You might need separate secrets for dev/prod environments
+          # Example: DATABASE_URL_DEV, DATABASE_URL_PROD, etc.
+          
           if [ -n "$missing_secrets" ]; then
             echo "❌ Missing required secrets:$missing_secrets"
             echo "valid=false" >> $GITHUB_OUTPUT
@@ -72,6 +75,7 @@ jobs:
     outputs:
       environment: ${{ steps.env.outputs.environment }}
       namespace: ${{ steps.env.outputs.namespace }}
+      values-file: ${{ steps.env.outputs.values-file }}
     steps:
       - name: Set environment
         id: env
@@ -86,11 +90,16 @@ jobs:
           
           if [ "$ENV" = "production" ]; then
             echo "namespace=trading-platform-prod" >> $GITHUB_OUTPUT
+            echo "values-file=values-prod.yaml" >> $GITHUB_OUTPUT
+            VALUES_FILE="values-prod.yaml"
           else
             echo "namespace=trading-platform-dev" >> $GITHUB_OUTPUT
+            echo "values-file=values-dev.yaml" >> $GITHUB_OUTPUT
+            VALUES_FILE="values-dev.yaml"
           fi
           
           echo "🎯 Target environment: $ENV"
+          echo "📁 Values file: ${VALUES_FILE}"
 
   buildImage:
     name: Build and Push Container Image
@@ -187,22 +196,18 @@ jobs:
       - name: Deploy with Helm (Secure)
         run: |
           echo "🚀 Starting secure deployment to ${{ needs.determine-environment.outputs.environment }} environment..."
+          echo "📁 Using values file: ${{ needs.determine-environment.outputs.values-file }}"
           
           helm upgrade --install data-engine ${{ env.CHART_PATH }} \
             --namespace ${{ needs.determine-environment.outputs.namespace }} \
             --create-namespace \
+            --values ${{ env.CHART_PATH }}/${{ needs.determine-environment.outputs.values-file }} \
             --set image.repository=${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.CONTAINER_NAME }} \
             --set image.tag=${{ github.sha }} \
             --set-string secrets.database.url="${{ secrets.DATABASE_URL }}" \
             --set-string secrets.redis.password="${{ secrets.REDIS_PASSWORD }}" \
             --set secrets.database.enabled=true \
             --set secrets.redis.enabled=true \
-            --set externalDatabase.enabled=true \
-            --set externalDatabase.useCompleteUrl=true \
-            --set externalRedis.enabled=true \
-            --set postgresql.enabled=false \
-            --set redis.enabled=false \
-            --set environment="${{ needs.determine-environment.outputs.environment }}" \
             --timeout 10m \
             --wait
           
