@@ -111,7 +111,7 @@ jobs:
     steps:
       - name: Check GitHub repository info
         run: |
-          response=$(curl -H "Authorization: token ${{ github.token }}" https://api.github.com/repos/Nwagbara-Group-LLC/DataEngine)
+          response=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/Nwagbara-Group-LLC/DataEngine)
           if echo "$response" | grep -q 'Not Found'; then
             echo "❌ GitHub repository Nwagbara-Group-LLC/DataEngine not found!"
             exit 1
@@ -141,7 +141,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
-          token: ${{ github.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           path: LoggingEngine
 
       # Logs in with your Azure credentials
