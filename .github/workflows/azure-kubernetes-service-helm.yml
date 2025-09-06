@@ -23,6 +23,7 @@ env:
   RESOURCE_GROUP: "aks-trading-bot-rg"
   CLUSTER_NAME: "trading-bot-cluster"
   CHART_PATH: "./k8s/data-engine-helm"
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   validate-secrets:
@@ -108,7 +109,15 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     needs: [validate-secrets, determine-environment]
-    steps:        
+    steps:
+      - name: Check GitHub repository info
+        run: |
+          response=$(curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/Nwagbara-Group-LLC/DataEngine)
+          if echo "$response" | grep -q 'Not Found'; then
+            echo "❌ GitHub repository Nwagbara-Group-LLC/DataEngine not found!"
+            exit 1
+          fi
+          echo "✅ GitHub repository info found."
       # Install Azure CLI
       - name: Install Azure CLI
         run: |
