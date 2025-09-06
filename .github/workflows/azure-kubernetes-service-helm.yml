@@ -133,7 +133,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
-          token: ${{ secrets.GITHUB_TOKEN }}
           path: LoggingEngine
 
       # Logs in with your Azure credentials
