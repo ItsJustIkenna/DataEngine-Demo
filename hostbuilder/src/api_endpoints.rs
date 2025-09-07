@@ -372,35 +372,18 @@ pub async fn update_config(
 pub async fn reload_config(
     State(state): State<ApiState>,
 ) -> Result<Json<ApiResponse<&'static str>>, StatusCode> {
-    let config_arc = state.config_manager.get_config();
-    
-    let result = {
-        let mut config_guard = match config_arc.write() {
-            Ok(guard) => guard,
-            Err(e) => {
-                log_error!(MAIN_LOGGER, "Failed to acquire config lock: {}", e);
-                return Err(StatusCode::INTERNAL_SERVER_ERROR);
-            }
-        };
-
-        match config_guard.reload_if_changed() {
-            Ok(true) => {
-                log_info!(MAIN_LOGGER, "Configuration reloaded successfully via API");
-                Ok("Configuration reloaded successfully")
-            }
-            Ok(false) => {
-                Ok("Configuration is already up to date")
-            }
-            Err(e) => {
-                log_error!(MAIN_LOGGER, "Failed to reload configuration: {}", e);
-                Err(())
-            }
+    match state.config_manager.reload_if_changed() {
+        Ok(true) => {
+            log_info!(MAIN_LOGGER, "Configuration reloaded successfully via API");
+            Ok(Json(ApiResponse::success("Configuration reloaded successfully")))
         }
-    };
-
-    match result {
-        Ok(message) => Ok(Json(ApiResponse::success(message))),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(false) => {
+            Ok(Json(ApiResponse::success("Configuration is already up to date")))
+        }
+        Err(e) => {
+            log_error!(MAIN_LOGGER, "Failed to reload configuration: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
@@ -480,12 +463,11 @@ pub async fn start_api_server(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::EnhancedConfig;
-    use std::time::Duration;
+    use config::Config;
 
     async fn create_test_state() -> ApiState {
-        let config = EnhancedConfig::default();
-        let config_manager = Arc::new(ConfigManager::new(config, Duration::from_secs(60)));
+        let config = Config::default();
+        let config_manager = Arc::new(ConfigManager::new(config));
         
         // Mock components for testing
         let health_monitor = Arc::new(SystemHealthMonitor::default());
@@ -519,7 +501,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_api_router() {
         let state = create_test_state().await;
-        let router = create_api_router(state);
+        let _router = create_api_router(state);
         
         // Just ensure the router can be created without panicking
         assert!(true);

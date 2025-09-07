@@ -21,6 +21,7 @@ chrono = { version = "0.4", features = ["serde"] }
 mimalloc = "0.1"
 fastrand = "2.0"
 num_cpus = "1.16"
+libc = "0.2"
 
 # Local dependencies
 hostbuilder = { path = "../hostbuilder" }

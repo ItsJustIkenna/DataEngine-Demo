@@ -14,6 +14,18 @@ debug = false
 debug-assertions = false
 incremental = false
 
+# Test profile that can run tests (doesn't use panic = "abort")
+[profile.test]
+opt-level = 3
+codegen-units = 1
+lto = "fat"
+# panic = "unwind" is the default for tests - don't set panic = "abort"
+strip = false  # Keep debug symbols for tests
+overflow-checks = true  # Enable checks for tests
+debug = true
+debug-assertions = true
+incremental = false
+
 # Ultra-aggressive profile for maximum performance
 [profile.ultra]
 inherits = "release"

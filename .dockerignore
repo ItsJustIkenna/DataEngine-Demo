@@ -1,32 +1,95 @@
-# Include any files or directories that you don't want to be copied to your
-# container here (e.g., local build artifacts, temporary files, etc.).
-#
-# For more help, visit the .dockerignore file reference guide at
-# https://docs.docker.com/go/build-context-dockerignore/
+# DataEngine Optimized Docker Ignore
+# Excludes unnecessary files to speed up Docker builds
 
-**/.DS_Store
-**/.classpath
-**/.dockerignore
-**/.env
+# Version control
 **/.git
 **/.gitignore
+**/.github
+
+# Development environment
+**/.DS_Store
+**/.env
+**/.vscode
+**/.vs
+**/.idea
 **/.project
 **/.settings
 **/.toolstarget
-**/.vs
-**/.vscode
-**/*.*proj.user
-**/*.dbmdl
-**/*.jfm
-**/charts
+
+# Build artifacts and caches
+**/target/**
+**/bin/**
+**/.cargo/**
+**/node_modules/**
+**/npm-debug.log
+
+# Documentation and examples  
+**/README.md
+**/LICENSE
+**/CHANGELOG.md
+**/docs/**
+**/examples/**
+**/notebooks/**
+**/benchmarks/**
+
+# Test files
+**/tests/**
+**/*_test.rs
+**/*test*.rs
+
+# Docker and deployment files
+**/Dockerfile*
 **/docker-compose*
 **/compose.y*ml
-**/Dockerfile*
-**/node_modules
-**/npm-debug.log
+**/k8s/**
+**/helm/**
+**/charts/**
+**/scripts/**
+
+# Database migrations (will be handled via init scripts)
+**/migrations/**
+
+# Configuration files that shouldn't be in image
 **/secrets.dev.yaml
 **/values.dev.yaml
-/bin
-/target
-LICENSE
-README.md
+**/.env*
+**/config.local.*
+
+# Logs and temporary files
+**/logs/**
+**/*.log
+**/*.tmp
+**/*.temp
+**/*.swp
+**/*.swo
+**/*~
+
+# IDE specific
+**/*.dbmdl
+**/*.jfm
+**/*.*proj.user
+**/.classpath
+
+# OS specific
+**/Thumbs.db
+**/.DS_Store
+
+# Performance: Only include essential workspace members
+# Exclude other engines that DataEngine doesn't directly need
+/BacktestingEngine/examples/**
+/BacktestingEngine/tests/**
+/BacktestingEngine/notebooks/**
+/SignalEngine/examples/**
+/SignalEngine/tests/**
+/SimulationEngine/examples/**
+/SimulationEngine/tests/**
+
+# Keep essential dependencies but exclude their non-essential parts
+/databaseschema/examples/**
+/databaseschema/docs/**
+/LoggingEngine/examples/**
+/LoggingEngine/docs/**
+/MessageBrokerEngine/examples/**
+/MessageBrokerEngine/docs/**
+/redisutils/examples/**
+/redisutils/docs/**

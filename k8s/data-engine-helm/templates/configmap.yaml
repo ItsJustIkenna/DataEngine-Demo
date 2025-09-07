@@ -1,3 +1,4 @@
+{{- if .Values.enabled | default true }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -170,4 +171,5 @@ data:
       file_path: {{ .Values.logging.file_path | quote }}
       max_file_size_mb: {{ .Values.logging.max_file_size_mb }}
       max_files: {{ .Values.logging.max_files }}
+{{- end }}
       structured_logging: {{ .Values.logging.structured_logging }}

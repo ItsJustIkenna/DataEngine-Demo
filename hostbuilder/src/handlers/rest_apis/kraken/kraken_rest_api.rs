@@ -53,11 +53,23 @@ impl KrakenRestHandler {
 
         let url = Url::parse(endpoint).expect("Failed to parse URL");
 
-        let api_secret = env::var("KRAKEN_SECRET_KEY").expect("KRAKEN_SECRET_KEY must be set");
+        let api_key = env::var("KRAKEN_API_KEY").unwrap_or_default();
+        
+        // Check if credentials are valid before attempting authentication
+        if api_key.is_empty() || api_key == "placeholder" {
+            println!("Kraken API key not configured (placeholder or empty). Skipping authentication.");
+            return Err(anyhow::anyhow!("API credentials not configured"));
+        }
 
-        let signature = generate_kraken_signature(url.path(), nonce, &post_data, &api_secret);
+        let signature = generate_kraken_signature(url.path(), nonce, &post_data, &api_key)?;
         let client = Client::new();
-        let api_key = env::var("KRAKEN_API_KEY").expect("KRAKEN_API_KEY must be set");
+        let api_key = env::var("KRAKEN_API_KEY").unwrap_or_default();
+        
+        // Check if API key is valid
+        if api_key.is_empty() || api_key == "placeholder" {
+            println!("Kraken API key not configured (placeholder or empty). Skipping authentication.");
+            return Err(anyhow::anyhow!("API credentials not configured"));
+        }
 
         let body = post_data;
         // Create the headers
@@ -144,24 +156,26 @@ fn generate_kraken_signature(
     api_path: &str,
     nonce: u64,
     post_data: &str,
-    api_secret: &str,
-) -> String {
+    api_key: &str,
+) -> Result<String> {
     // 1. Calculate SHA256 of the nonce + POST data
     let mut sha256 = Sha256::new();
     sha256.update(nonce.to_string() + post_data);
     let sha256_hash = sha256.finalize();
-    // 2. Decode the API secret from base64
-    let decoded_secret = BASE64_STANDARD
-        .decode(api_secret)
-        .expect("Failed to decode API secret from base64");
+    
+    // 2. Decode the API key from base64
+    let decoded_key = BASE64_STANDARD
+        .decode(api_key)
+        .map_err(|e| anyhow::anyhow!("Failed to decode API secret from base64: {}. Check if KRAKEN_API_KEY is properly configured.", e))?;
+    
     // 3. Create an HMAC-SHA512 instance with the decoded key
     let mut mac =
-        HmacSha512::new_from_slice(&decoded_secret).expect("HMAC can take key of any size");
+        HmacSha512::new_from_slice(&decoded_key).expect("HMAC can take key of any size");
     // Update the HMAC with the API path and SHA256 hash
     mac.update(api_path.as_bytes());
     mac.update(&sha256_hash);
     // 4. Finalize the HMAC calculation and encode the result into base64
     let hmac_result = mac.finalize();
     let hmac_bytes = hmac_result.into_bytes();
-    BASE64_STANDARD.encode(hmac_bytes)
+    Ok(BASE64_STANDARD.encode(hmac_bytes))
 }

@@ -1,4 +1,4 @@
-{{- if .Values.service.enabled }}
+{{- if and (.Values.enabled | default true) .Values.service.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -53,7 +53,7 @@ spec:
   selector:
     {{- include "data-engine.selectorLabels" . | nindent 4 }}
 ---
-{{- if .Values.monitoring.metrics.enabled }}
+{{- if and (.Values.enabled | default true) .Values.monitoring.metrics.enabled }}
 # Headless service for metrics scraping
 apiVersion: v1
 kind: Service

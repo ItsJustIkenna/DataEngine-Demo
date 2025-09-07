@@ -4,6 +4,8 @@ target/
 # Ignore sensitive or environment-specific files
 appsettings.json
 .env
+.env.local
+.env.*.local
 
 # Helm values files with real credentials - NEVER COMMIT THESE!
 **/values-dev.yaml

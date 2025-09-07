@@ -1,740 +1,225 @@
 # DataEngine
 
-> **Ultra-High-Performance Real-Time Market Data Processing Engine**
-
-A production-grade, institutional-quality market data processing engine built in Rust, designed for ultra-low latency trading systems. Processes real-time market data from cryptocurrency exchanges with sub-millisecond performance while providing flexible deployment options for both full messaging and database-only modes.
-
-## 🚀 Key Features
-
-### Performance Excellence
-- **Sub-millisecond Processing**: < 1ms end-to-end latency for critical path operations
-- **Ultra-Low Latency**: SIMD-optimized message parsing with zero-copy operations
-- **Lock-Free Architecture**: Memory-efficient concurrent data structures
-- **Kernel Bypass**: Direct hardware access for maximum throughput
-- **RDTSC Precision**: CPU cycle-level timing measurements
-
-### Market Data Processing
-- **Real-Time WebSocket Streams**: Live market data from Kraken and other exchanges
-- **Order Book Management**: Lock-free Level 3 order book processing
-- **Trade Data Processing**: Real-time trade execution data handling
-- **Balance Tracking**: Account balance snapshots and updates
-- **Multi-Symbol Support**: Concurrent processing of multiple trading pairs
-
-### Data Persistence
-- **PostgreSQL + TimescaleDB**: Time-series optimized storage for historical data
-- **Redis Caching**: High-performance in-memory caching layer
-- **Connection Pooling**: Optimized database connection management
-- **Transactional Integrity**: ACID compliance for critical financial data
-
-### Deployment Flexibility
-- **Database-Only Mode**: Data collection and persistence without message broadcasting
-- **Full Messaging Mode**: Complete real-time data distribution pipeline
-- **Environment-Based Configuration**: Simple deployment mode switching
-- **Kubernetes Ready**: Production-grade container orchestration support
-
-## 📊 Performance Benchmarks
-
-| Metric | Performance | Use Case |
-|--------|-------------|----------|
-| **End-to-End Latency** | 402μs | Complete message processing pipeline |
-| **Order Book Updates** | < 100μs | Level 3 order book modifications |
-| **Message Parsing** | < 50μs | SIMD-optimized JSON parsing |
-| **Database Writes** | < 200μs | PostgreSQL + TimescaleDB inserts |
-| **Redis Operations** | < 10μs | Cache reads/writes |
-| **Memory Usage** | < 500MB | Peak memory footprint |
-| **CPU Utilization** | < 15% | At 10,000 messages/second |
-| **Throughput** | 50,000+ msg/s | Sustained message processing |
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        DataEngine Architecture                   │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │   WebSocket     │  │   Fast Message  │  │   SIMD Message  │  │
-│  │   Handlers      │──│     Parser      │──│    Processor    │  │
-│  │                 │  │                 │  │                 │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
-│           │                       │                       │      │
-│           └───────────────────────┼───────────────────────┘      │
-│                                   │                              │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │                Order Book Manager                          │ │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐       │ │
-│  │  │   Level 3   │  │   Balances  │  │    Trades   │       │ │
-│  │  │  Processor  │  │  Processor  │  │  Processor  │       │ │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘       │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│           │                       │                       │      │
-│           ▼                       ▼                       ▼      │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │  PostgreSQL +   │  │     Redis       │  │  Message Broker │  │
-│  │   TimescaleDB   │  │    Caching      │  │   (Optional)    │  │
-│  │   Persistence   │  │                 │  │   Publishing    │  │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Core Components
-
-1. **WebSocket Handler**: Real-time connection management with automatic reconnection
-2. **Fast Message Parser**: SIMD-optimized JSON parsing with field caching
-3. **Order Book Processor**: Lock-free Level 3 order book management
-4. **Database Layer**: PostgreSQL + TimescaleDB with connection pooling
-5. **Caching Layer**: Redis-based high-performance data caching
-6. **Message Broker**: Optional real-time data distribution
-7. **Metrics System**: Ultra-precision performance monitoring
+High-performance cryptocurrency market data processing engine built with Rust and deployed on Kubernetes using Helm.
 
 ## 🚀 Quick Start
 
 ### Prerequisites
+- **Docker Desktop** with Kubernetes enabled
+- **kubectl** configured and connected to cluster  
+- **Helm 3.x** installed (`winget install Helm.Helm`)
 
-- **Rust**: 1.70+ (stable toolchain)
-- **PostgreSQL**: 12+ with TimescaleDB extension
-- **Redis**: 6.0+
-- **Docker**: 20.10+ (optional)
-- **Kubernetes**: 1.20+ (for production deployment)
+### Deploy DataEngine
 
-### Installation
+```powershell
+# Navigate to DataEngine directory
+cd DataEngine
 
-```bash
-# Clone the repository
-git clone https://github.com/your-org/tradingplatform.git
-cd tradingplatform/DataEngine
+# Deploy development environment
+.\scripts\deploy.ps1
 
-# Build the project
-cargo build --release
+# Check status
+.\scripts\deploy.ps1 -Status
 
-# Run tests
-cargo test
+# Access the application (in new terminal)
+kubectl port-forward -n data-engine-dev service/data-engine 8080:8080
 
-# Start the DataEngine
-cargo run --release
+# Open in browser
+Start-Process "http://localhost:8080"
 ```
 
-### Docker Quick Start
+## 📋 Available Commands
 
-```bash
-# Build the Docker image
-docker build -t dataengine:latest .
+### Deployment
+```powershell
+# Development environment
+.\scripts\deploy.ps1 -Environment dev
 
-# Run with docker-compose
-docker-compose up -d
+# Production environment  
+.\scripts\deploy.ps1 -Environment prod
+
+# With custom secrets
+.\scripts\deploy.ps1 -SecretsFile secrets.yaml
+
+# Clean redeployment
+.\scripts\deploy.ps1 -Clean
 ```
 
-### Configuration
-
-Create a `config.toml` file:
-
-```toml
-[database]
-host = "localhost"
-port = 5432
-username = "dataengine"
-password = "your_password"
-database = "trading_data"
-max_connections = 20
-
-[redis]
-host = "localhost"
-port = 6379
-max_connections = 10
-
-[kraken]
-websocket_url = "wss://ws.kraken.com"
-symbols = ["XBT/USD", "ETH/USD", "SOL/USD"]
-reconnect_delay = 5000
-
-[message_broker]
-host = "localhost"
-port = 9092
-topics = ["market.data.kraken", "order.book.updates"]
-
-[performance]
-enable_simd = true
-enable_kernel_bypass = true
-memory_pool_size = 1048576
-```
-
-## 🔧 Deployment Modes
-
-### Database-Only Mode (Helm)
-
-Perfect for data collection and storage without real-time distribution:
-
-```bash
-# Deploy with database-only values
-helm install dataengine-db-only ./k8s/data-engine-helm \
-  -f ./k8s/data-engine-helm/values-database-only.yaml
-
-# Or override values directly
-helm install dataengine ./k8s/data-engine-helm \
-  --set config.database_only_mode=true \
-  --set config.disable_message_broker=true
-```
-
-**Features**:
-- ✅ Full database operations (PostgreSQL + TimescaleDB + Redis)
-- ✅ Real-time WebSocket data processing
-- ✅ Order book management and caching
-- ❌ Message broker publishing disabled
-- 💡 ~100MB less memory usage, ~10% better CPU efficiency
-
-### Full Messaging Mode (Helm)
-
-Complete real-time data processing and distribution:
-
-```bash
-# Deploy with default values (full messaging)
-helm install dataengine ./k8s/data-engine-helm
-
-# Deploy with production values
-helm install dataengine ./k8s/data-engine-helm \
-  -f ./k8s/data-engine-helm/values-prod.yaml
-```
-
-**Features**:
-- ✅ All database operations
-- ✅ Real-time WebSocket data processing
-- ✅ Order book management and caching
-- ✅ Message broker publishing enabled
-- ✅ Cross-service real-time data distribution
-
-### Local Development
-
-For local development without Kubernetes:
-
-```bash
-# Database-only mode
-export DATABASE_ONLY_MODE=true
-export DISABLE_MESSAGE_BROKER=true
-cargo run --release
-
-# Full messaging mode (default)
-cargo run --release
-```
-
-### Kubernetes Deployment
-
-#### Production Deployment (Full Messaging)
-
-```bash
-# Deploy with production values
-helm install dataengine ./k8s/data-engine-helm \
-  -f ./k8s/data-engine-helm/values-prod.yaml \
-  --namespace trading-platform \
-  --create-namespace
-
+### Management
+```powershell
 # Check deployment status
-kubectl get pods -n trading-platform
-kubectl logs -f deployment/dataengine -n trading-platform
+.\scripts\deploy.ps1 -Status
+
+# View logs
+.\scripts\logs.ps1 -Follow
+
+# Health check
+.\scripts\health-check.ps1 -Detailed
+
+# Stop deployment
+.\scripts\deploy.ps1 -Stop
 ```
 
-#### Database-Only Deployment
-
+### Using Makefile
 ```bash
-# Deploy database-only mode
-helm install dataengine-db-only ./k8s/data-engine-helm \
-  -f ./k8s/data-engine-helm/values-database-only.yaml \
-  --namespace data-collection \
-  --create-namespace
+make dev          # Deploy development
+make prod         # Deploy production  
+make status       # Check status
+make logs         # View logs
+make stop         # Stop deployment
 ```
 
-#### Custom Configuration
+## 🔑 Secret Management
 
-```bash
-# Override specific values
-helm install dataengine ./k8s/data-engine-helm \
-  --set config.database_only_mode=true \
-  --set replicaCount=3 \
-  --set resources.requests.memory=4Gi \
-  --set postgresql.enabled=true \
-  --set redis.enabled=true
+### Development (Quick Start)
+```powershell
+# Uses default development secrets - no setup needed
+.\scripts\deploy.ps1
 ```
 
-#### Available Helm Values Files
+### Production (Secure)
+```powershell
+# 1. Create secrets file from template
+Copy-Item secrets.template.yaml secrets.yaml
 
-- `values.yaml` - Default configuration (full messaging)
-- `values-prod.yaml` - Production optimized settings
-- `values-dev.yaml` - Development environment
-- `values-qa.yaml` - QA environment settings  
-- `values-database-only.yaml` - Database-only mode optimized
+# 2. Edit with your actual credentials
+notepad secrets.yaml
 
-## 🔍 Monitoring and Observability
-
-### Built-in Metrics
-
-The DataEngine provides comprehensive metrics through the ultra-precision metrics system:
-
-```rust
-// Access real-time metrics
-let metrics = UltraPrecisionMetrics::global();
-println!("Processing latency: {}μs", metrics.average_latency_micros());
-println!("Messages processed: {}", metrics.total_messages_processed());
-println!("Error rate: {:.2}%", metrics.error_rate_percentage());
+# 3. Deploy with secrets
+.\scripts\deploy.ps1 -Environment prod -SecretsFile secrets.yaml
 ```
 
-### Key Metrics
+## 🏗️ Architecture
 
-| Metric | Description | Typical Value |
-|--------|-------------|---------------|
-| `processing_latency_us` | End-to-end message processing time | < 500μs |
-| `database_write_latency_us` | PostgreSQL write operations | < 200μs |
-| `redis_operation_latency_us` | Redis cache operations | < 10μs |
-| `messages_per_second` | Sustained throughput | 10,000+ |
-| `error_rate_percentage` | Processing error rate | < 0.01% |
-| `memory_usage_mb` | Peak memory consumption | < 500MB |
-| `cpu_utilization_percentage` | CPU usage under load | < 15% |
+- **Rust Application**: High-performance market data processing
+- **PostgreSQL + TimescaleDB**: Time-series database for market data
+- **Redis**: High-speed caching and session storage
+- **Kubernetes**: Container orchestration and scaling
+- **Helm**: Configuration management and deployment
+- **Prometheus + Grafana**: Monitoring and observability (optional)
 
-### Health Endpoints
+## 📊 Environments
 
-```bash
-# Check system health
-curl http://localhost:8080/health
+| Environment | Namespace | Resources | Use Case |
+|-------------|-----------|-----------|----------|
+| **dev** | data-engine-dev | 1 CPU, 1GB RAM | Development, testing |
+| **qa** | data-engine-qa | 1 CPU, 2GB RAM | Quality assurance |
+| **prod** | data-engine | 2 CPU, 4GB RAM | Production deployment |
+| **monitoring** | data-engine-monitoring | + Prometheus/Grafana | Full observability |
 
-# Get detailed metrics
-curl http://localhost:8080/metrics
+## 🔧 Advanced Usage
 
-# View current configuration
-curl http://localhost:8080/config
+### Access Services
+```powershell
+# DataEngine API
+kubectl port-forward -n data-engine-dev service/data-engine 8080:8080
+
+# Database (PostgreSQL)
+kubectl port-forward -n data-engine-dev service/postgresql 5432:5432
+
+# Cache (Redis)
+kubectl port-forward -n data-engine-dev service/redis 6379:6379
+
+# Metrics (Prometheus)
+kubectl port-forward -n data-engine-dev service/prometheus 9090:9090
+
+# Dashboards (Grafana)
+kubectl port-forward -n data-engine-dev service/grafana 3000:3000
 ```
 
-### Logging
+### Database Operations
+```powershell
+# Create backup
+.\scripts\database.ps1 -Action backup
 
-Structured JSON logging with configurable levels:
+# Restore from backup
+.\scripts\database.ps1 -Action restore
 
-```toml
-[logging]
-level = "info"
-format = "json"
-file = "/var/log/dataengine.log"
-max_size = "100MB"
-max_files = 10
+# Check database status
+.\scripts\database.ps1 -Action status
 ```
 
-## 🛠️ Development
+### Log Management
+```powershell
+# Follow application logs
+.\scripts\logs.ps1 -Follow
 
-### Project Structure
+# Export logs to files
+.\scripts\logs.ps1 -Export
 
-```
-DataEngine/
-├── Cargo.toml                 # Project configuration
-├── Dockerfile                 # Container build configuration
-├── docker-compose.yml         # Multi-service orchestration
-├── k8s/                      # Kubernetes deployment manifests
-├── config/                   # Configuration management
-├── hostbuilder/              # Core engine implementation
-│   ├── src/
-│   │   ├── handlers/         # WebSocket and message handlers
-│   │   │   ├── websockets/   # WebSocket connection management
-│   │   │   ├── models/       # Data model processors
-│   │   │   └── rest_apis/    # REST API integrations
-│   │   ├── caching.rs        # Redis caching layer
-│   │   ├── kernel_bypass.rs  # Low-level optimizations
-│   │   ├── order_book.rs     # Lock-free order book
-│   │   ├── ultra_metrics.rs  # Performance monitoring
-│   │   └── lib.rs           # Main library entry
-├── performance/              # Performance optimization modules
-├── program/                  # Executable programs
-└── tests/                   # Integration and unit tests
+# Filter for errors
+.\scripts\logs.ps1 -Filter "ERROR" -Since "1h"
 ```
 
-### Building from Source
+## 🛠️ Development Workflow
 
-```bash
-# Development build
-cargo build
+```powershell
+# 1. Deploy development environment
+.\scripts\deploy.ps1 -Environment dev
 
-# Release build with optimizations
-cargo build --release
+# 2. Make code changes in your IDE
 
-# Build with specific features
-cargo build --features "simd,kernel-bypass"
+# 3. Redeploy with latest changes
+.\scripts\deploy.ps1 -Clean
 
-# Cross-compilation for different targets
-cargo build --target x86_64-unknown-linux-musl
+# 4. Monitor logs
+.\scripts\logs.ps1 -Follow
+
+# 5. Check health
+.\scripts\health-check.ps1
+
+# 6. Access application
+kubectl port-forward -n data-engine-dev service/data-engine 8080:8080
 ```
 
-### Running Tests
+## 📚 Documentation
 
-```bash
-# Unit tests
-cargo test
+- **Scripts**: See `scripts/README.md` for detailed script documentation
+- **Helm Chart**: See `k8s/data-engine-helm/` for Kubernetes configuration
+- **API Docs**: Available at `http://localhost:8080/docs` when running
 
-# Integration tests
-cargo test --test integration
+## 🚨 Important Notes
 
-# Performance benchmarks
-cargo bench
+1. **Never commit secrets**: `secrets.yaml` files should never be committed to version control
+2. **Kubernetes required**: This deployment requires a running Kubernetes cluster
+3. **Resource requirements**: Ensure adequate CPU/memory for your target environment
+4. **Network access**: Cluster must have internet access to pull container images
 
-# End-to-end tests
-./scripts/test-end-to-end-latency.ps1
-```
-
-### Debugging
-
-```bash
-# Debug build with symbols
-cargo build --features debug-symbols
-
-# Run with debug logging
-RUST_LOG=debug cargo run
-
-# Memory profiling with Valgrind
-valgrind --tool=memcheck cargo run
-
-# CPU profiling with perf
-perf record cargo run
-perf report
-```
-
-## 🔧 Configuration Reference
-
-### Environment Variables
-
-| Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
-| `DATABASE_ONLY_MODE` | Enable database-only mode | `false` | `true` |
-| `DISABLE_MESSAGE_BROKER` | Disable message publishing | `false` | `true` |
-| `POSTGRES_HOST` | PostgreSQL server hostname | `localhost` | `postgres-cluster.internal` |
-| `POSTGRES_PORT` | PostgreSQL server port | `5432` | `5432` |
-| `POSTGRES_USER` | PostgreSQL username | `dataengine` | `trading_user` |
-| `POSTGRES_PASSWORD` | PostgreSQL password | - | `secure_password` |
-| `POSTGRES_DB` | PostgreSQL database name | `trading_data` | `market_data` |
-| `REDIS_HOST` | Redis server hostname | `localhost` | `redis-cluster.internal` |
-| `REDIS_PORT` | Redis server port | `6379` | `6379` |
-| `RUST_LOG` | Logging level | `info` | `debug` |
-
-### Performance Tuning
-
-#### Memory Configuration
-
-```toml
-[performance]
-# Memory pool size for zero-copy operations
-memory_pool_size = 1048576  # 1MB
-
-# Buffer sizes for different data types
-order_book_buffer_size = 65536
-trade_buffer_size = 32768
-balance_buffer_size = 16384
-```
-
-#### CPU Optimizations
-
-```toml
-[cpu]
-# Enable SIMD optimizations
-enable_simd = true
-
-# CPU affinity for critical threads
-order_book_cpu_affinity = [0, 1]
-websocket_cpu_affinity = [2, 3]
-database_cpu_affinity = [4, 5]
-```
-
-#### Network Settings
-
-```toml
-[network]
-# TCP buffer sizes
-tcp_receive_buffer = 262144  # 256KB
-tcp_send_buffer = 262144     # 256KB
-
-# WebSocket settings
-websocket_timeout = 30000    # 30 seconds
-ping_interval = 10000        # 10 seconds
-max_frame_size = 1048576     # 1MB
-```
-
-## 🔐 Security
-
-### Authentication
-
-```toml
-[security]
-# API key authentication
-api_key_required = true
-api_key_header = "X-API-Key"
-
-# Rate limiting
-rate_limit_requests_per_second = 1000
-rate_limit_burst_size = 100
-```
-
-### Network Security
-
-```toml
-[network_security]
-# TLS configuration
-tls_enabled = true
-tls_cert_path = "/etc/ssl/certs/dataengine.crt"
-tls_key_path = "/etc/ssl/private/dataengine.key"
-
-# Firewall rules
-allowed_ips = ["10.0.0.0/8", "192.168.0.0/16"]
-blocked_ips = []
-```
-
-## 🧪 Testing
-
-### Performance Tests
-
-```bash
-# Latency benchmarks
-cargo bench --bench latency
-
-# Throughput tests
-cargo bench --bench throughput
-
-# Memory usage profiling
-cargo bench --bench memory
-
-# End-to-end integration
-./scripts/test-end-to-end-latency.ps1
-```
-
-### Load Testing
-
-```bash
-# Simulate high-frequency trading load
-cargo run --bin benchmark -- --clients 100 --messages 1000000
-
-# WebSocket connection stress test
-cargo run --bin websocket-stress -- --connections 1000
-
-# Database write performance
-cargo run --bin db-benchmark -- --writes 100000
-```
-
-## 📊 Observability
-
-### Prometheus Metrics
-
-```yaml
-# Prometheus scrape configuration
-- job_name: 'dataengine'
-  static_configs:
-  - targets: ['dataengine:8080']
-  scrape_interval: 5s
-  metrics_path: '/metrics'
-```
-
-### Grafana Dashboard
-
-Key visualizations available:
-- **Processing Latency**: Real-time latency percentiles
-- **Throughput**: Messages processed per second
-- **Error Rates**: System error rate over time
-- **Resource Usage**: CPU, memory, and network utilization
-- **Database Performance**: Query latency and connection pool stats
-
-### Jaeger Tracing
-
-```toml
-[tracing]
-enabled = true
-jaeger_endpoint = "http://jaeger:14268/api/traces"
-service_name = "dataengine"
-sample_rate = 0.1
-```
-
-## 🚨 Troubleshooting
+## 🆘 Troubleshooting
 
 ### Common Issues
 
-#### High Memory Usage
-```bash
-# Check memory pool configuration
-grep -i "memory_pool_size" config.toml
+**Deployment fails**:
+```powershell
+# Check cluster connectivity
+kubectl cluster-info
 
-# Monitor memory allocations
-RUST_LOG=trace cargo run 2>&1 | grep -i memory
+# Check pod status
+kubectl get pods -n data-engine-dev
+
+# Check events
+kubectl get events -n data-engine-dev --sort-by='.lastTimestamp'
 ```
 
-#### Database Connection Issues
-```bash
-# Test database connectivity
-psql -h $POSTGRES_HOST -U $POSTGRES_USER -c "SELECT 1;"
+**Cannot access application**:
+```powershell
+# Verify port-forward is running
+kubectl port-forward -n data-engine-dev service/data-engine 8080:8080
 
-# Check connection pool status
-curl http://localhost:8080/metrics | grep db_pool
+# Check service status
+kubectl get services -n data-engine-dev
 ```
 
-#### WebSocket Disconnections
-```bash
-# Check network connectivity
-ping ws.kraken.com
+**Resource issues**:
+```powershell
+# Check resource usage
+kubectl top pods -n data-engine-dev
 
-# Monitor WebSocket logs
-tail -f /var/log/dataengine.log | grep -i websocket
+# Scale down for development
+helm upgrade data-engine ./k8s/data-engine-helm --set replicaCount=1
 ```
 
-#### Performance Degradation
-```bash
-# CPU profiling
-perf top -p $(pgrep dataengine)
-
-# Memory profiling
-pmap -x $(pgrep dataengine)
-
-# Check system limits
-ulimit -a
+For more help, check the logs:
+```powershell
+.\scripts\logs.ps1 -Filter "ERROR" -Detailed
 ```
-
-### Debug Commands
-
-```bash
-# Enable verbose logging
-export RUST_LOG=dataengine=trace
-
-# Check configuration
-cargo run -- --check-config
-
-# Validate database schema
-cargo run -- --validate-schema
-
-# Test WebSocket connectivity
-cargo run -- --test-websockets
-```
-
-## 🚀 Production Deployment
-
-### Resource Requirements
-
-| Component | CPU | Memory | Storage | Network |
-|-----------|-----|--------|---------|---------|
-| **DataEngine** | 2-4 cores | 1-2GB RAM | 10GB SSD | 1Gbps |
-| **PostgreSQL** | 4-8 cores | 8-16GB RAM | 500GB NVMe | 1Gbps |
-| **Redis** | 2 cores | 4-8GB RAM | 50GB SSD | 1Gbps |
-| **Message Broker** | 2-4 cores | 2-4GB RAM | 100GB SSD | 1Gbps |
-
-### High Availability Setup
-
-```yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: dataengine-service
-spec:
-  selector:
-    app: dataengine
-  ports:
-  - port: 8080
-    targetPort: 8080
-  type: LoadBalancer
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: dataengine
-spec:
-  replicas: 3
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-  selector:
-    matchLabels:
-      app: dataengine
-  template:
-    spec:
-      containers:
-      - name: dataengine
-        image: dataengine:latest
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
-```
-
-### Backup and Recovery
-
-```bash
-# Database backup
-pg_dump -h $POSTGRES_HOST -U $POSTGRES_USER trading_data > backup.sql
-
-# Redis backup
-redis-cli --rdb dump.rdb
-
-# Configuration backup
-tar -czf config-backup.tar.gz config/
-```
-
-## 📈 Roadmap
-
-### Version 1.1 (Q4 2024)
-- [ ] Support for additional exchanges (Binance, Coinbase Pro)
-- [ ] GraphQL API for historical data queries
-- [ ] Real-time analytics engine
-- [ ] Machine learning integration for pattern detection
-
-### Version 1.2 (Q1 2025)
-- [ ] Multi-region deployment support
-- [ ] Advanced order routing algorithms
-- [ ] Risk management integration
-- [ ] Compliance reporting tools
-
-### Version 2.0 (Q2 2025)
-- [ ] Equity markets support (NYSE, NASDAQ)
-- [ ] Options and derivatives processing
-- [ ] Advanced portfolio management
-- [ ] AI-powered market prediction
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
-
-```bash
-# Fork the repository
-git clone https://github.com/your-username/tradingplatform.git
-
-# Create a feature branch
-git checkout -b feature/amazing-feature
-
-# Make your changes and test
-cargo test
-
-# Commit and push
-git commit -am 'Add amazing feature'
-git push origin feature/amazing-feature
-
-# Create a Pull Request
-```
-
-### Code Standards
-
-- **Performance**: All changes must maintain sub-millisecond latency requirements
-- **Safety**: Use `unsafe` code only when absolutely necessary with proper documentation
-- **Testing**: Minimum 90% test coverage for all new features
-- **Documentation**: Comprehensive documentation for all public APIs
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-- **Documentation**: [https://docs.tradingplatform.com](https://docs.tradingplatform.com)
-- **Issues**: [GitHub Issues](https://github.com/your-org/tradingplatform/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-org/tradingplatform/discussions)
-- **Email**: support@tradingplatform.com
-
----
-
-**Built with ❤️ for ultra-high-frequency trading**
-
-*DataEngine - Where microseconds matter™*

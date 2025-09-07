@@ -1,122 +1,210 @@
 # =============================================================================
-# DataEngine Database-Only Mode Configuration
-# Optimized for data collection and storage without message broker publishing
+# DataEngine Database and Cache Only Configuration
+# Deploys only PostgreSQL (TimescaleDB) and Redis - No DataEngine application
 # =============================================================================
 
-environment: production
-replicaCount: 2
+# Global configuration
+global:
+  environment: development
 
-# Database-only optimized resources
+# =============================================================================
+# DataEngine Application - DISABLED for database-only mode
+# =============================================================================
+
+# Disable the main DataEngine application
+enabled: false
+
+# Minimal application configuration (ignored when enabled: false)
+replicaCount: 0
+image:
+  repository: data-engine
+  tag: "local"
+  pullPolicy: Never
+
+# =============================================================================
+# Resource Management - Minimal since no application pods
+# =============================================================================
+
 resources:
   limits:
-    cpu: "2000m"
-    memory: "4Gi"
+    cpu: "100m"
+    memory: "128Mi"
   requests:
-    cpu: "1000m"
-    memory: "2Gi"
+    cpu: "50m"
+    memory: "64Mi"
 
-# Limited autoscaling for database-only mode
+# Disable autoscaling since no application
 autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 6
-  targetCPUUtilizationPercentage: 75
-
-# Database-only configuration
-config:
-  log_level: "info"
-  rust_log: "data_engine=info,hostbuilder=debug"
-  tokio_worker_threads: 8  # Optimized for database operations
-  max_connections: 1000
+  enabled: false
   
   # Database-only mode flags
   database_only_mode: true
   disable_message_broker: true
   disable_publisher: true
-
+  
+  # Empty exchanges for database-only mode
+  exchanges: []
+  topics: []
+  topic_routing: {}
+  
 # =============================================================================
-# External Services Configuration (Database-Only)
+# Database and Cache Services Configuration
 # =============================================================================
 
-# Use external database
-externalDatabase:
-  enabled: true
-  host: "prod-postgres.internal"
-  port: 5432
-  username: "dataengine_db"
-  database: "trading_platform"
-
-# Use external Redis for caching
-externalRedis:
-  enabled: true
-  host: "prod-redis.internal"
-  port: 6379
-
-# Disable embedded services
+# Enable LOCAL PostgreSQL database
 postgresql:
-  enabled: false
+  enabled: true
+  auth:
+    enablePostgresUser: true
+    postgresPassword: "local_dev_postgres_password"
+    username: "dataengine_user"
+    password: "local_dev_user_password"
+    database: "trading_platform"
+  primary:
+    resources:
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""  # Use default storage class
+    # Install TimescaleDB extension
+    initdb:
+      scripts:
+        init-timescaledb.sql: |
+          -- Create TimescaleDB extension
+          CREATE EXTENSION IF NOT EXISTS timescaledb;
+          
+          -- Create schemas for trading data
+          CREATE SCHEMA IF NOT EXISTS market_data;
+          CREATE SCHEMA IF NOT EXISTS trading;
+          CREATE SCHEMA IF NOT EXISTS analytics;
+          
+          -- Grant permissions to dataengine_user
+          GRANT ALL PRIVILEGES ON SCHEMA market_data TO dataengine_user;
+          GRANT ALL PRIVILEGES ON SCHEMA trading TO dataengine_user;
+          GRANT ALL PRIVILEGES ON SCHEMA analytics TO dataengine_user;
 
+# Enable LOCAL Redis cache
 redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "local_dev_redis_password"
+  master:
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+    persistence:
+      enabled: true
+      size: 10Gi
+  replica:
+    replicaCount: 1
+    resources:
+      limits:
+        cpu: "250m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+
+# =============================================================================
+# Disable All Application Components
+# =============================================================================
+
+# Disable external services (using local embedded services)
+externalDatabase:
+  enabled: false
+
+externalRedis:
+  enabled: false
+
+# Disable monitoring components for resource efficiency
+grafana:
+  enabled: false
+
+prometheus:
+  enabled: false
+
+alertmanager:
+  enabled: false
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  outputs: ["stdout"]
+  file_path: null
+  max_file_size_mb: 100
+  max_files: 5
+  structured_logging: true
+
+# =============================================================================
+# Disable All Application Services
+# =============================================================================
+
+# Disable main application service
+service:
+  enabled: false
+
+# Disable ingress
+ingress:
+  enabled: false
+
+# Disable all monitoring components
+monitoring:
+  enabled: false
+  metrics:
+    enabled: false
+    serviceMonitor:
+      enabled: false
+  prometheus:
+    enabled: false
+  grafana:
+    enabled: false
+
+# Disable persistence (not needed for database-only deployment)
+persistence:
   enabled: false
 
 # =============================================================================
-# Secrets Configuration (NO ACTUAL SECRETS STORED)
+# Networking (Database Access Only)
 # =============================================================================
 
-secrets:
-  database:
-    enabled: true
-    username: "dataengine_db"
-    # password: PROVIDED VIA --set-string AT DEPLOY TIME
-    
-  redis:
-    enabled: true
-    # password: PROVIDED VIA --set-string AT DEPLOY TIME
-    
-  api_keys:
-    # kraken: PROVIDED VIA --set-string AT DEPLOY TIME
-    
-  tls:
-    cert: ""
-    key: ""
+# Network policy to allow database access
+networkPolicy:
+  enabled: true
+  ingress:
+    - from: []  # Allow all internal cluster traffic
+      ports:
+        - protocol: TCP
+          port: 5432  # PostgreSQL
+        - protocol: TCP
+          port: 6379  # Redis
 
 # =============================================================================
-# Database-Only Specific Settings
+# Security Context (Minimal)
 # =============================================================================
 
-# Security for database-only mode
 podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
-  fsGroup: 1000
+  runAsNonRoot: false  # Allow postgres to run as postgres user
+  fsGroup: 999  # postgres group
 
 securityContext:
   allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: true
-  runAsNonRoot: true
-  runAsUser: 1000
+  readOnlyRootFilesystem: false
 
-# Monitoring focused on database operations
-monitoring:
-  enabled: true
-  metrics:
-    enabled: true
-    port: 9090
-    serviceMonitor:
-      enabled: true
+# =============================================================================
+# Resource Limits (Database Focus)
+# =============================================================================
 
-# Database-only environment variables
-env:
-  ENVIRONMENT: "production"
-  DEBUG_MODE: "false"
-  DATABASE_POOL_SIZE: "30"  # Higher for database-focused workload
-  REDIS_POOL_SIZE: "15"
-  ENABLE_QUERY_LOGGING: "true"
-  ENABLE_PERFORMANCE_METRICS: "true"
-  MAX_CONCURRENT_REQUESTS: "2000"
-  
-  # Database-only specific variables
-  DATABASE_ONLY_MODE: "true"
-  DISABLE_MESSAGE_BROKER: "true"
-  DISABLE_PUBLISHER: "true"
+# No application resource limits since no application pods are deployed
+# Resources are allocated to PostgreSQL and Redis components only

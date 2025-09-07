@@ -1,3 +1,4 @@
+{{- if .Values.enabled | default true }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -175,12 +176,39 @@ spec:
                   key: redis-password
             {{- else if .Values.externalRedis.enabled }}
             - name: REDIS_URL
-              value: "redis://:$(REDIS_PASSWORD)@{{ .Values.externalRedis.host }}:{{ .Values.externalRedis.port }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}-redis
+                  key: url
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "data-engine.fullname" . }}-redis
                   key: password
+            {{- end }}
+            
+            # API Keys - Support both values file and command line --set
+            {{- if or .Values.kraken_api_key (and .Values.secrets.api_keys .Values.secrets.api_keys.kraken_api_key) }}
+            - name: KRAKEN_API_KEY
+              {{- if .Values.kraken_api_key }}
+              value: {{ .Values.kraken_api_key | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}
+                  key: KRAKEN_API_KEY
+              {{- end }}
+            {{- end }}
+            {{- if or .Values.kraken_secret_key (and .Values.secrets.api_keys .Values.secrets.api_keys.kraken_secret_key) }}
+            - name: KRAKEN_SECRET_KEY
+              {{- if .Values.kraken_secret_key }}
+              value: {{ .Values.kraken_secret_key | quote }}
+              {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}
+                  key: KRAKEN_SECRET_KEY
+              {{- end }}
             {{- end }}
             
             # Performance tuning
@@ -306,3 +334,4 @@ spec:
         {{- range .Values.extraVolumes }}
         - {{- toYaml . | nindent 10 }}
         {{- end }}
+{{- end }}

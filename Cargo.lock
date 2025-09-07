@@ -334,9 +334,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "tempfile",
- "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -2095,6 +2092,7 @@ dependencies = [
  "config",
  "fastrand",
  "hostbuilder",
+ "libc",
  "mimalloc",
  "num_cpus",
  "performance",

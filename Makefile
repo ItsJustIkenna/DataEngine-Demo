@@ -2,7 +2,14 @@
 # Provides comprehensive build management for all environments
 
 # Main Makefile for DataEngine project
-.PHONY: help build release ultra debug clean test lint bench install dev watch all
+.PHONY: help build release ultra debug clean test lint bench install dev watchelm-dev: ## Deploy DataEngine with Helm (development)
+	@echo -e "$(CYAN)🚀 Deploying DataEngine with Helm (development)...$(NC)"
+	@echo -e "$(YELLOW)💡 Set environment variables for custom secrets:$(NC)"
+	@echo -e "$(GRAY)   export DB_PASSWORD='your-dev-password'$(NC)"
+	@echo -e "$(GRAY)   export REDIS_PASSWORD='your-redis-password'$(NC)"
+	@echo -e "$(GRAY)   export KRAKEN_API_KEY='your-api-key'$(NC)"
+	@./scripts/deploy.ps1 -Environment dev
+	@echo -e "$(GREEN)✅ Development environment deployed$(NC)"l
 .DEFAULT_GOAL := help
 
 # Project configuration
@@ -207,15 +214,40 @@ else
 	@echo -e "$(YELLOW)⚠️ Not running on Windows$(NC)"
 endif
 
-# Docker targets
-docker-build: ## Build Docker image
-	@echo -e "$(CYAN)🐳 Building Docker image...$(NC)"
-	@docker build -t $(PROJECT_NAME):latest .
-	@echo -e "$(GREEN)✅ Docker image built$(NC)"
+# Kubernetes/Helm targets
+helm-dev: ## Deploy DataEngine with Helm (development)
+	@echo -e "$(CYAN)� Deploying DataEngine with Helm (development)...$(NC)"
+	@./scripts/deploy.ps1 -Environment dev
+	@echo -e "$(GREEN)✅ Development environment deployed$(NC)"
 
-docker-run: ## Run in Docker container
-	@echo -e "$(CYAN)🐳 Running Docker container...$(NC)"
-	@docker run --rm -it $(PROJECT_NAME):latest
+helm-prod: ## Deploy DataEngine with Helm (production)
+	@echo -e "$(CYAN)� Deploying DataEngine with Helm (production)...$(NC)"
+	@./scripts/deploy.ps1 -Environment prod
+	@echo -e "$(GREEN)✅ Production environment deployed$(NC)"
+
+helm-stop: ## Stop/uninstall Helm deployment
+	@echo -e "$(YELLOW)� Stopping Helm deployment...$(NC)"
+	@./scripts/deploy.ps1 -Stop
+
+helm-status: ## Show Helm deployment status
+	@echo -e "$(CYAN)📊 Checking Helm deployment status...$(NC)"
+	@./scripts/deploy.ps1 -Status
+
+helm-logs: ## Show logs from Helm deployment
+	@echo -e "$(CYAN)� Showing logs...$(NC)"
+	@./scripts/logs.ps1 -Follow
+
+helm-clean: ## Clean Helm deployment and redeploy
+	@echo -e "$(YELLOW)🧹 Clean Helm redeployment...$(NC)"
+	@./scripts/deploy.ps1 -Clean
+
+# Convenience aliases
+dev: helm-dev ## Alias for helm-dev
+prod: helm-prod ## Alias for helm-prod  
+deploy: helm-dev ## Alias for helm-dev
+stop: helm-stop ## Alias for helm-stop
+status: helm-status ## Alias for helm-status
+logs: helm-logs ## Alias for helm-logs
 
 # Information targets
 version: ## Show version information
