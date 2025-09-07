@@ -108,7 +108,7 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     needs: [validate-secrets, determine-environment]
-    steps:        
+    steps:
       # Install Azure CLI
       - name: Install Azure CLI
         run: |
