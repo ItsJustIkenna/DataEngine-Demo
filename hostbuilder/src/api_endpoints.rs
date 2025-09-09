@@ -136,6 +136,8 @@ pub fn create_api_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(health_check))
         .route("/health/detailed", get(detailed_health_check))
+        .route("/startup", get(startup_check))  // Kubernetes startup probe
+        .route("/ready", get(readiness_check))  // Kubernetes readiness probe
         .route("/metrics", get(get_metrics))
         .route("/metrics/reset", post(reset_metrics))
         .route("/config", get(get_config))

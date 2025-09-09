@@ -76,6 +76,9 @@ COPY DataEngine/hostbuilder ./hostbuilder
 COPY DataEngine/program ./program
 COPY DataEngine/performance ./performance
 
+# Run tests to ensure code quality before building production binary
+RUN cargo test --locked
+
 # Build application with optimized flags for production
 ENV RUSTFLAGS="-C opt-level=3 -C codegen-units=1 -C panic=abort"
 ENV CARGO_PROFILE_RELEASE_LTO=fat

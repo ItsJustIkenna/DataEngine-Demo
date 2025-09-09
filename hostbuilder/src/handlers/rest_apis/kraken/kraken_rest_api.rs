@@ -47,38 +47,33 @@ impl KrakenRestHandler {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_millis() as u64;
-
-        let post_data = format!("nonce={}", nonce);
+            .as_millis();
 
         let url = Url::parse(endpoint).expect("Failed to parse URL");
 
         let api_key = env::var("KRAKEN_API_KEY").unwrap_or_default();
+        let secret_key = env::var("KRAKEN_SECRET_KEY").unwrap_or_default();
         
         // Check if credentials are valid before attempting authentication
-        if api_key.is_empty() || api_key == "placeholder" {
-            println!("Kraken API key not configured (placeholder or empty). Skipping authentication.");
+        if secret_key.is_empty() || secret_key == "placeholder_secret_key" {
+            println!("Kraken API credentials not configured (placeholder or empty). Skipping authentication.");
             return Err(anyhow::anyhow!("API credentials not configured"));
         }
 
-        let signature = generate_kraken_signature(url.path(), nonce, &post_data, &api_key)?;
-        let client = Client::new();
-        let api_key = env::var("KRAKEN_API_KEY").unwrap_or_default();
+        // Create JSON body with nonce (matching Python implementation)
+        let body_json = format!(r#"{{"nonce":"{}"}}"#, nonce);
         
-        // Check if API key is valid
-        if api_key.is_empty() || api_key == "placeholder" {
-            println!("Kraken API key not configured (placeholder or empty). Skipping authentication.");
-            return Err(anyhow::anyhow!("API credentials not configured"));
-        }
+        let signature = generate_kraken_signature(url.path(), &nonce.to_string(), &body_json, &secret_key)?;
+        let client = Client::new();
 
-        let body = post_data;
+        let body = body_json;
         // Create the headers
         let mut headers = HeaderMap::new();
         headers.insert("API-Key", HeaderValue::from_str(&api_key)?);
         headers.insert("API-Sign", HeaderValue::from_str(&signature)?);
         headers.insert(
             CONTENT_TYPE,
-            HeaderValue::from_static("application/x-www-form-urlencoded"),
+            HeaderValue::from_static("application/json"),
         );
         
         match client.post(url).headers(headers).body(body).send().await {
@@ -154,27 +149,29 @@ impl KrakenRestHandler {
 type HmacSha512 = Hmac<Sha512>;
 fn generate_kraken_signature(
     api_path: &str,
-    nonce: u64,
-    post_data: &str,
-    api_key: &str,
+    nonce: &str,
+    body_data: &str,
+    secret_key: &str,
 ) -> Result<String> {
-    // 1. Calculate SHA256 of the nonce + POST data
+    // 1. Calculate SHA256 of the nonce + body data (matching Python: nonce + data)
     let mut sha256 = Sha256::new();
-    sha256.update(nonce.to_string() + post_data);
+    sha256.update((nonce.to_string() + body_data).as_bytes());
     let sha256_hash = sha256.finalize();
     
-    // 2. Decode the API key from base64
+    // 2. Decode the secret key from base64
     let decoded_key = BASE64_STANDARD
-        .decode(api_key)
-        .map_err(|e| anyhow::anyhow!("Failed to decode API secret from base64: {}. Check if KRAKEN_API_KEY is properly configured.", e))?;
+        .decode(secret_key)
+        .map_err(|e| anyhow::anyhow!("Failed to decode API secret from base64: {}. Check if KRAKEN_SECRET_KEY is properly configured.", e))?;
     
     // 3. Create an HMAC-SHA512 instance with the decoded key
     let mut mac =
         HmacSha512::new_from_slice(&decoded_key).expect("HMAC can take key of any size");
-    // Update the HMAC with the API path and SHA256 hash
+    
+    // 4. Update the HMAC with the API path and SHA256 hash (matching Python: path + hash)
     mac.update(api_path.as_bytes());
     mac.update(&sha256_hash);
-    // 4. Finalize the HMAC calculation and encode the result into base64
+    
+    // 5. Finalize the HMAC calculation and encode the result into base64
     let hmac_result = mac.finalize();
     let hmac_bytes = hmac_result.into_bytes();
     Ok(BASE64_STANDARD.encode(hmac_bytes))

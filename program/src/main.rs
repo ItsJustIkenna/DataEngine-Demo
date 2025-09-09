@@ -271,11 +271,20 @@ async fn main() -> Result<()> {
     log_info!(MAIN_LOGGER, "  ✅ mimalloc Ultra-Fast Allocator");
     log_info!(MAIN_LOGGER, "  ✅ Real-Time Thread Priority");
     
+    // Start API server for health checks
+    log_info!(MAIN_LOGGER, "🌐 Starting API server for health checks on port 8080...");
+    let api_server_handle = tokio::spawn(async move {
+        if let Err(e) = hostbuilder::start_api_server("0.0.0.0", 8080).await {
+            log_warn!(MAIN_LOGGER, "API server failed: {}", e);
+        }
+    });
+    
     // Run the hosted engine with all optimizations active
     engine.run().await?;
     
-    // Cancel metrics reporting
+    // Cancel background tasks
     metrics_handle.abort();
+    api_server_handle.abort();
     
     log_info!(MAIN_LOGGER, "🏁 DataEngine shutting down gracefully...");
     

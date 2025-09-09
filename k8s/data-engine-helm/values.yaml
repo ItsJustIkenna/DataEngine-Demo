@@ -20,7 +20,7 @@ nameOverride: ""
 
 # Image configuration
 image:
-  repository: prodtradingbotregistry.azurecr.io/data-engine
+  repository: data-engine
   tag: "latest"
   pullPolicy: Always
   pullSecrets: []
@@ -112,7 +112,7 @@ networkPolicy:
 
 # Persistent storage for data
 persistence:
-  enabled: true
+  enabled: false
   existingClaim: ""
   storageClass: ""
   accessModes:
@@ -229,6 +229,7 @@ config:
   exchanges:
     - name: "Kraken"
       enabled: true
+      api_url: "https://api.kraken.com"
       websocket_token: 'https://api.kraken.com/0/private/GetWebSocketsToken'
       symbols: ["BTC/USD", "ETH/USD", "BTC/EUR", "ETH/EUR"]
       depth: 100
@@ -375,17 +376,18 @@ secrets:
   # Database credentials
   database:
     enabled: false  # Enable to use external database with secrets
-    username: ""
-    password: ""
+    # Credentials injected via --set parameters at deployment time
     
   # Redis credentials  
   redis:
     enabled: false  # Enable to use external redis with secrets
-    password: ""
+    # Credentials injected via --set parameters at deployment time
     
   # API keys
   api_keys:
-    kraken: ""
+    # Credentials injected via --set parameters at deployment time
+    kraken_api_key: "placeholder"
+    kraken_secret_key: "placeholder"
     
   # TLS certificates
   tls:
@@ -420,10 +422,12 @@ externalRedis:
 postgresql:
   enabled: true
   auth:
-    postgresPassword: "YOUR_POSTGRES_PASSWORD_HERE"
+    # SECURITY: Credentials injected via --set parameters at deployment
+    # NEVER store actual passwords in this file!
+    postgresPassword: "INJECTED_AT_DEPLOYMENT"
     database: "dataengine"
-    username: "YOUR_POSTGRES_USERNAME_HERE"
-    password: "YOUR_POSTGRES_PASSWORD_HERE"
+    username: "INJECTED_AT_DEPLOYMENT"
+    password: "INJECTED_AT_DEPLOYMENT"
   primary:
     persistence:
       enabled: true
@@ -443,7 +447,9 @@ redis:
   enabled: true
   auth:
     enabled: true
-    password: "YOUR_REDIS_PASSWORD_HERE"
+    # SECURITY: Password injected via --set parameters at deployment
+    # NEVER store actual passwords in this file!
+    password: "INJECTED_AT_DEPLOYMENT"
   master:
     persistence:
       enabled: true
@@ -478,11 +484,11 @@ monitoring:
   
   # Metrics configuration
   metrics:
-    enabled: true
+    enabled: false
     port: 9090
     path: /metrics
     serviceMonitor:
-      enabled: true
+      enabled: false
       interval: 30s
       path: /metrics
       labels: {}

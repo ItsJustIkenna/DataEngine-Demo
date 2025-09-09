@@ -8,124 +8,105 @@ global:
   environment: development
 
 # =============================================================================
-# DataEngine Application - DISABLED for database-only mode
+# DataEngine Application - ENABLED for database-only mode
 # =============================================================================
 
-# Disable the main DataEngine application
-enabled: false
+# Enable the main DataEngine application in database-only mode
+enabled: true
 
-# Minimal application configuration (ignored when enabled: false)
-replicaCount: 0
+# Single replica for development
+replicaCount: 1
 image:
   repository: data-engine
-  tag: "local"
+  tag: latest
   pullPolicy: Never
 
 # =============================================================================
-# Resource Management - Minimal since no application pods
+# Resource Management - Increased for stable operation
 # =============================================================================
 
 resources:
   limits:
-    cpu: "100m"
-    memory: "128Mi"
+    cpu: "500m"
+    memory: "4Gi"
   requests:
-    cpu: "50m"
-    memory: "64Mi"
+    cpu: "200m"
+    memory: "2Gi"
 
-# Disable autoscaling since no application
+# Disable autoscaling for development
 autoscaling:
   enabled: false
-  
+
+# =============================================================================
+# Application Configuration - Database-Only Mode
+# =============================================================================
+
+config:
   # Database-only mode flags
   database_only_mode: true
   disable_message_broker: true
   disable_publisher: true
+  websocket_only: true
+  graceful_api_failure: true
   
-  # Empty exchanges for database-only mode
-  exchanges: []
+  # Kraken exchange configuration
+  exchanges:
+    - name: Kraken
+      enabled: true
+      api_url: "https://api.kraken.com"
+      websocket_url: "wss://ws.kraken.com"
+      require_auth: false
+      websocket_only: true
+      websocket_token: 'https://api.kraken.com/0/private/GetWebSocketsToken'
+  
+  # Empty topics for database-only mode
   topics: []
   topic_routing: {}
   
 # =============================================================================
-# Database and Cache Services Configuration
+# Database and Cache Services Configuration - EXTERNAL SERVICES
 # =============================================================================
 
-# Enable LOCAL PostgreSQL database
+# DISABLE local PostgreSQL (use external TimescaleDB)
 postgresql:
-  enabled: true
-  auth:
-    enablePostgresUser: true
-    postgresPassword: "local_dev_postgres_password"
-    username: "dataengine_user"
-    password: "local_dev_user_password"
-    database: "trading_platform"
-  primary:
-    resources:
-      limits:
-        cpu: "1000m"
-        memory: "2Gi"
-      requests:
-        cpu: "500m"
-        memory: "1Gi"
-    persistence:
-      enabled: true
-      size: 20Gi
-      storageClass: ""  # Use default storage class
-    # Install TimescaleDB extension
-    initdb:
-      scripts:
-        init-timescaledb.sql: |
-          -- Create TimescaleDB extension
-          CREATE EXTENSION IF NOT EXISTS timescaledb;
-          
-          -- Create schemas for trading data
-          CREATE SCHEMA IF NOT EXISTS market_data;
-          CREATE SCHEMA IF NOT EXISTS trading;
-          CREATE SCHEMA IF NOT EXISTS analytics;
-          
-          -- Grant permissions to dataengine_user
-          GRANT ALL PRIVILEGES ON SCHEMA market_data TO dataengine_user;
-          GRANT ALL PRIVILEGES ON SCHEMA trading TO dataengine_user;
-          GRANT ALL PRIVILEGES ON SCHEMA analytics TO dataengine_user;
+  enabled: false
 
-# Enable LOCAL Redis cache
+# DISABLE local Redis (use external Redis)
 redis:
-  enabled: true
-  auth:
-    enabled: true
-    password: "local_dev_redis_password"
-  master:
-    resources:
-      limits:
-        cpu: "500m"
-        memory: "1Gi"
-      requests:
-        cpu: "250m"
-        memory: "512Mi"
-    persistence:
-      enabled: true
-      size: 10Gi
-  replica:
-    replicaCount: 1
-    resources:
-      limits:
-        cpu: "250m"
-        memory: "512Mi"
-      requests:
-        cpu: "100m"
-        memory: "256Mi"
+  enabled: false
 
 # =============================================================================
-# Disable All Application Components
+# Enable External Services
 # =============================================================================
 
-# Disable external services (using local embedded services)
+# Enable EXTERNAL database (TimescaleDB Cloud)
 externalDatabase:
-  enabled: false
+  enabled: true
+  useCompleteUrl: true
 
+# Enable EXTERNAL Redis
 externalRedis:
-  enabled: false
+  enabled: true
+
+# =============================================================================
+# Secrets Configuration
+# =============================================================================
+
+secrets:
+  # External database configuration
+  database:
+    enabled: true
+    # URL and password will be injected via --set parameters
+  
+  # External Redis configuration  
+  redis:
+    enabled: true
+    # Password will be injected via --set parameters
+  
+  # API keys  
+  api_keys:
+    # Kraken API credentials will be injected via --set parameters
+    enabled: true
 
 # Disable monitoring components for resource efficiency
 grafana:
@@ -181,7 +162,7 @@ persistence:
 
 # Network policy to allow database access
 networkPolicy:
-  enabled: true
+  enabled: false
   ingress:
     - from: []  # Allow all internal cluster traffic
       ports:

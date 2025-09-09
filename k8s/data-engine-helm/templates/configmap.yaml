@@ -49,17 +49,66 @@ data:
     
     environment: {{ .Values.config.environment }}
     
+    # Database-only mode configuration
+    {{- if .Values.config.database_only_mode }}
+    database_only_mode: {{ .Values.config.database_only_mode }}
+    {{- end }}
+    {{- if .Values.config.disable_message_broker }}
+    disable_message_broker: {{ .Values.config.disable_message_broker }}
+    {{- end }}
+    {{- if .Values.config.disable_publisher }}
+    disable_publisher: {{ .Values.config.disable_publisher }}
+    {{- end }}
+    {{- if .Values.config.websocket_only }}
+    websocket_only: {{ .Values.config.websocket_only }}
+    {{- end }}
+    {{- if .Values.config.graceful_api_failure }}
+    graceful_api_failure: {{ .Values.config.graceful_api_failure }}
+    {{- end }}
+    
     # Exchange configurations
     exchanges:
     {{- range .Values.config.exchanges }}
       - name: {{ .name | quote }}
         enabled: {{ .enabled }}
+        {{- if .api_url }}
+        api_url: {{ .api_url | quote }}
+        {{- end }}
+        {{- if .websocket_url }}
+        websocket_url: {{ .websocket_url | quote }}
+        {{- else if .websockets }}
+        websocket_url: {{ (index .websockets 0).endpoint | quote }}
+        {{- end }}
+        {{- if .websocket_token }}
+        websocket_token: {{ .websocket_token | quote }}
+        {{- end }}
+        {{- if .require_auth }}
+        require_auth: {{ .require_auth }}
+        {{- else }}
+        require_auth: false
+        {{- end }}
+        {{- if .websocket_only }}
+        websocket_only: {{ .websocket_only }}
+        {{- else }}
+        websocket_only: false
+        {{- end }}
+        {{- if .symbols }}
         symbols:
         {{- range .symbols }}
           - {{ . | quote }}
         {{- end }}
+        {{- else }}
+        symbols:
+          - "BTC/USD"
+          - "ETH/USD"
+        {{- end }}
+        {{- if .depth }}
         depth: {{ .depth }}
-        websocket_token: {{ .websocket_token | quote }}
+        max_depth: {{ .depth }}
+        {{- else }}
+        depth: 100
+        max_depth: 100
+        {{- end }}
         websockets:
         {{- range .websockets }}
           - channel: {{ .channel | quote }}
@@ -116,6 +165,7 @@ data:
       redis_url: {{ .Values.config.database.redis_url | quote }}
       max_connections: {{ .Values.config.database.max_connections }}
       connection_timeout: {{ .Values.config.database.connection_timeout | quote }}
+      connection_timeout_secs: 10
       query_timeout: {{ .Values.config.database.query_timeout | quote }}
       retry_attempts: {{ .Values.config.database.retry_attempts }}
       backup_enabled: {{ .Values.config.database.backup_enabled }}

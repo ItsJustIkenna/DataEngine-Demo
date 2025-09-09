@@ -14,6 +14,9 @@ pub mod tests;
 pub mod ultra_metrics;
 pub mod api_endpoints;
 
+// Re-export important functions
+pub use api_endpoints::start_api_server;
+
 use anyhow::Result;
 use crate::logging_facade::MAIN_LOGGER;
 

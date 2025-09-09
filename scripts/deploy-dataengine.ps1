@@ -139,7 +139,7 @@ function Show-DataEngineAccess {
 
 # Read credentials from .env file
 function Get-EnvCredentials {
-    $envFile = ".env"
+    $envFile = "scripts/.env"
     $credentials = @{}
     
     if (Test-Path $envFile) {
@@ -168,7 +168,11 @@ function Deploy-DataEngine {
     try {
         # Auto-select values file if not specified
         if ([string]::IsNullOrEmpty($ValuesFile)) {
-            $ValuesFile = "k8s/data-engine-helm/values.yaml"
+            if ($DatabaseOnlyMode) {
+                $ValuesFile = "k8s/data-engine-helm/values-database-only.yaml"
+            } else {
+                $ValuesFile = "k8s/data-engine-helm/values.yaml"
+            }
         }
         
         # Validate prerequisites
@@ -212,80 +216,26 @@ function Deploy-DataEngine {
         $helmCommand += "--values", $ValuesFile
         $helmCommand += "--create-namespace"
         
-        # Database-only mode configuration
-        if ($DatabaseOnlyMode) {
-            $helmCommand += "--set", "enabled=true"  # Ensure application is enabled
-            $helmCommand += "--set", "replicaCount=1"  # Single replica for dev
-            # Reduce resource requirements for local development
-            $helmCommand += "--set", "resources.requests.cpu=200m"
-            $helmCommand += "--set", "resources.requests.memory=512Mi"
-            $helmCommand += "--set", "resources.limits.cpu=500m"
-            $helmCommand += "--set", "resources.limits.memory=1Gi"
-            $helmCommand += "--set", "config.database_only_mode=true"
-            $helmCommand += "--set", "config.disable_message_broker=true"
-            $helmCommand += "--set", "config.disable_publisher=true"
-            $helmCommand += "--set", "exchanges=[]"
-            $helmCommand += "--set", "topics=[]"
-            $helmCommand += "--set", "topic_routing={}"
-            $helmCommand += "--set", "monitoring.enabled=false"
-            $helmCommand += "--set", "monitoring.metrics.enabled=false"
-            $helmCommand += "--set", "monitoring.metrics.serviceMonitor.enabled=false"
-            $helmCommand += "--set", "monitoring.prometheus.enabled=false"  # Fixed path
-            $helmCommand += "--set", "monitoring.grafana.enabled=false"    # Fixed path
-            $helmCommand += "--set", "prometheus.enabled=false"
-            $helmCommand += "--set", "grafana.enabled=false"
-            $helmCommand += "--set", "alertmanager.enabled=false"
-            $helmCommand += "--set", "persistence.enabled=false"
-            $helmCommand += "--set", "postgresql.enabled=false"
-            $helmCommand += "--set", "redis.enabled=false"
-            # Use local Docker image for development
-            $helmCommand += "--set", "image.repository=data-engine"
-            $helmCommand += "--set", "image.tag=local"
-            $helmCommand += "--set", "image.pullPolicy=Never"
-        }
-        
+        # Only add credential overrides, no configuration overrides since values file handles that
         # External database configuration
         if ($creds["DATABASE_URL"] -ne "placeholder") {
-            $helmCommand += "--set", "externalDatabase.enabled=true"
-            $helmCommand += "--set", "externalDatabase.useCompleteUrl=true"
-            $helmCommand += "--set", "database_url=$($creds['DATABASE_URL'])"
-            # Enable secret creation for external database
-            $helmCommand += "--set", "secrets.database.enabled=true"
             $helmCommand += "--set", "secrets.database.url=$($creds['DATABASE_URL'])"
+        }
+        if ($creds["POSTGRES_PASSWORD"] -ne "placeholder") {
+            $helmCommand += "--set", "secrets.database.password=$($creds['POSTGRES_PASSWORD'])"
         }
         
         # External Redis configuration  
         if ($creds["REDIS_URL"] -ne "placeholder") {
-            # Parse Redis URL to extract host and port
-            $redisUrl = $creds["REDIS_URL"]
-            if ($redisUrl -match "redis://[^@]*@([^:]+):(\d+)") {
-                $redisHost = $matches[1]
-                $redisPort = $matches[2]
-                
-                $helmCommand += "--set", "externalRedis.enabled=true"
-                $helmCommand += "--set", "externalRedis.host=$redisHost"
-                $helmCommand += "--set", "externalRedis.port=$redisPort"
-                $helmCommand += "--set", "redis_url=$($creds['REDIS_URL'])"
-                $helmCommand += "--set", "redis_password=$($creds['REDIS_PASSWORD'])"
-                # Enable secret creation for external Redis
-                $helmCommand += "--set", "secrets.redis.enabled=true"
-                $helmCommand += "--set", "secrets.redis.password=$($creds['REDIS_PASSWORD'])"
-            } else {
-                Write-Warning "Could not parse Redis URL format: $redisUrl"
-                $helmCommand += "--set", "externalRedis.enabled=true"
-                $helmCommand += "--set", "redis_url=$($creds['REDIS_URL'])"
-                $helmCommand += "--set", "redis_password=$($creds['REDIS_PASSWORD'])"
-                # Enable secret creation for external Redis
-                $helmCommand += "--set", "secrets.redis.enabled=true"
-                $helmCommand += "--set", "secrets.redis.password=$($creds['REDIS_PASSWORD'])"
-            }
+            $helmCommand += "--set", "secrets.redis.password=$($creds['REDIS_PASSWORD'])"
+            $helmCommand += "--set", "secrets.redis.url=$($creds['REDIS_URL'])"
         }
         
-        # API keys (use from .env file or placeholders for database-only mode)
+        # API keys
         $krakenApiKey = if ($creds["KRAKEN_API_KEY"]) { $creds["KRAKEN_API_KEY"] } else { "placeholder" }
         $krakenSecretKey = if ($creds["KRAKEN_SECRET_KEY"]) { $creds["KRAKEN_SECRET_KEY"] } else { "placeholder" }
-        $helmCommand += "--set", "kraken_api_key=$krakenApiKey"
-        $helmCommand += "--set", "kraken_secret_key=$krakenSecretKey"
+        $helmCommand += "--set", "secrets.api_keys.kraken_api_key=$krakenApiKey"
+        $helmCommand += "--set", "secrets.api_keys.kraken_secret_key=$krakenSecretKey"
         
         if ($IsDryRun) {
             $helmCommand += "--dry-run"
