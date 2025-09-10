@@ -263,3 +263,28 @@ env: ## Show build environment
 	@echo -e "$(WHITE)RUSTFLAGS: $${RUSTFLAGS:-<not set>}$(NC)"
 	@echo -e "$(WHITE)CARGO_PROFILE_RELEASE_LTO: $${CARGO_PROFILE_RELEASE_LTO:-<not set>}$(NC)"
 	@echo -e "$(WHITE)Working directory: $(PWD)$(NC)"
+
+# Docker targets
+docker-build: ## Build Docker image
+	@echo -e "$(CYAN)🐳 Building Docker image...$(NC)"
+	@cd .. && docker build -f DataEngine/Dockerfile -t dataengine:latest .
+	@echo -e "$(GREEN)✅ Docker image built successfully$(NC)"
+
+docker-run: ## Run Docker container
+	@echo -e "$(CYAN)🐳 Running Docker container...$(NC)"
+	docker run -p 8080:8080 -p 9090:9090 dataengine:latest
+
+docker-compose-up: ## Start full stack with docker-compose
+	@echo -e "$(CYAN)🐳 Starting docker-compose stack...$(NC)"
+	docker-compose up -d
+	@echo -e "$(GREEN)✅ Docker stack started$(NC)"
+
+docker-compose-down: ## Stop docker-compose stack
+	@echo -e "$(CYAN)🐳 Stopping docker-compose stack...$(NC)"
+	docker-compose down
+	@echo -e "$(GREEN)✅ Docker stack stopped$(NC)"
+
+docker-logs: ## Show docker-compose logs
+	docker-compose logs -f
+
+docker: docker-build docker-compose-up ## Build and run with docker-compose

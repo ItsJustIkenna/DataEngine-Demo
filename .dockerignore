@@ -18,6 +18,66 @@
 
 # Build artifacts and caches
 **/target/**
+**/node_modules/**
+**/.cargo/**
+
+# Documentation and non-essential files
+**/README.md
+**/CHANGELOG.md
+**/docs/**
+**/*.md
+!DOCKER.md
+
+# Test files
+**/tests/**
+**/*_test.rs
+**/*_tests.rs
+
+# Temporary files
+**/*.tmp
+**/*.temp
+**/*.swp
+**/*.swo
+**/.*~
+
+# OS specific files
+Thumbs.db
+.DS_Store
+
+# IDE files
+*.suo
+*.user
+*.sln.docstates
+
+# Log files
+**/*.log
+**/logs/**
+
+# Docker related files (avoid recursion)
+**/Dockerfile*
+**/docker-compose*.yml
+**/.dockerignore
+
+# Scripts and tools (not needed in container)
+**/scripts/**
+**/tools/**
+**/*.sh
+**/*.bat
+**/*.ps1
+
+# Kubernetes manifests
+**/k8s/**
+**/*.yaml
+**/*.yml
+!docker-compose.yml
+
+# Backup files
+**/*.bak
+**/*.backup
+
+# Development dependencies
+**/examples/**
+**/benches/**
 **/bin/**
 **/.cargo/**
 **/node_modules/**
