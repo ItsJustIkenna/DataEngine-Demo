@@ -13,6 +13,11 @@ pub mod simd_optimizations;
 pub mod tests;
 pub mod ultra_metrics;
 pub mod api_endpoints;
+// Security enhancement modules
+pub mod secure_error_handling;
+pub mod secure_input_validation;
+pub mod enhanced_security_config;
+pub mod security_monitoring;
 
 // Re-export important functions
 pub use api_endpoints::start_api_server;

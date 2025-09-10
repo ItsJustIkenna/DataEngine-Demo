@@ -48,6 +48,14 @@ socket2 = "0.5"
 mimalloc = { version = "0.1", default-features = false }
 # Lock-free data structures
 crossbeam = "0.8"
+# Security enhancements
+regex = "1.10"
+thiserror = "1.0"
+rand = "0.8"
+libc = "0.2"
+# Windows-specific dependencies
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.48", features = ["Win32_System_Threading"] }
 crossbeam-channel = "0.5"
 crossbeam-utils = "0.8"
 # SIMD optimizations

@@ -1,7 +1,5 @@
-use ultra_logger::{UltraLogger, LogLevel, LogValue, LogEntry};
+use ultra_logger::{UltraLogger, LogLevel};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
 /// Global logging facade for the DataEngine
@@ -45,8 +43,13 @@ impl DataEngineLogger {
 
     /// Log with custom level
     pub async fn log(&self, level: LogLevel, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.logger.log(level, message.to_string()).await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        match level {
+            LogLevel::Debug => self.logger.debug(message.to_string()).await,
+            LogLevel::Info => self.logger.info(message.to_string()).await,
+            LogLevel::Warn => self.logger.warn(message.to_string()).await,
+            LogLevel::Error => self.logger.error(message.to_string()).await,
+        }
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log performance metrics
@@ -103,16 +106,17 @@ impl DataEngineLogger {
         }
     }
 
-    /// Flush logs synchronously
+    /// Flush logs synchronously (no-op for ultra-logger)
     pub async fn flush(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.logger.flush().await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        // Ultra-logger doesn't have a flush method, it's always real-time
+        Ok(())
     }
 
-    /// Shutdown the logger
+    /// Shutdown the logger (not available for shared instances)
     pub async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.logger.shutdown().await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        // Cannot shutdown shared logger instances
+        // In a real implementation, this would coordinate with a manager
+        Ok(())
     }
 }
 

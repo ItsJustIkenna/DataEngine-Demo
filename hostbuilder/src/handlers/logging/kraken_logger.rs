@@ -1,128 +1,114 @@
-use ultra_logger::{UltraLogger, LogLevel, LogValue, LogEntry};
+use ultra_logger::{LogLevel, LogEntry};
 use std::collections::HashMap;
 use bigdecimal::BigDecimal;
 use once_cell::sync::Lazy;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 /// High-performance centralized logging service for Kraken operations
 /// Optimized for minimal latency impact on critical trading paths
 pub struct KrakenLogger {
-    logger: UltraLogger,
     service_name: String,
-    sequence_counter: AtomicU64,
 }
 
 impl KrakenLogger {
     pub fn new(service_name: &str) -> Self {
         Self {
-            logger: UltraLogger::new(format!("DataEngine-Kraken-{}", service_name)),
             service_name: service_name.to_string(),
-            sequence_counter: AtomicU64::new(0),
         }
     }
 
     /// Log WebSocket connection events
     pub async fn log_websocket_event(&self, event: WebSocketEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("endpoint".to_string(), LogValue::String(event.endpoint));
-        fields.insert("action".to_string(), LogValue::String(event.action));
-        fields.insert("connection_id".to_string(), LogValue::String(event.connection_id.unwrap_or_default()));
+        let mut metadata = HashMap::new();
+        metadata.insert("endpoint".to_string(), event.endpoint);
+        metadata.insert("action".to_string(), event.action);
+        metadata.insert("connection_id".to_string(), event.connection_id.unwrap_or_default());
         
         if let Some(latency) = event.latency_micros {
-            fields.insert("latency_microseconds".to_string(), LogValue::Number(latency as f64));
+            metadata.insert("latency_microseconds".to_string(), latency.to_string());
         }
 
-        let entry = LogEntry::new(
+        let mut entry = LogEntry::new(
             event.level,
             self.service_name.clone(),
             event.message,
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
-
-        // Add fields to entry
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
-        });
+        
+        // Add metadata
+        entry.metadata = metadata;
 
         // Use structured logging output
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry.to_json());
         Ok(())
     }
 
     /// Log order book update processing with performance metrics
     pub async fn log_orderbook_update(&self, update: OrderBookUpdateLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("symbol".to_string(), LogValue::String(update.symbol.clone()));
-        fields.insert("update_type".to_string(), LogValue::String(update.update_type.clone()));
-        fields.insert("bids_count".to_string(), LogValue::Number(update.bids_count as f64));
-        fields.insert("asks_count".to_string(), LogValue::Number(update.asks_count as f64));
-        fields.insert("processing_time_micros".to_string(), LogValue::Number(update.processing_time_micros as f64));
-        fields.insert("total_volume".to_string(), LogValue::String(update.total_volume.to_string()));
+        let mut metadata = HashMap::new();
+        metadata.insert("symbol".to_string(), update.symbol.clone());
+        metadata.insert("update_type".to_string(), update.update_type.clone());
+        metadata.insert("bids_count".to_string(), update.bids_count.to_string());
+        metadata.insert("asks_count".to_string(), update.asks_count.to_string());
+        metadata.insert("processing_time_micros".to_string(), update.processing_time_micros.to_string());
+        metadata.insert("total_volume".to_string(), update.total_volume.to_string());
         
         if let Some(ref error) = update.error {
-            fields.insert("error".to_string(), LogValue::String(error.clone()));
+            metadata.insert("error".to_string(), error.clone());
         }
 
         let level = if update.error.is_some() { LogLevel::Error } else { LogLevel::Info };
         
-        let entry = LogEntry::new(
+        let mut entry = LogEntry::new(
             level,
             self.service_name.clone(),
             format!("Order book update processed for {}", update.symbol),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
-        });
+        entry.metadata = metadata;
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry.to_json());
         Ok(())
     }
 
     /// Log trade processing events
     pub async fn log_trade_processing(&self, trade: TradeProcessingLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("symbol".to_string(), LogValue::String(trade.symbol.clone()));
-        fields.insert("trade_id".to_string(), LogValue::String(trade.trade_id.clone()));
-        fields.insert("side".to_string(), LogValue::String(trade.side.clone()));
-        fields.insert("price".to_string(), LogValue::Number(trade.price as f64));
-        fields.insert("quantity".to_string(), LogValue::Number(trade.quantity as f64));
-        fields.insert("processing_time_micros".to_string(), LogValue::Number(trade.processing_time_micros as f64));
+        let mut metadata = HashMap::new();
+        metadata.insert("symbol".to_string(), trade.symbol.clone());
+        metadata.insert("trade_id".to_string(), trade.trade_id.clone());
+        metadata.insert("side".to_string(), trade.side.clone());
+        metadata.insert("price".to_string(), (trade.price as f64).to_string());
+        metadata.insert("quantity".to_string(), (trade.quantity as f64).to_string());
+        metadata.insert("processing_time_micros".to_string(), (trade.processing_time_micros as f64).to_string());
         
         if let Some(ref error) = trade.error {
-            fields.insert("error".to_string(), LogValue::String(error.clone()));
+            metadata.insert("error".to_string(), error.clone());
         }
 
         let level = if trade.error.is_some() { LogLevel::Error } else { LogLevel::Debug };
         
-        let entry = LogEntry::new(
+        let mut entry = LogEntry::new(
             level,
             self.service_name.clone(),
             format!("Trade processed: {} @ {} for {}", trade.quantity, trade.price, trade.symbol),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
-        });
+        entry.metadata = metadata;
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry.to_json());
         Ok(())
     }
 
     /// Log API authentication events
     pub async fn log_auth_event(&self, event: AuthEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("endpoint".to_string(), LogValue::String(event.endpoint.clone()));
-        fields.insert("success".to_string(), LogValue::Bool(event.success));
+        let mut metadata = HashMap::new();
+        metadata.insert("endpoint".to_string(), event.endpoint.clone());
+        metadata.insert("success".to_string(), event.success.to_string());
         
         if let Some(ref error) = event.error {
-            fields.insert("error".to_string(), LogValue::String(error.clone()));
+            metadata.insert("error".to_string(), error.clone());
         }
         
         if let Some(latency) = event.latency_micros {
-            fields.insert("latency_microseconds".to_string(), LogValue::Number(latency as f64));
+            metadata.insert("latency_microseconds".to_string(), (latency as f64).to_string());
         }
 
         let level = if event.success { LogLevel::Info } else { LogLevel::Error };
@@ -131,80 +117,77 @@ impl KrakenLogger {
             level,
             self.service_name.clone(),
             format!("Authentication {} for {}", if event.success { "succeeded" } else { "failed" }, event.endpoint),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
+        let entry_with_fields = metadata.into_iter().fold(entry, |acc, (k, v)| {
+            acc.with_metadata(k, v)
         });
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry_with_fields.to_json());
         Ok(())
     }
 
     /// Log performance metrics
     pub async fn log_performance_metrics(&self, metrics: PerformanceMetrics) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("component".to_string(), LogValue::String(metrics.component.clone()));
-        fields.insert("operation".to_string(), LogValue::String(metrics.operation.clone()));
-        fields.insert("execution_time_micros".to_string(), LogValue::Number(metrics.execution_time_micros as f64));
-        fields.insert("throughput_ops_per_sec".to_string(), LogValue::Number(metrics.throughput_ops_per_sec));
-        fields.insert("memory_usage_mb".to_string(), LogValue::Number(metrics.memory_usage_mb));
-        fields.insert("cpu_usage_percent".to_string(), LogValue::Number(metrics.cpu_usage_percent));
+        let mut metadata = HashMap::new();
+        metadata.insert("component".to_string(), metrics.component.clone());
+        metadata.insert("operation".to_string(), metrics.operation.clone());
+        metadata.insert("execution_time_micros".to_string(), (metrics.execution_time_micros as f64).to_string());
+        metadata.insert("throughput_ops_per_sec".to_string(), metrics.throughput_ops_per_sec.to_string());
+        metadata.insert("memory_usage_mb".to_string(), metrics.memory_usage_mb.to_string());
+        metadata.insert("cpu_usage_percent".to_string(), metrics.cpu_usage_percent.to_string());
 
         let entry = LogEntry::new(
             LogLevel::Info,
             self.service_name.clone(),
             format!("Performance metrics for {}-{}", metrics.component, metrics.operation),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
+        let entry_with_fields = metadata.into_iter().fold(entry, |acc, (k, v)| {
+            acc.with_metadata(k, v)
         });
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry_with_fields.to_json());
         Ok(())
     }
 
     /// Emergency error logging with minimal overhead
     pub async fn log_critical_error(&self, error: CriticalError) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("component".to_string(), LogValue::String(error.component.clone()));
-        fields.insert("error_code".to_string(), LogValue::String(error.error_code.clone()));
-        fields.insert("error_message".to_string(), LogValue::String(error.error_message.clone()));
-        fields.insert("stack_trace".to_string(), LogValue::String(error.stack_trace.unwrap_or_default()));
+        let mut metadata = HashMap::new();
+        metadata.insert("component".to_string(), error.component.clone());
+        metadata.insert("error_code".to_string(), error.error_code.clone());
+        metadata.insert("error_message".to_string(), error.error_message.clone());
+        metadata.insert("stack_trace".to_string(), error.stack_trace.unwrap_or_default());
         
         if let Some(context) = error.context {
-            fields.insert("context".to_string(), LogValue::String(context));
+            metadata.insert("context".to_string(), context);
         }
 
         let entry = LogEntry::new(
             LogLevel::Error,
             self.service_name.clone(),
             format!("CRITICAL ERROR in {}: {}", error.component, error.error_code),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
+        let entry_with_fields = metadata.into_iter().fold(entry, |acc, (k, v)| {
+            acc.with_metadata(k, v)
         });
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry_with_fields.to_json());
         Ok(())
     }
 
     /// Log snapshot processing (Level3, Trade, Balance snapshots)
     pub async fn log_snapshot_processing(&self, snapshot: SnapshotProcessingLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("symbol".to_string(), LogValue::String(snapshot.symbol.clone()));
-        fields.insert("snapshot_type".to_string(), LogValue::String(snapshot.snapshot_type.clone()));
-        fields.insert("data_count".to_string(), LogValue::Number(snapshot.data_count as f64));
-        fields.insert("processing_time_micros".to_string(), LogValue::Number(snapshot.processing_time_micros as f64));
-        fields.insert("data_size_bytes".to_string(), LogValue::Number(snapshot.data_size_bytes as f64));
+        let mut metadata = HashMap::new();
+        metadata.insert("symbol".to_string(), snapshot.symbol.clone());
+        metadata.insert("snapshot_type".to_string(), snapshot.snapshot_type.clone());
+        metadata.insert("data_count".to_string(), (snapshot.data_count as f64).to_string());
+        metadata.insert("processing_time_micros".to_string(), (snapshot.processing_time_micros as f64).to_string());
+        metadata.insert("data_size_bytes".to_string(), (snapshot.data_size_bytes as f64).to_string());
         
         if let Some(ref error) = snapshot.error {
-            fields.insert("error".to_string(), LogValue::String(error.clone()));
+            metadata.insert("error".to_string(), error.clone());
         }
 
         let level = if snapshot.error.is_some() { LogLevel::Error } else { LogLevel::Info };
@@ -213,28 +196,27 @@ impl KrakenLogger {
             self.service_name.clone(),
             format!("{} snapshot processed for {} ({} records)", 
                    snapshot.snapshot_type, snapshot.symbol, snapshot.data_count),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
+        let entry_with_fields = metadata.into_iter().fold(entry, |acc, (k, v)| {
+            acc.with_metadata(k, v)
         });
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry_with_fields.to_json());
         Ok(())
     }
 
     /// Log balance updates
     pub async fn log_balance_update(&self, balance: BalanceUpdateLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("asset".to_string(), LogValue::String(balance.asset.clone()));
-        fields.insert("balance".to_string(), LogValue::Number(balance.balance));
-        fields.insert("balance_change".to_string(), LogValue::Number(balance.balance_change));
-        fields.insert("ledger_id".to_string(), LogValue::String(balance.ledger_id.clone()));
-        fields.insert("processing_time_micros".to_string(), LogValue::Number(balance.processing_time_micros as f64));
+        let mut metadata = HashMap::new();
+        metadata.insert("asset".to_string(), balance.asset.clone());
+        metadata.insert("balance".to_string(), balance.balance.to_string());
+        metadata.insert("balance_change".to_string(), balance.balance_change.to_string());
+        metadata.insert("ledger_id".to_string(), balance.ledger_id.clone());
+        metadata.insert("processing_time_micros".to_string(), (balance.processing_time_micros as f64).to_string());
         
         if let Some(ref error) = balance.error {
-            fields.insert("error".to_string(), LogValue::String(error.clone()));
+            metadata.insert("error".to_string(), error.clone());
         }
 
         let level = if balance.error.is_some() { LogLevel::Error } else { LogLevel::Info };
@@ -243,26 +225,25 @@ impl KrakenLogger {
             self.service_name.clone(),
             format!("Balance update for {} - New: {:.8}, Change: {:.8}", 
                    balance.asset, balance.balance, balance.balance_change),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
+        let entry_with_fields = metadata.into_iter().fold(entry, |acc, (k, v)| {
+            acc.with_metadata(k, v)
         });
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry_with_fields.to_json());
         Ok(())
     }
 
     /// Log heartbeat events for connection monitoring
     pub async fn log_heartbeat(&self, heartbeat: HeartbeatLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("channel".to_string(), LogValue::String(heartbeat.channel.clone()));
-        fields.insert("timestamp_micros".to_string(), LogValue::Number(heartbeat.timestamp_micros as f64));
-        fields.insert("connection_status".to_string(), LogValue::String(heartbeat.connection_status.clone()));
+        let mut metadata = HashMap::new();
+        metadata.insert("channel".to_string(), heartbeat.channel.clone());
+        metadata.insert("timestamp_micros".to_string(), (heartbeat.timestamp_micros as f64).to_string());
+        metadata.insert("connection_status".to_string(), heartbeat.connection_status.clone());
         
         if let Some(latency) = heartbeat.latency_micros {
-            fields.insert("latency_micros".to_string(), LogValue::Number(latency as f64));
+            metadata.insert("latency_micros".to_string(), (latency as f64).to_string());
         }
 
         let level = match heartbeat.connection_status.as_str() {
@@ -277,31 +258,30 @@ impl KrakenLogger {
             self.service_name.clone(),
             format!("Heartbeat received on {} - Status: {}", 
                    heartbeat.channel, heartbeat.connection_status),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
+        let entry_with_fields = metadata.into_iter().fold(entry, |acc, (k, v)| {
+            acc.with_metadata(k, v)
         });
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry_with_fields.to_json());
         Ok(())
     }
 
     /// Log subscription management events
     pub async fn log_subscription(&self, subscription: SubscriptionLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let mut fields = HashMap::new();
-        fields.insert("channel".to_string(), LogValue::String(subscription.channel.clone()));
-        fields.insert("action".to_string(), LogValue::String(subscription.action.clone()));
-        fields.insert("success".to_string(), LogValue::String(subscription.success.to_string()));
-        fields.insert("processing_time_micros".to_string(), LogValue::Number(subscription.processing_time_micros as f64));
+        let mut metadata = HashMap::new();
+        metadata.insert("channel".to_string(), subscription.channel.clone());
+        metadata.insert("action".to_string(), subscription.action.clone());
+        metadata.insert("success".to_string(), subscription.success.to_string());
+        metadata.insert("processing_time_micros".to_string(), (subscription.processing_time_micros as f64).to_string());
         
         if let Some(ref symbol) = subscription.symbol {
-            fields.insert("symbol".to_string(), LogValue::String(symbol.clone()));
+            metadata.insert("symbol".to_string(), symbol.clone());
         }
         
         if let Some(ref error) = subscription.error {
-            fields.insert("error".to_string(), LogValue::String(error.clone()));
+            metadata.insert("error".to_string(), error.clone());
         }
 
         let level = if subscription.success { LogLevel::Info } else { LogLevel::Error };
@@ -315,14 +295,13 @@ impl KrakenLogger {
                    if subscription.success { "successful" } else { "failed" },
                    subscription.channel,
                    symbol_info),
-            self.sequence_counter.fetch_add(1, Ordering::SeqCst),
         );
 
-        let entry_with_fields = fields.into_iter().fold(entry, |acc, (k, v)| {
-            acc.with_field(k, v)
+        let entry_with_fields = metadata.into_iter().fold(entry, |acc, (k, v)| {
+            acc.with_metadata(k, v)
         });
 
-        println!("{}", serde_json::to_string(&entry_with_fields)?);
+        println!("{}", entry_with_fields.to_json());
         Ok(())
     }
 }
