@@ -14,7 +14,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use anyhow::{Result, anyhow};
-use crate::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
+use crate::logging_facade::MAIN_LOGGER; 
+use crate::{log_info, log_error};
 
 use config::ConfigManager;
 use performance::PerformanceMetrics;
@@ -164,6 +165,41 @@ pub async fn health_check(
             }
         }
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+/// Kubernetes startup probe - checks if application has started
+pub async fn startup_check(
+    State(state): State<ApiState>,
+) -> Result<Json<ApiResponse<&'static str>>, StatusCode> {
+    // For startup probe, we just need to verify the application is running
+    // This is a simple check that the service is responsive
+    match state.health_monitor.check_health().await {
+        Ok(_) => Ok(Json(ApiResponse::success("STARTED"))),
+        Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+    }
+}
+
+/// Kubernetes readiness probe - checks if application is ready to serve traffic
+pub async fn readiness_check(
+    State(state): State<ApiState>,
+) -> Result<Json<ApiResponse<&'static str>>, StatusCode> {
+    match state.health_monitor.check_health().await {
+        Ok(report) => {
+            match report.overall_status {
+                HealthStatus::Healthy => {
+                    Ok(Json(ApiResponse::success("READY")))
+                }
+                HealthStatus::Degraded => {
+                    // Still ready but degraded
+                    Ok(Json(ApiResponse::success("READY")))
+                }
+                _ => {
+                    Err(StatusCode::SERVICE_UNAVAILABLE)
+                }
+            }
+        }
+        Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
     }
 }
 

@@ -5,13 +5,9 @@ use anyhow::Result;
 use bigdecimal::ToPrimitive;
 use config::Config;
 use databaseschema::{
-    models::{historical_order::NewHistoricalOrder, order_book::OrderBook}, ops::historical_order_ops::create_historical_orders, CustomAsyncPgConnectionManager
+    models::{historical_order::NewHistoricalOrder, order_book::OrderBook}, ops::historical_order_ops::create_historical_orders
 };
-use deadpool::managed::Pool;
-use deadpool_redis::{
-    Connection,
-    Manager
-};
+use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, PublishRequest, Trade, Trades};
 use publisher::Publisher;
 use redis_utils::get_redis_connection;
@@ -52,8 +48,8 @@ impl TradeSnapshot {
 
     pub async fn process_snapshot(
         &self,
-        redis_pool: Arc<Pool<Manager, Connection>>,
-        postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+        redis_pool: Arc<deadpool_redis::Pool>,
+        postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook
@@ -126,6 +122,8 @@ impl TradeSnapshot {
                 STATUS_FILLED,
                 &order_book.exchange,
                 &trade.symbol,
+                order_book.exchange_id,
+                order_book.security_id,
             );
 
             // Use key once

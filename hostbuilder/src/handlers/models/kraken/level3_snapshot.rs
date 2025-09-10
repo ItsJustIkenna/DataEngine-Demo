@@ -8,13 +8,9 @@ use config::Config;
 use databaseschema::{
     models::{historical_order::NewHistoricalOrder, open_buy_order::NewOpenBuyOrder, open_sell_order::NewOpenSellOrder, order_book::OrderBook}, ops::{
         historical_order_ops::create_historical_orders, open_buy_order_ops::create_open_buy_orders, open_sell_order_ops::create_open_sell_orders, order_book_ops::update_orderbook
-    }, CustomAsyncPgConnectionManager
+    }
 };
-use deadpool::managed::Pool;
-use deadpool_redis::{
-    Connection,
-    Manager
-};
+use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
 use publisher::Publisher;
 use redis::cmd;
@@ -58,8 +54,8 @@ impl Level3Snapshot {
 
     pub async fn process_snapshot(
         &self,
-        redis_pool: Arc<Pool<Manager, Connection>>,
-        postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+        redis_pool: Arc<deadpool_redis::Pool>,
+        postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook,
@@ -170,6 +166,8 @@ impl Level3Snapshot {
                         STATUS_OPEN,
                         &order_book.exchange,
                         &order_book.symbol,
+                        order_book.exchange_id,
+                        order_book.security_id,
                     );
 
                     // Prepare key once for reuse
@@ -283,6 +281,8 @@ impl Level3Snapshot {
                         STATUS_OPEN,
                         &order_book.exchange,
                         &order_book.symbol,
+                        order_book.exchange_id,
+                        order_book.security_id,
                     );
 
                     // Prepare key once for reuse

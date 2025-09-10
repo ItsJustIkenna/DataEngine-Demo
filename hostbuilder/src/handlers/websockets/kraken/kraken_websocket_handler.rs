@@ -2,14 +2,9 @@ use anyhow::Result;
 use async_trait::async_trait;
 use config::Config;
 use databaseschema::{
-    models::order_book::OrderBook, 
-    CustomAsyncPgConnectionManager,
+    models::order_book::OrderBook,
 };
-use deadpool::managed::Pool;
-use deadpool_redis::{
-    Connection,
-    Manager
-};
+use diesel_async::AsyncPgConnection;
 use futures_util::{
     stream::{
         SplitSink,
@@ -61,13 +56,13 @@ pub struct KrakenWebSocketHandler {
     publisher: Option<Arc<tokio::sync::Mutex<Publisher>>>, // Optional for database-only mode
     unsubscribe_message: Value,
     order_books: DashMap<String, OrderBook>, // Use DashMap for concurrent access
-    redis_pool: Arc<Pool<Manager, Connection>>,
-    postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+    redis_pool: Arc<deadpool_redis::Pool>,
+    postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
     fast_parser: FastMessageParser, // SIMD-accelerated message parsing
 }
 
 impl KrakenWebSocketHandler {
-    pub async fn new(endpoint: &str, order_books: HashMap<String, OrderBook>, subscribe_message: &Value, unsubscribe_message: &Value, redis_pool: Arc<Pool<Manager, Connection>>, postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>) -> Result<Self> {
+    pub async fn new(endpoint: &str, order_books: HashMap<String, OrderBook>, subscribe_message: &Value, unsubscribe_message: &Value, redis_pool: Arc<deadpool_redis::Pool>, postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>) -> Result<Self> {
         // Use default config for now, optimize later
         let connection_start = Instant::now();
         let (ws_stream, _) = match connect_async(endpoint).await {

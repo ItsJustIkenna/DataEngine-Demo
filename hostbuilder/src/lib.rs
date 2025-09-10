@@ -23,14 +23,14 @@ use crate::logging_facade::MAIN_LOGGER;
 use async_trait::async_trait;
 use config::Config;
 use databaseschema::{
-    create_timescale_connection_pool,
-    CustomAsyncPgConnectionManager
+    create_timescale_connection_pool
 };
-use deadpool::managed::Pool;
+use diesel_async::pooled_connection::deadpool;
 use deadpool_redis::{
     Connection,
     Manager
 };
+use diesel_async::AsyncPgConnection;
 use dotenv::dotenv;
 use get_info::{
     get_exchange,
@@ -77,8 +77,8 @@ pub trait HostedObjectTrait {
 
 pub struct HostedObject {
     config: Config,
-    redis_pool: Arc<Pool<Manager, Connection>>,
-    postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+    redis_pool: Arc<deadpool_redis::Pool>,
+    postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
     health_monitor: Arc<SystemHealthMonitor>,
     security_manager: Arc<SecurityManager>,
     error_handler: Arc<ErrorHandler>,

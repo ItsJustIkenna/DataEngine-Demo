@@ -26,14 +26,9 @@ use databaseschema::{
                 create_open_sell_orders,
                 delete_open_sell_orders, modify_open_sell_orders
             }, order_book_ops::update_orderbook
-        },
-    CustomAsyncPgConnectionManager
+        }
 };
-use deadpool::managed::Pool;
-use deadpool_redis::{
-    Connection,
-    Manager
-};
+use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
 use publisher::Publisher;
 use redis::cmd;
@@ -86,8 +81,8 @@ impl Level3Update {
 
     pub async fn process_update(
         &self,
-        redis_pool: Arc<Pool<Manager, Connection>>,
-        postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+        redis_pool: Arc<deadpool_redis::Pool>,
+        postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<tokio::sync::Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook,
@@ -232,6 +227,8 @@ impl Level3Update {
                             STATUS_OPEN,
                             &order_book.exchange,
                             &order_book.symbol,
+                            order_book.exchange_id,
+                            order_book.security_id,
                         );
 
                         // Format key once, reuse in args
@@ -313,6 +310,8 @@ impl Level3Update {
                             STATUS_PARTIALLY_FILLED,
                             &order_book.exchange,
                             &order_book.symbol,
+                            order_book.exchange_id,
+                            order_book.security_id,
                         );
 
                         // Format key once, reuse in args
@@ -358,6 +357,8 @@ impl Level3Update {
                             STATUS_FILLED,
                             &order_book.exchange,
                             &order_book.symbol,
+                            order_book.exchange_id,
+                            order_book.security_id,
                         );
 
                         // Format key once, reuse in args
@@ -500,6 +501,8 @@ impl Level3Update {
                             STATUS_OPEN,
                             &order_book.exchange,
                             &order_book.symbol,
+                            order_book.exchange_id,
+                            order_book.security_id,
                         );
 
                         // Format key once, reuse in args
@@ -580,6 +583,8 @@ impl Level3Update {
                             STATUS_PARTIALLY_FILLED,
                             &order_book.exchange,
                             &order_book.symbol,
+                            order_book.exchange_id,
+                            order_book.security_id,
                         );
 
                         let key = format!("sell_order:{}", unique_id);
@@ -624,6 +629,8 @@ impl Level3Update {
                             STATUS_FILLED,
                             &order_book.exchange,
                             &order_book.symbol,
+                            order_book.exchange_id,
+                            order_book.security_id,
                         );
 
                         let key = format!("sell_order:{}", ask.order_id);

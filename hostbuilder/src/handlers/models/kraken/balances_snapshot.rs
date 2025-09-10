@@ -5,13 +5,9 @@ use anyhow::Result;
 use bigdecimal::ToPrimitive;
 use config::Config;
 use databaseschema::{
-    models::order_book::OrderBook, CustomAsyncPgConnectionManager
+    models::order_book::OrderBook
 };
-use deadpool::managed::Pool;
-use deadpool_redis::{
-    Connection,
-    Manager
-};
+use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{portfolio_message, publish_request, PortfolioMessage, PublishRequest, Wallet, Wallets};
 use publisher::Publisher;
 use redis_utils::get_redis_connection;
@@ -69,8 +65,8 @@ impl BalanceSnapshot {
 
     pub async fn process_snapshot(
         &self,
-        redis_pool: Arc<Pool<Manager, Connection>>,
-        _postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+        redis_pool: Arc<deadpool_redis::Pool>,
+        _postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook

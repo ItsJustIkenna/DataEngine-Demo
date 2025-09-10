@@ -35,21 +35,16 @@ use databaseschema::{
             security_exists
         },
     },
-    CustomAsyncPgConnectionManager,
 };
-use deadpool::managed::Pool;
-use deadpool_redis::{
-    Connection,
-    Manager
-};
+use diesel_async::AsyncPgConnection;
 use anyhow::Error;
 use redis::cmd;
 use redis_utils::get_redis_connection;
 use tokio_retry::{strategy::{jitter, ExponentialBackoff}, Retry};
 
 pub async fn get_exchange(
-    redis_pool: Arc<Pool<Manager, Connection>>,
-    postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+    redis_pool: Arc<deadpool_redis::Pool>,
+    postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
     name: String,
 ) -> Result<Exchange, Error> {
     let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
@@ -117,8 +112,8 @@ pub async fn get_exchange(
 
 
 pub async fn get_securities(
-    redis_pool: Arc<Pool<Manager, Connection>>,
-    postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+    redis_pool: Arc<deadpool_redis::Pool>,
+    postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
     symbols: &Vec<String>,
 ) -> Result<Vec<Security>, Error> {
     let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
@@ -185,8 +180,8 @@ pub async fn get_securities(
 
 
 pub async fn get_orderbooks(
-    redis_pool: Arc<Pool<Manager, Connection>>,
-    postgres_pool: Arc<Pool<CustomAsyncPgConnectionManager>>,
+    redis_pool: Arc<deadpool_redis::Pool>,
+    postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
     securities: Vec<Security>,
     exchange: &Exchange,
 ) -> Result<HashMap<String, OrderBook>, Error> {
@@ -274,7 +269,7 @@ pub async fn get_orderbooks(
 fn add_orderbook_to_redis_pipeline(pipe: &mut redis::Pipeline, order_book: &OrderBook) {
     pipe.atomic()
         .cmd("HSET")
-        .arg(format!("order_book:{}", order_book.symbol))
+        .arg(format!("order_book:{}", order_book.order_book_id))
         .arg("created_at")
         .arg(&order_book.created_at.to_string())
         .arg("updated_at")

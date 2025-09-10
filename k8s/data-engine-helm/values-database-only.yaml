@@ -58,10 +58,30 @@ config:
       require_auth: false
       websocket_only: true
       websocket_token: 'https://api.kraken.com/0/private/GetWebSocketsToken'
+      symbols:
+        - "BTC/USD"
+        - "SOL/USD"
+        - "SUI/USD"
+      depth: 100
+      websockets:
+        - channel: "level3"
+          endpoint: "wss://ws-auth.kraken.com/v2"
+        - channel: "trade"
+          endpoint: "wss://ws.kraken.com/v2"
+      timeout: 30
   
-  # Empty topics for database-only mode
-  topics: []
-  topic_routing: {}
+  # Topics for message routing in database-only mode
+  topics:
+    - "market.data.kraken.trades"
+    - "market.data.kraken.level3"
+    - "market.data.kraken.snapshots"
+  topic_routing:
+    balances: "portfolio.updates.balances"
+    balances_snapshot: "portfolio.updates.snapshots"
+    level3: "market.data.kraken.level3"
+    level3_snapshot: "market.data.kraken.snapshots"
+    trade_snapshot: "market.data.kraken.trade_snapshots"
+    trades: "market.data.kraken.trades"
   
 # =============================================================================
 # Database and Cache Services Configuration - EXTERNAL SERVICES

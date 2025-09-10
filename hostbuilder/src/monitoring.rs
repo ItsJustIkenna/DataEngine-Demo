@@ -133,13 +133,13 @@ impl HealthCheck for WebSocketHealthChecker {
 /// Database connection health checker
 pub struct DatabaseHealthChecker {
     redis_pool: Arc<deadpool::managed::Pool<deadpool_redis::Manager, deadpool_redis::Connection>>,
-    postgres_pool: Arc<deadpool::managed::Pool<databaseschema::CustomAsyncPgConnectionManager>>,
+    postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
 }
 
 impl DatabaseHealthChecker {
     pub fn new(
         redis_pool: Arc<deadpool::managed::Pool<deadpool_redis::Manager, deadpool_redis::Connection>>,
-        postgres_pool: Arc<deadpool::managed::Pool<databaseschema::CustomAsyncPgConnectionManager>>,
+        postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
     ) -> Self {
         Self {
             redis_pool,

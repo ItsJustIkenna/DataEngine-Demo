@@ -273,8 +273,23 @@ async fn main() -> Result<()> {
     
     // Start API server for health checks
     log_info!(MAIN_LOGGER, "🌐 Starting API server for health checks on port 8080...");
+    
+    // Create minimal API state for health checks
+    let api_config = config::Config::default();
+    let api_config_manager = Arc::new(config::ConfigManager::new(api_config));
+    let api_health_monitor = Arc::new(hostbuilder::monitoring::SystemHealthMonitor::default());
+    let api_security_manager = Arc::new(hostbuilder::security::SecurityManager::new(Default::default()));
+    let api_metrics = Arc::new(performance::PerformanceMetrics::new());
+    
+    let api_state = hostbuilder::api_endpoints::ApiState {
+        config_manager: api_config_manager,
+        health_monitor: api_health_monitor,
+        security_manager: api_security_manager,
+        metrics: api_metrics,
+    };
+    
     let api_server_handle = tokio::spawn(async move {
-        if let Err(e) = hostbuilder::start_api_server("0.0.0.0", 8080).await {
+        if let Err(e) = hostbuilder::start_api_server(api_state, "0.0.0.0", 8080).await {
             log_warn!(MAIN_LOGGER, "API server failed: {}", e);
         }
     });

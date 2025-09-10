@@ -42,10 +42,6 @@ features = ["derive"]
 name = "performance"
 crate-type = ["rlib"]
 
-[[example]]
-name = "performance_demo"
-path = "examples/performance_demo.rs"
-
 [features]
 default = ["metrics", "cpu_affinity", "memory_pools", "simd"]
 metrics = []
