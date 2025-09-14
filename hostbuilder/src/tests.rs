@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::handlers::models::kraken::fast_parser::FastMessageParser;
+    use crate::network::handlers::models::kraken::fast_parser::FastMessageParser;
     
     #[test]
     fn test_fast_parser_creation() {

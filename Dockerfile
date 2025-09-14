@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Ultra-optimized production Dockerfile for DataEngine
 # Build from TradingPlatform root: docker build -f DataEngine/Dockerfile -t dataengine:latest .
 

@@ -262,7 +262,7 @@ pub mod secure_memory {
 
 #[cfg(test)]
 mod tests {
-    use crate::secure_error_handling::secure_memory::SecureBuffer;
+    use crate::security::error_handling::secure_memory::SecureBuffer;
 
     use super::*;
     
