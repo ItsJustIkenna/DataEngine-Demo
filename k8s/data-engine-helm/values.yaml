@@ -20,9 +20,9 @@ nameOverride: ""
 
 # Image configuration
 image:
-  repository: data-engine
+  repository: dataengine  # Updated to use new optimized image
   tag: "latest"
-  pullPolicy: Always
+  pullPolicy: IfNotPresent  # Changed for local development
   pullSecrets: []
 
 # Deployment configuration  
@@ -279,21 +279,22 @@ config:
     level3_snapshot: "market.data.kraken.snapshots"
     trade_snapshot: "market.data.kraken.trade_snapshots"
   
-  # Database configuration
+  # Database configuration (External)
   database:
-    postgres_url: "postgresql://localhost:5432/trading"
-    redis_url: "redis://localhost:6379"
+    # URLs will be constructed from external database secrets
+    postgres_url: ""  # Injected from secrets.database.url
+    redis_url: ""     # Injected from secrets.redis.url
     max_connections: 50
     connection_timeout: "10s"
     query_timeout: "30s"
     retry_attempts: 3
-    backup_enabled: true
+    backup_enabled: false  # Managed externally
   
-  # Redis configuration
+  # Redis configuration (External)
   redis:
     cluster_mode: false
     cluster_nodes: []
-    password: null
+    password: ""      # Injected from secrets.redis.password
     db_index: 0
     key_prefix: "dataengine:"
     ttl_seconds: 3600
@@ -375,62 +376,77 @@ logging:
 secrets:
   # Database credentials
   database:
-    enabled: false  # Enable to use external database with secrets
+    enabled: true  # Enable to use external database with secrets
     # Credentials injected via --set parameters at deployment time
+    # Example: --set secrets.database.username=$POSTGRES_USER
+    #          --set secrets.database.password=$POSTGRES_PASSWORD
+    #          --set secrets.database.url=$POSTGRES_URL
+    username: ""  # Injected at deployment
+    password: ""  # Injected at deployment
+    url: ""       # Injected at deployment
     
   # Redis credentials  
   redis:
-    enabled: false  # Enable to use external redis with secrets
+    enabled: true  # Enable to use external redis with secrets
     # Credentials injected via --set parameters at deployment time
+    # Example: --set secrets.redis.password=$REDIS_PASSWORD
+    #          --set secrets.redis.url=$REDIS_URL
+    password: ""  # Injected at deployment
+    url: ""       # Injected at deployment
     
   # API keys
   api_keys:
+    enabled: true
     # Credentials injected via --set parameters at deployment time
-    kraken_api_key: "placeholder"
-    kraken_secret_key: "placeholder"
+    # Example: --set secrets.api_keys.kraken_api_key=$KRAKEN_API_KEY
+    #          --set secrets.api_keys.kraken_secret_key=$KRAKEN_SECRET_KEY
+    kraken_api_key: ""     # Injected at deployment
+    kraken_secret_key: ""  # Injected at deployment
     
-  # TLS certificates
+  # TLS certificates (optional)
   tls:
+    enabled: false
     cert: ""
     key: ""
 
 # =============================================================================
-# External Database Configuration (Alternative to embedded PostgreSQL)
+# External Database Configuration (Using External PostgreSQL)
 # =============================================================================
 
 # External PostgreSQL Database
 externalDatabase:
-  enabled: false
-  host: ""
+  enabled: true  # Enable external database
+  host: ""       # Injected via secrets.database.url parsing
   port: 5432
-  username: "dataengine_user"
-  database: "trading_platform"
+  username: ""   # Injected via secrets.database.username
+  database: "dataengine"
   # Password is provided via secrets.database.password
+  # Connection string format: postgresql://username:password@host:port/database
 
 # External Redis Cache
 externalRedis:
-  enabled: false
-  host: ""
+  enabled: true  # Enable external Redis
+  host: ""       # Injected via secrets.redis.url parsing
   port: 6379
   # Password is provided via secrets.redis.password
+  # Connection string format: redis://:password@host:port
 
 # =============================================================================
-# Database Dependencies  
+# Database Dependencies (Disabled - Using External Services)
 # =============================================================================
 
-# TimescaleDB (PostgreSQL) configuration
+# TimescaleDB (PostgreSQL) configuration - DISABLED for external use
 postgresql:
-  enabled: true
+  enabled: false  # Disabled - using external database
+  # External database configuration is handled via externalDatabase section
   auth:
-    # SECURITY: Credentials injected via --set parameters at deployment
-    # NEVER store actual passwords in this file!
-    postgresPassword: "INJECTED_AT_DEPLOYMENT"
+    postgresPassword: ""
     database: "dataengine"
-    username: "INJECTED_AT_DEPLOYMENT"
-    password: "INJECTED_AT_DEPLOYMENT"
+    username: ""
+    password: ""
   primary:
     persistence:
-      enabled: true
+      enabled: false
       size: 100Gi
     resources:
       limits:
@@ -440,19 +456,18 @@ postgresql:
         cpu: "500m"
         memory: "1Gi"
   metrics:
-    enabled: true
+    enabled: false
 
-# Redis configuration
+# Redis configuration - DISABLED for external use
 redis:
-  enabled: true
+  enabled: false  # Disabled - using external Redis
+  # External Redis configuration is handled via externalRedis section
   auth:
-    enabled: true
-    # SECURITY: Password injected via --set parameters at deployment
-    # NEVER store actual passwords in this file!
-    password: "INJECTED_AT_DEPLOYMENT"
+    enabled: false
+    password: ""
   master:
     persistence:
-      enabled: true
+      enabled: false
       size: 10Gi
     resources:
       limits:
@@ -462,7 +477,7 @@ redis:
         cpu: "250m"
         memory: "512Mi"
   metrics:
-    enabled: true
+    enabled: false
 
 # =============================================================================
 # Monitoring & Observability

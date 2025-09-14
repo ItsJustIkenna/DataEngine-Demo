@@ -11,11 +11,13 @@ path = "src/main.rs"
 name = "benchmark"
 path = "src/benchmark.rs"
 
+[features]
+default = ["database"]
+database = ["hostbuilder/database"]
+
 [dependencies]
 anyhow = "1.0"
 tokio = { version = "1.38", features = ["full"] }
-tracing = "0.1"
-tracing-subscriber = "0.3"
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 mimalloc = "0.1"
@@ -23,8 +25,11 @@ fastrand = "2.0"
 num_cpus = "1.16"
 libc = "0.2"
 
+# Ultra-high performance logging
+ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
+
 # Local dependencies
-hostbuilder = { path = "../hostbuilder" }
+hostbuilder = { path = "../hostbuilder", default-features = false }
 performance = { path = "../performance" }
 config = { path = "../config" }
 

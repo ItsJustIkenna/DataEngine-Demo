@@ -1,25 +1,19 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use fastrand;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use tracing::{info, warn, Level};
-use tracing_subscriber;
+use hostbuilder::infrastructure::logging_facade::PERFORMANCE_LOGGER;
+use hostbuilder::log_info;
 
 /// Comprehensive benchmark suite for DataEngine
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .with_target(false)
-        .with_thread_ids(true)
-        .with_file(true)
-        .with_line_number(true)
-        .init();
+    // Initialize ultra-high performance logging
+    log_info!(PERFORMANCE_LOGGER, "🚀 Starting DataEngine Benchmark Suite");
 
-    info!("🚀 DataEngine Performance Benchmark Suite v0.1.0");
-    info!("==================================================");
+    log_info!(PERFORMANCE_LOGGER, "🚀 DataEngine Performance Benchmark Suite v0.1.0");
+    log_info!(PERFORMANCE_LOGGER, "==================================================");
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
@@ -58,13 +52,13 @@ async fn main() -> Result<()> {
         }
     }
 
-    info!("Benchmark Configuration:");
-    info!("  Messages: {}", messages);
-    info!("  Clients: {}", clients);
-    info!("  Duration: {}s", duration_secs);
-    info!("  Latency Test: {}", latency_test);
-    info!("  Platform Test: {}", platform_test);
-    info!("");
+    log_info!(PERFORMANCE_LOGGER, "Benchmark Configuration:");
+    log_info!(PERFORMANCE_LOGGER, "  Messages: {}", messages);
+    log_info!(PERFORMANCE_LOGGER, "  Clients: {}", clients);
+    log_info!(PERFORMANCE_LOGGER, "  Duration: {}s", duration_secs);
+    log_info!(PERFORMANCE_LOGGER, "  Latency Test: {}", latency_test);
+    log_info!(PERFORMANCE_LOGGER, "  Platform Test: {}", platform_test);
+    log_info!(PERFORMANCE_LOGGER, "");
 
     // Run benchmarks
     if platform_test {
@@ -80,12 +74,12 @@ async fn main() -> Result<()> {
 
 /// Platform compatibility and performance test
 async fn run_platform_test() -> Result<()> {
-    info!("🏁 Platform Performance Test");
-    info!("============================");
+    log_info!(PERFORMANCE_LOGGER, "🏁 Platform Performance Test");
+    log_info!(PERFORMANCE_LOGGER, "============================");
 
     // System information
     let num_cpus = num_cpus::get();
-    info!("CPU Cores: {}", num_cpus);
+    log_info!(PERFORMANCE_LOGGER, "CPU Cores: {}", num_cpus);
     
     // Memory allocation test
     let start = Instant::now();
@@ -95,7 +89,7 @@ async fn run_platform_test() -> Result<()> {
         buffers.push(buffer);
     }
     let alloc_time = start.elapsed();
-    info!("Memory Allocation (1GB): {:?}", alloc_time);
+    log_info!(PERFORMANCE_LOGGER, "Memory Allocation (1GB): {:?}", alloc_time);
 
     // Buffer clearing
     buffers.clear();
@@ -107,7 +101,7 @@ async fn run_platform_test() -> Result<()> {
         result = result.wrapping_add(i * 7 + 13);
     }
     let cpu_time = start.elapsed();
-    info!("CPU Computation (10M ops): {:?} (result: {})", cpu_time, result);
+    log_info!(PERFORMANCE_LOGGER, "CPU Computation (10M ops): {:?} (result: {})", cpu_time, result);
 
     // Async task spawning
     let start = Instant::now();
@@ -125,16 +119,16 @@ async fn run_platform_test() -> Result<()> {
         results.push(handle.await?);
     }
     let async_time = start.elapsed();
-    info!("Async Tasks (1000): {:?}", async_time);
+    log_info!(PERFORMANCE_LOGGER, "Async Tasks (1000): {:?}", async_time);
 
-    info!("✅ Platform test completed successfully");
+    log_info!(PERFORMANCE_LOGGER, "✅ Platform test completed successfully");
     Ok(())
 }
 
 /// Latency-focused benchmark
 async fn run_latency_benchmark(duration_secs: u64) -> Result<()> {
-    info!("⚡ Ultra-Low Latency Benchmark");
-    info!("==============================");
+    log_info!(PERFORMANCE_LOGGER, "⚡ Ultra-Low Latency Benchmark");
+    log_info!(PERFORMANCE_LOGGER, "==============================");
 
     let mut latencies = Vec::new();
     let end_time = Instant::now() + Duration::from_secs(duration_secs);
@@ -151,7 +145,7 @@ async fn run_latency_benchmark(duration_secs: u64) -> Result<()> {
         operations += 1;
 
         if operations % 10000 == 0 {
-            info!("Processed {} operations...", operations);
+            log_info!(PERFORMANCE_LOGGER, "Processed {} operations...", operations);
         }
     }
 
@@ -168,33 +162,33 @@ async fn run_latency_benchmark(duration_secs: u64) -> Result<()> {
     
     let avg_nanos: u128 = latencies.iter().map(|d| d.as_nanos()).sum::<u128>() / len as u128;
 
-    info!("");
-    info!("🔥 LATENCY BENCHMARK RESULTS");
-    info!("===========================");
-    info!("Total Operations: {}", operations);
-    info!("Operations/sec: {:.2}", operations as f64 / duration_secs as f64);
-    info!("");
-    info!("Latency Distribution:");
-    info!("  Min:    {:>8.0} ns", min.as_nanos());
-    info!("  P50:    {:>8.0} ns", p50.as_nanos());
-    info!("  P90:    {:>8.0} ns", p90.as_nanos());
-    info!("  P99:    {:>8.0} ns", p99.as_nanos());
-    info!("  P99.9:  {:>8.0} ns", p999.as_nanos());
-    info!("  Max:    {:>8.0} ns", max.as_nanos());
-    info!("  Avg:    {:>8.0} ns", avg_nanos);
-    info!("");
+    log_info!(PERFORMANCE_LOGGER, "");
+    log_info!(PERFORMANCE_LOGGER, "🔥 LATENCY BENCHMARK RESULTS");
+    log_info!(PERFORMANCE_LOGGER, "===========================");
+    log_info!(PERFORMANCE_LOGGER, "Total Operations: {}", operations);
+    log_info!(PERFORMANCE_LOGGER, "Operations/sec: {:.2}", operations as f64 / duration_secs as f64);
+    log_info!(PERFORMANCE_LOGGER, "");
+    log_info!(PERFORMANCE_LOGGER, "Latency Distribution:");
+    log_info!(PERFORMANCE_LOGGER, "  Min:    {:>8.0} ns", min.as_nanos());
+    log_info!(PERFORMANCE_LOGGER, "  P50:    {:>8.0} ns", p50.as_nanos());
+    log_info!(PERFORMANCE_LOGGER, "  P90:    {:>8.0} ns", p90.as_nanos());
+    log_info!(PERFORMANCE_LOGGER, "  P99:    {:>8.0} ns", p99.as_nanos());
+    log_info!(PERFORMANCE_LOGGER, "  P99.9:  {:>8.0} ns", p999.as_nanos());
+    log_info!(PERFORMANCE_LOGGER, "  Max:    {:>8.0} ns", max.as_nanos());
+    log_info!(PERFORMANCE_LOGGER, "  Avg:    {:>8.0} ns", avg_nanos);
+    log_info!(PERFORMANCE_LOGGER, "");
 
     // Performance score
     let score = calculate_performance_score(avg_nanos);
-    info!("🏆 Performance Score: {:.1}/10.0 - {}", score.0, score.1);
+    log_info!(PERFORMANCE_LOGGER, "🏆 Performance Score: {:.1}/10.0 - {}", score.0, score.1);
 
     Ok(())
 }
 
 /// Throughput-focused benchmark
 async fn run_throughput_benchmark(total_messages: u64, num_clients: u32) -> Result<()> {
-    info!("🚀 High-Throughput Benchmark");
-    info!("============================");
+    log_info!(PERFORMANCE_LOGGER, "🚀 High-Throughput Benchmark");
+    log_info!(PERFORMANCE_LOGGER, "============================");
 
     let messages_per_client = total_messages / num_clients as u64;
     let start_time = Instant::now();
@@ -204,12 +198,12 @@ async fn run_throughput_benchmark(total_messages: u64, num_clients: u32) -> Resu
     for client_id in 0..num_clients {
         let handle = tokio::spawn(async move {
             let mut processed = 0u64;
-            for i in 0..messages_per_client {
+            for _i in 0..messages_per_client {
                 let _result = simulate_message_processing().await;
                 processed += 1;
 
                 if processed % 10000 == 0 {
-                    info!("Client {}: Processed {} messages", client_id, processed);
+                    log_info!(PERFORMANCE_LOGGER, "Client {}: Processed {} messages", client_id, processed);
                 }
             }
             processed
@@ -226,14 +220,14 @@ async fn run_throughput_benchmark(total_messages: u64, num_clients: u32) -> Resu
     let total_time = start_time.elapsed();
     let throughput = total_processed as f64 / total_time.as_secs_f64();
 
-    info!("");
-    info!("📊 THROUGHPUT BENCHMARK RESULTS");
-    info!("===============================");
-    info!("Total Messages: {}", total_processed);
-    info!("Total Time: {:.2} seconds", total_time.as_secs_f64());
-    info!("Throughput: {:.0} messages/second", throughput);
-    info!("Average Latency: {:.2} μs/message", 1_000_000.0 / throughput);
-    info!("");
+    log_info!(PERFORMANCE_LOGGER, "");
+    log_info!(PERFORMANCE_LOGGER, "📊 THROUGHPUT BENCHMARK RESULTS");
+    log_info!(PERFORMANCE_LOGGER, "===============================");
+    log_info!(PERFORMANCE_LOGGER, "Total Messages: {}", total_processed);
+    log_info!(PERFORMANCE_LOGGER, "Total Time: {:.2} seconds", total_time.as_secs_f64());
+    log_info!(PERFORMANCE_LOGGER, "Throughput: {:.0} messages/second", throughput);
+    log_info!(PERFORMANCE_LOGGER, "Average Latency: {:.2} μs/message", 1_000_000.0 / throughput);
+    log_info!(PERFORMANCE_LOGGER, "");
 
     // Performance classification
     let performance_class = if throughput > 1_000_000.0 {
@@ -246,7 +240,7 @@ async fn run_throughput_benchmark(total_messages: u64, num_clients: u32) -> Resu
         "📈 BASELINE PERFORMANCE"
     };
 
-    info!("Performance Classification: {}", performance_class);
+    log_info!(PERFORMANCE_LOGGER, "Performance Classification: {}", performance_class);
 
     Ok(())
 }

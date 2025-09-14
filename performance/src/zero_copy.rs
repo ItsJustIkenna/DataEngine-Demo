@@ -48,7 +48,7 @@ impl ZeroCopyBufferPool {
             }
         }
 
-        tracing::info!(
+        crate::perf_log_info!(
             "Created zero-copy buffer pool: {} buffers of {} bytes each ({}KB total)",
             buffer_count,
             aligned_size,
@@ -73,7 +73,7 @@ impl ZeroCopyBufferPool {
             })
         } else {
             // Pool exhausted - should be rare in properly sized system
-            tracing::warn!("Zero-copy buffer pool exhausted");
+            crate::perf_log_warn!("Zero-copy buffer pool exhausted");
             None
         }
     }

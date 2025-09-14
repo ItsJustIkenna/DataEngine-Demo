@@ -1,0 +1,25 @@
+# Kubernetes Secrets and Sensitive Files
+*.env
+.env
+.env.local
+.env.production
+.env.staging
+secrets/
+credentials/
+
+# API Keys and Passwords
+**/api-keys.yaml
+**/credentials.yaml
+**/secrets.yaml
+
+# Backup files with potential secrets
+*.bak
+*.backup
+
+# IDE files
+.vscode/settings.json
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

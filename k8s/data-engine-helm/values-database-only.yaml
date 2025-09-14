@@ -82,18 +82,6 @@ config:
     level3_snapshot: "market.data.kraken.snapshots"
     trade_snapshot: "market.data.kraken.trade_snapshots"
     trades: "market.data.kraken.trades"
-  
-# =============================================================================
-# Database and Cache Services Configuration - EXTERNAL SERVICES
-# =============================================================================
-
-# DISABLE local PostgreSQL (use external TimescaleDB)
-postgresql:
-  enabled: false
-
-# DISABLE local Redis (use external Redis)
-redis:
-  enabled: false
 
 # =============================================================================
 # Enable External Services
@@ -116,17 +104,20 @@ secrets:
   # External database configuration
   database:
     enabled: true
-    # URL and password will be injected via --set parameters
+    # Password should be set via --set flag, never stored in YAML
+    # Set via: --set secrets.database.password="$DB_PASSWORD" for production
   
   # External Redis configuration  
   redis:
     enabled: true
-    # Password will be injected via --set parameters
+    # Set via: --set secrets.redis.url="$REDIS_URL" --set secrets.redis.password="$REDIS_PASSWORD"
   
   # API keys  
   api_keys:
-    # Kraken API credentials will be injected via --set parameters
     enabled: true
+    kraken_api_key: ""  # Triggers secret lookup
+    kraken_secret_key: ""  # Triggers secret lookup
+    # Set via: --set secrets.api_keys.kraken_api_key="$KRAKEN_API_KEY" --set secrets.api_keys.kraken_secret_key="$KRAKEN_SECRET"
 
 # Disable monitoring components for resource efficiency
 grafana:

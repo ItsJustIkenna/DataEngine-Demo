@@ -4,8 +4,6 @@ target/
 # Ignore sensitive or environment-specific files
 appsettings.json
 .env
-.env.local
-.env.*.local
 
 # Helm values files with real credentials - NEVER COMMIT THESE!
 **/values-dev.yaml
@@ -21,10 +19,3 @@ k8s/helm/values-*.yaml
 **/*secrets*
 **/*credentials*
 config/secrets.yaml
-.env.production
-.env.development
-.env.local
-
-# Authentication tokens and keys
-**/api-keys.yaml
-**/auth-tokens.yaml

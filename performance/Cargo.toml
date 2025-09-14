@@ -19,8 +19,8 @@ dashmap = "5.5"
 anyhow = "1.0"
 crossbeam-utils = "0.8"
 
-# Logging
-tracing = "0.1"
+# Ultra-high performance logging
+ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
 
 # System APIs
 libc = "0.2"

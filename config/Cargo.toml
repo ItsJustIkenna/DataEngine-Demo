@@ -10,5 +10,8 @@ serde_yaml = "0.9.34"
 serde_json = "1.0"
 num_cpus = "1.16"
 
+# Ultra-high performance logging
+ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
+
 [dev-dependencies]
 # Removed tempfile - no longer needed for simplified tests

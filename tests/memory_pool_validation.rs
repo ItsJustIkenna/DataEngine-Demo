@@ -1,19 +1,20 @@
 //! Quick validation test for memory pool fixes
 
 use performance::memory_pool::{BufferPool, PoolConfig};
+use hostbuilder::{TEST_LOGGER, log_info};
 
 #[test]
 fn test_memory_pool_basic_functionality() {
-    println!("🧪 Testing memory pool basic functionality...");
+    log_info!(TEST_LOGGER, "🧪 Testing memory pool basic functionality...");
     
     // Test pool creation with default config
     let pool = BufferPool::new();
     let initial_stats = pool.get_stats();
     
-    println!("   Initial pool stats:");
-    println!("   - Small pool size: {}", initial_stats.small_pool_size);
-    println!("   - Medium pool size: {}", initial_stats.medium_pool_size);
-    println!("   - Large pool size: {}", initial_stats.large_pool_size);
+    log_info!(TEST_LOGGER, "   Initial pool stats:");
+    log_info!(TEST_LOGGER, "   - Small pool size: {}", initial_stats.small_pool_size);
+    log_info!(TEST_LOGGER, "   - Medium pool size: {}", initial_stats.medium_pool_size);
+    log_info!(TEST_LOGGER, "   - Large pool size: {}", initial_stats.large_pool_size);
     
     // Should have pre-allocated buffers
     assert!(initial_stats.small_pool_size > 0, "Should have pre-allocated small buffers");
@@ -33,12 +34,12 @@ fn test_memory_pool_basic_functionality() {
     let final_stats = pool.get_stats();
     assert_eq!(final_stats.small_returned, initial_stats.small_returned + 1, "Should track buffer return");
     
-    println!("✅ Memory pool basic functionality test passed");
+    log_info!(TEST_LOGGER, "✅ Memory pool basic functionality test passed");
 }
 
 #[test]
 fn test_buffer_size_classes() {
-    println!("📏 Testing buffer size class selection...");
+    log_info!(TEST_LOGGER, "📏 Testing buffer size class selection...");
     
     let pool = BufferPool::new();
     
@@ -55,12 +56,12 @@ fn test_buffer_size_classes() {
     assert!(large.capacity() >= 32768, "Should handle large size requests");
     assert!(large.capacity() >= 65536, "Should allocate large buffer class (64KB)");
     
-    println!("✅ Buffer size class selection test passed");
+    log_info!(TEST_LOGGER, "✅ Buffer size class selection test passed");
 }
 
 #[test]
 fn test_custom_pool_config() {
-    println!("⚙️  Testing custom pool configuration...");
+    log_info!(TEST_LOGGER, "⚙️  Testing custom pool configuration...");
     
     let custom_config = PoolConfig {
         small_buffer_size: 512,
@@ -78,12 +79,12 @@ fn test_custom_pool_config() {
     assert_eq!(stats.medium_pool_size, 25, "Should pre-allocate 25 medium buffers");
     assert_eq!(stats.large_pool_size, 25, "Should pre-allocate 25 large buffers");
     
-    println!("✅ Custom pool configuration test passed");
+    log_info!(TEST_LOGGER, "✅ Custom pool configuration test passed");
 }
 
 #[test]
 fn test_buffer_operations() {
-    println!("🔧 Testing buffer operations...");
+    log_info!(TEST_LOGGER, "🔧 Testing buffer operations...");
     
     let pool = BufferPool::new();
     let mut buffer = pool.get_medium_buffer();
@@ -104,12 +105,12 @@ fn test_buffer_operations() {
     assert_eq!(buffer.len(), 0, "Buffer should clear correctly");
     assert!(buffer.capacity() > 0, "Buffer capacity should remain");
     
-    println!("✅ Buffer operations test passed");
+    log_info!(TEST_LOGGER, "✅ Buffer operations test passed");
 }
 
 #[test]
 fn test_global_pool() {
-    println!("🌍 Testing global pool access...");
+    log_info!(TEST_LOGGER, "🌍 Testing global pool access...");
     
     use performance::memory_pool::{initialize_global_pools, global_pool};
     
@@ -123,12 +124,12 @@ fn test_global_pool() {
     
     assert!(buffer.capacity() >= 1024, "Global pool should work correctly");
     
-    println!("✅ Global pool test passed");
+    log_info!(TEST_LOGGER, "✅ Global pool test passed");
 }
 
 #[test]
 fn test_high_frequency_allocation() {
-    println!("⚡ Testing high-frequency buffer allocation...");
+    log_info!(TEST_LOGGER, "⚡ Testing high-frequency buffer allocation...");
     
     let pool = BufferPool::new();
     let iterations = 1000;
@@ -144,8 +145,8 @@ fn test_high_frequency_allocation() {
     let duration = start.elapsed();
     let allocations_per_sec = iterations as f64 / duration.as_secs_f64();
     
-    println!("   - {} allocations in {:?}", iterations, duration);
-    println!("   - Rate: {:.0} allocations/sec", allocations_per_sec);
+    log_info!(TEST_LOGGER, "   - {} allocations in {:?}", iterations, duration);
+    log_info!(TEST_LOGGER, "   - Rate: {:.0} allocations/sec", allocations_per_sec);
     
     // Should be very fast
     assert!(duration.as_millis() < 100, "Should complete quickly (under 100ms)");
@@ -156,11 +157,11 @@ fn test_high_frequency_allocation() {
     assert_eq!(stats.small_allocated, iterations as usize, "Should track all allocations");
     assert_eq!(stats.small_returned, iterations as usize, "Should track all returns");
     
-    println!("✅ High-frequency allocation test passed");
+    log_info!(TEST_LOGGER, "✅ High-frequency allocation test passed");
 }
 
 fn main() {
-    println!("🚀 Running memory pool validation tests...");
+    log_info!(TEST_LOGGER, "🚀 Running memory pool validation tests...");
     
     test_memory_pool_basic_functionality();
     test_buffer_size_classes();
@@ -169,5 +170,5 @@ fn main() {
     test_global_pool();
     test_high_frequency_allocation();
     
-    println!("\n🎉 All memory pool tests passed! The fixes are working correctly.");
+    log_info!(TEST_LOGGER, "\n🎉 All memory pool tests passed! The fixes are working correctly.");
 }

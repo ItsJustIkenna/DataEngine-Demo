@@ -24,6 +24,45 @@
 //! let _ = affinity_manager.pin_to_core(0); // Note: requires root privileges
 //! ```
 
+use std::sync::{Arc, OnceLock};
+use ultra_logger::UltraLogger;
+
+// Create a global performance logger instance
+static PERFORMANCE_LOGGER: OnceLock<Arc<UltraLogger>> = OnceLock::new();
+
+pub fn get_performance_logger() -> &'static Arc<UltraLogger> {
+    PERFORMANCE_LOGGER.get_or_init(|| {
+        Arc::new(UltraLogger::new("Performance".to_string()))
+    })
+}
+
+// Simple logging macros for performance module
+#[macro_export]
+macro_rules! perf_log_info {
+    ($($arg:tt)*) => {
+        {
+            let logger = $crate::get_performance_logger().clone();
+            let message = format!($($arg)*);
+            tokio::spawn(async move {
+                let _ = logger.info(message).await;
+            });
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! perf_log_warn {
+    ($($arg:tt)*) => {
+        {
+            let logger = $crate::get_performance_logger().clone();
+            let message = format!($($arg)*);
+            tokio::spawn(async move {
+                let _ = logger.warn(message).await;
+            });
+        }
+    };
+}
+
 pub mod metrics;
 pub mod cpu_affinity;
 
@@ -52,14 +91,14 @@ pub fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     let affinity_manager = CpuAffinityManager::new();
     // Pin the main thread to core 0 for consistent performance
     if let Err(e) = affinity_manager.pin_to_core(0) {
-        tracing::warn!("Failed to set CPU affinity: {}", e);
+        perf_log_warn!("Failed to set CPU affinity: {}", e);
     }
     
     // Pre-allocate memory pools for zero-copy operations
     memory_pool::init_global_pool(64 * 1024 * 1024, 1024)?;
     
     // Initialize SIMD operations for financial calculations
-    tracing::info!("SIMD support initialized");
+    perf_log_info!("SIMD support initialized");
     
     // Set up high-resolution timers for sub-microsecond measurements
     initialize_high_precision_timing()?;
@@ -67,7 +106,7 @@ pub fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     // Configure memory allocator for trading workloads
     configure_trading_allocator()?;
     
-    tracing::info!("Performance optimization system initialized successfully");
+    perf_log_info!("Performance optimization system initialized successfully");
     Ok(())
 }
 
@@ -83,7 +122,7 @@ fn initialize_global_performance_metrics() -> Result<(), Box<dyn std::error::Err
     
     // Validate that metrics system is ready
     let _metrics = &*GLOBAL_METRICS;
-    tracing::info!("Global performance metrics system initialized");
+    perf_log_info!("Global performance metrics system initialized");
     Ok(())
 }
 
@@ -93,7 +132,7 @@ fn initialize_high_precision_timing() -> Result<(), Box<dyn std::error::Error>> 
     #[cfg(target_os = "windows")]
     {
         // Windows: Note - would need specific timer APIs for production
-        tracing::info!("High-resolution timing configured for Windows");
+        perf_log_info!("High-resolution timing configured for Windows");
     }
     
     #[cfg(target_os = "linux")]
@@ -104,9 +143,9 @@ fn initialize_high_precision_timing() -> Result<(), Box<dyn std::error::Error>> 
         std::thread::sleep(std::time::Duration::from_nanos(100));
         let elapsed = start.elapsed();
         if elapsed > std::time::Duration::from_micros(10) {
-            tracing::warn!("High-resolution timing may not be available");
+            perf_log_warn!("High-resolution timing may not be available");
         } else {
-            tracing::info!("High-resolution timing verified");
+            perf_log_info!("High-resolution timing verified");
         }
     }
     
@@ -117,7 +156,7 @@ fn initialize_high_precision_timing() -> Result<(), Box<dyn std::error::Error>> 
 fn configure_trading_allocator() -> Result<(), Box<dyn std::error::Error>> {
     // Configure mimalloc for low-latency trading
     // These are compile-time configurations but we can validate they're active
-    tracing::info!("Trading allocator configuration validated");
+    perf_log_info!("Trading allocator configuration validated");
     Ok(())
 }
 
@@ -228,7 +267,7 @@ pub mod trading_perf {
         let elapsed_micros = start.elapsed().as_micros() as u64;
         
         if elapsed_micros > threshold_micros {
-            tracing::warn!(
+            perf_log_warn!(
                 "Slow {} operation: {}μs (threshold: {}μs)", 
                 operation_name, 
                 elapsed_micros, 

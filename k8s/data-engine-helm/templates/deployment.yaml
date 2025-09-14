@@ -188,7 +188,7 @@ spec:
             {{- end }}
             
             # API Keys - Support both values file and command line --set
-            {{- if or .Values.kraken_api_key (and .Values.secrets.api_keys .Values.secrets.api_keys.kraken_api_key) }}
+            {{- if or .Values.kraken_api_key (and .Values.secrets.api_keys .Values.secrets.api_keys.enabled) }}
             - name: KRAKEN_API_KEY
               {{- if .Values.kraken_api_key }}
               value: {{ .Values.kraken_api_key | quote }}
@@ -199,7 +199,7 @@ spec:
                   key: KRAKEN_API_KEY
               {{- end }}
             {{- end }}
-            {{- if or .Values.kraken_secret_key (and .Values.secrets.api_keys .Values.secrets.api_keys.kraken_secret_key) }}
+            {{- if or .Values.kraken_secret_key (and .Values.secrets.api_keys .Values.secrets.api_keys.enabled) }}
             - name: KRAKEN_SECRET_KEY
               {{- if .Values.kraken_secret_key }}
               value: {{ .Values.kraken_secret_key | quote }}

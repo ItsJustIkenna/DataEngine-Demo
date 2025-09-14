@@ -1,5 +1,4 @@
 use std::{
-    thread,
     sync::atomic::{AtomicUsize, Ordering},
 };
 
@@ -26,7 +25,7 @@ pub struct CpuAffinityManager {
 impl CpuAffinityManager {
     pub fn new() -> Self {
         let total_cores = num_cpus::get();
-        tracing::info!("Detected {} CPU cores for affinity management", total_cores);
+        crate::perf_log_info!("Detected {} CPU cores for affinity management", total_cores);
         
         Self {
             core_counter: AtomicUsize::new(0),
@@ -52,7 +51,7 @@ impl CpuAffinityManager {
         // Windows CPU affinity is complex and requires specific APIs
         // For now, we'll log the intent but not implement the actual pinning
         // This can be implemented with more specific Windows APIs if needed
-        tracing::info!("Thread {:?} requested pinning to CPU core {} (Windows)", thread::current().id(), core_id);
+        crate::perf_log_info!("Thread requested pinning to CPU core {} (Windows)", core_id);
         Ok(())
     }
 
@@ -73,13 +72,13 @@ impl CpuAffinityManager {
             }
         }
 
-        tracing::info!("Thread {:?} pinned to CPU core {}", thread::current().id(), core_id);
+        crate::perf_log_info!("Thread pinned to CPU core {}", core_id);
         Ok(())
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     pub fn pin_to_core(&self, core_id: usize) -> Result<(), Box<dyn std::error::Error>> {
-        tracing::warn!("CPU affinity not supported on this platform, core {} requested", core_id);
+        crate::perf_log_warn!("CPU affinity not supported on this platform, core {} requested", core_id);
         Ok(())
     }
 
@@ -114,7 +113,7 @@ impl CpuAffinityManager {
 pub fn set_high_priority() -> Result<(), Box<dyn std::error::Error>> {
     // Windows priority setting requires specific APIs and permissions
     // For now, we'll log the intent but not implement the actual priority setting
-    tracing::info!("Thread priority set to high (Windows - requires admin privileges)");
+    crate::perf_log_info!("Thread priority set to high (Windows - requires admin privileges)");
     Ok(())
 }
 
@@ -132,13 +131,13 @@ pub fn set_high_priority() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    tracing::info!("Thread priority set to SCHED_FIFO with priority 99");
+    crate::perf_log_info!("Thread priority set to SCHED_FIFO with priority 99");
     Ok(())
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "linux")))]
 pub fn set_high_priority() -> Result<(), Box<dyn std::error::Error>> {
-    tracing::warn!("High priority scheduling not supported on this platform");
+    crate::perf_log_warn!("High priority scheduling not supported on this platform");
     Ok(())
 }
 
@@ -155,6 +154,6 @@ pub fn prefault_stack(size_mb: usize) -> Result<(), Box<dyn std::error::Error>> 
     // Prevent optimization from removing this
     std::hint::black_box(stack_buffer);
     
-    tracing::info!("Prefaulted {} MB of stack memory", size_mb);
+    crate::perf_log_info!("Prefaulted {} MB of stack memory", size_mb);
     Ok(())
 }
