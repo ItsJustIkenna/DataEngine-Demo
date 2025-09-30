@@ -1,0 +1,88 @@
+name: Deploy DataEngine to Colocation Server
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: DataEngine
+  SERVICE_PORT: 8080
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Run tests
+        run: cargo test --verbose
+
+  deploy:
+    name: Deploy to Colocation
+    runs-on: [self-hosted, windows, x64]
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    # environment: production  # Add when environment is configured
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Checkout Dependencies
+        shell: powershell
+        run: |
+          Write-Host "📦 Checking out dependencies..." -ForegroundColor Yellow
+          $deps = @("databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
+          foreach ($dep in $deps) {
+            if (Test-Path $dep) { Remove-Item $dep -Recurse -Force }
+          }
+          git clone https://github.com/Nwagbara-Group-LLC/databaseschema.git
+          git clone https://github.com/Nwagbara-Group-LLC/redisutils.git
+          git clone https://github.com/Nwagbara-Group-LLC/LoggingEngine.git
+          git clone https://github.com/Nwagbara-Group-LLC/MessageBrokerEngine.git
+
+      - name: Build DataEngine
+        shell: powershell
+        run: |
+          Write-Host "🏗️ Building DataEngine..." -ForegroundColor Green
+          $env:RUSTFLAGS = "-C target-cpu=native -C opt-level=3"
+          cargo build --release --verbose
+          if (Test-Path "target\release\dataengine.exe") {
+            Write-Host "✅ Build successful" -ForegroundColor Green
+          } else {
+            Write-Host "❌ Build failed" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Deploy Service
+        shell: powershell
+        run: |
+          Write-Host "🚀 Deploying DataEngine..." -ForegroundColor Green
+          $result = & "C:\Services\Scripts\Deploy-Microservice.ps1" -ServiceName "${{ env.SERVICE_NAME }}" -BinaryPath "$PWD\target\release\dataengine.exe" -Port ${{ env.SERVICE_PORT }}
+          if ($result -eq 0) {
+            Write-Host "✅ Deployment successful" -ForegroundColor Green
+          } else {
+            exit 1
+          }
+
+      - name: Verify Health
+        shell: powershell
+        run: |
+          Start-Sleep -Seconds 10
+          try {
+            Invoke-RestMethod -Uri "http://localhost:${{ env.SERVICE_PORT }}/health" -TimeoutSec 10
+            Write-Host "✅ Health check passed" -ForegroundColor Green
+          } catch {
+            Write-Host "⚠️ Health check failed" -ForegroundColor Yellow
+          }
