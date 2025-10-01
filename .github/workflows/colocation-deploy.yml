@@ -14,35 +14,38 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     steps:
+      - name: Create workspace structure
+        run: mkdir -p TradingPlatform
+
       - name: Checkout DataEngine
         uses: actions/checkout@v4
         with:
-          path: DataEngine
+          path: TradingPlatform/DataEngine
 
       - name: Checkout databaseschema
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
-          path: databaseschema
+          path: TradingPlatform/databaseschema
 
       - name: Checkout redisutils
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
-          path: redisutils
+          path: TradingPlatform/redisutils
       
       - name: Checkout LoggingEngine
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
-          path: LoggingEngine
+          path: TradingPlatform/LoggingEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Checkout MessageBrokerEngine
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          path: MessageBrokerEngine
+          path: TradingPlatform/MessageBrokerEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Setup Rust toolchain
@@ -56,11 +59,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            DataEngine
-            databaseschema
-            redisutils
-            LoggingEngine
-            MessageBrokerEngine
+            TradingPlatform/DataEngine
+            TradingPlatform/databaseschema
+            TradingPlatform/redisutils
+            TradingPlatform/LoggingEngine
+            TradingPlatform/MessageBrokerEngine
           cache-on-failure: true
 
       - name: Install system dependencies
@@ -72,34 +75,40 @@ jobs:
             libssl-dev \
             libpq-dev
 
-      - name: Run cargo test on workspaces (CI-compatible)
+      - name: Run comprehensive tests
+        working-directory: TradingPlatform
         run: |
-          echo "🧪 Running tests on CI-compatible crates only..."
+          echo "🔍 Running comprehensive tests with proper workspace structure..."
           
-          # Test LoggingEngine first (provides ultra-logger dependency)
+          # Test LoggingEngine first (it's a dependency for others)
           echo "🧪 Testing LoggingEngine..."
           cd LoggingEngine && cargo test --verbose
           
-          # Test standalone crates without ultra-logger dependencies
+          # Test redisutils
           echo "🧪 Testing redisutils..."
           cd ../redisutils && cargo test --verbose
           
-          # Test MessageBrokerEngine publisher
+          # Test MessageBrokerEngine components
           echo "🧪 Testing MessageBrokerEngine publisher..."
           cd ../MessageBrokerEngine/publisher && cargo test --verbose
           
-          # Skip DataEngine and databaseschema due to ultra-logger path dependencies in CI
-          echo "⚠️ Skipping DataEngine and databaseschema tests due to CI dependency path issues"
-          echo "✅ These will be tested during actual deployment on colocation server"
+          # Test DataEngine (now that all dependencies are available)
+          echo "🧪 Testing DataEngine..."
+          cd ../../DataEngine && cargo test --verbose
+          
+          echo "✅ All tests passed with proper workspace structure!"
 
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
     needs: test
     steps:
+      - name: Create workspace structure
+        run: mkdir -p TradingPlatform
+        
       - uses: actions/checkout@v4
         with:
-          path: DataEngine
+          path: TradingPlatform/DataEngine
 
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
@@ -111,13 +120,13 @@ jobs:
         run: cargo install cargo-audit
 
       - name: Run security audit
-        working-directory: DataEngine
+        working-directory: TradingPlatform/DataEngine
         run: |
           echo "🔒 Running security audit..."
           cargo audit
 
       - name: Check for vulnerabilities
-        working-directory: DataEngine
+        working-directory: TradingPlatform/DataEngine
         run: |
           echo "🛡️ Checking for known vulnerabilities..."
           cargo audit --deny warnings
