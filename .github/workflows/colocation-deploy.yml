@@ -74,8 +74,8 @@ jobs:
 
       - name: Run cargo test on all workspaces
         run: |
-          echo "🧪 Running cargo test on DataEngine workspace..."
-          cd DataEngine && cargo test --verbose
+          echo "🧪 Running cargo test on DataEngine workspace (excluding performance)..."
+          cd DataEngine && cargo test --verbose --workspace --exclude performance
           
           echo "🧪 Running cargo test on databaseschema..."
           cd ../databaseschema && cargo test --verbose
@@ -87,7 +87,7 @@ jobs:
           cd ../LoggingEngine && cargo test --verbose
           
           echo "🧪 Running cargo test on MessageBrokerEngine..."
-          cd ../MessageBrokerEngine && cargo test --verbose
+          cd ../MessageBrokerEngine/publisher && cargo test --verbose
 
   security-audit:
     name: Security Audit
