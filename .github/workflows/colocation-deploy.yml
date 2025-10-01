@@ -36,12 +36,14 @@ jobs:
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
           path: LoggingEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Checkout MessageBrokerEngine
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
           path: MessageBrokerEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Setup Rust toolchain
         uses: actions-rs/toolchain@v1
