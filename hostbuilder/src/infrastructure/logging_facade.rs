@@ -1,5 +1,6 @@
-use ultra_logger::{UltraLogger, LogLevel};
+use ultra_logger::{UltraLogger, LogLevel, LoggerConfig, TransportConfig, ConnectionConfig, load_config_from_env};
 use std::sync::Arc;
+use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
 /// Global logging facade for the DataEngine
@@ -11,9 +12,50 @@ pub struct DataEngineLogger {
 
 impl DataEngineLogger {
     pub fn new(service_name: &str) -> Self {
+        // Create the appropriate logger configuration
+        let config = Self::create_elasticsearch_config();
+
         Self {
-            logger: UltraLogger::new(format!("DataEngine-{}", service_name)),
+            logger: UltraLogger::with_config(format!("DataEngine-{}", service_name), config),
             service_name: service_name.to_string(),
+        }
+    }
+
+    /// Create Elasticsearch configuration for DataEngine
+    fn create_elasticsearch_config() -> LoggerConfig {
+        // Check if we should use Elasticsearch (environment variable or default)
+        let use_elasticsearch = std::env::var("USE_ELASTICSEARCH_LOGGING")
+            .map(|v| v.to_lowercase() == "true")
+            .unwrap_or(true); // Default to true for production
+
+        if use_elasticsearch {
+            // Try to get credentials from environment or use fallback
+            let endpoint = std::env::var("ELASTIC_CLOUD_ENDPOINT")
+                .unwrap_or_else(|_| "https://my-observability-deployment-76d771.es.us-east-2.aws.elastic-cloud.com".to_string());
+            let username = std::env::var("ELASTIC_CLOUD_USERNAME")
+                .unwrap_or_else(|_| "elastic".to_string());
+            let password = std::env::var("ELASTIC_CLOUD_PASSWORD")
+                .unwrap_or_else(|_| "mN9CNxqYU9J0nw4aywXVxTAw".to_string());
+
+            let mut options = HashMap::new();
+            options.insert("index".to_string(), "dataengine-logs".to_string());
+
+            LoggerConfig {
+                level: "info".to_string(),
+                transport: TransportConfig {
+                    transport_type: "elasticsearch".to_string(),
+                    connection: ConnectionConfig {
+                        host: endpoint,
+                        port: 443,
+                        username: Some(username),
+                        password: Some(password),
+                        options,
+                    },
+                },
+            }
+        } else {
+            // Fallback to stdout for development
+            LoggerConfig::default()
         }
     }
 

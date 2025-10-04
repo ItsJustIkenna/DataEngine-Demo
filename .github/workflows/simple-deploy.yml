@@ -1,0 +1,297 @@
+name: Deploy DataEngine Stack to Remote Desktop
+
+on:
+  push:
+    branches: [main, develop]
+
+env:
+  # Container Configuration
+  IMAGE_NAME: data-engine
+  IMAGE_REGISTRY: ghcr.io/trading-platform
+  
+  # Kubernetes Configuration  
+  NAMESPACE: trading-platform
+  RELEASE_NAME: data-engine
+  
+  # Helm Chart Configuration
+  CHART_PATH: "./k8s/data-engine-helm"
+  CHART_OVERRIDE_PATH: "./k8s/overrides"
+  
+  # Infrastructure Configuration
+  DATABASE_SCHEMA_CHART: "./TradingPlatform/databaseschema/k8s/database-schema-helm"
+  REDIS_UTILS_CHART: "./TradingPlatform/redisutils/k8s/redis-utils-helm"
+  MESSAGE_BROKER_CHART: "./TradingPlatform/MessageBrokerEngine/k8s/message-broker-engine"
+  
+  # Timeouts
+  DEPLOY_TIMEOUT: "300s"
+  HEALTH_CHECK_TIMEOUT: "60s"
+
+jobs:
+  deploy-complete-stack:
+    name: Deploy DataEngine with Dependencies  
+    runs-on: [self-hosted, windows, x64]
+    env:
+      DEPLOY_ENV: ${{ github.ref == 'refs/heads/develop' && 'dev' || 'database-only' }}
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Environment
+        shell: powershell
+        run: |
+          Write-Host "🎯 Deploying DataEngine stack to: $env:DEPLOY_ENV" -ForegroundColor Green
+          
+          # Login to GitHub Container Registry (if using remote images)
+          if ($env:IMAGE_REGISTRY -like "*ghcr.io*") {
+            Write-Host "🔐 Authenticating with GitHub Container Registry..." -ForegroundColor Yellow
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          }
+
+      - name: Verify System
+        shell: powershell
+        run: |
+          Write-Host "🔍 Verifying system readiness..." -ForegroundColor Yellow
+          
+          # Check Docker
+          docker --version
+          if ($LASTEXITCODE -ne 0) { Write-Host "❌ Docker not found"; exit 1 }
+          
+          # Check Kubernetes  
+          kubectl cluster-info --request-timeout=10s
+          if ($LASTEXITCODE -ne 0) { Write-Host "❌ Kubernetes not available"; exit 1 }
+          
+          # Check/Install Helm
+          helm version --short
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "📥 Installing Helm..." -ForegroundColor Yellow
+            winget install Helm.Helm --silent
+          }
+          
+          # Verify Kubernetes context and resources
+          Write-Host "🔍 Verifying Kubernetes resources..." -ForegroundColor Gray
+          kubectl get nodes --no-headers | Measure-Object | ForEach-Object { 
+            if ($_.Count -eq 0) { 
+              Write-Host "❌ No Kubernetes nodes available" -ForegroundColor Red; exit 1 
+            } else {
+              Write-Host "✅ Found $($_.Count) Kubernetes node(s)" -ForegroundColor Green
+            }
+          }
+          
+          Write-Host "✅ System ready" -ForegroundColor Green
+
+      - name: Setup DataEngine Workspace
+        shell: powershell
+        run: |
+          Write-Host "📦 Setting up DataEngine workspace..." -ForegroundColor Yellow
+          
+          # Create workspace directory
+          $workspace = "TradingPlatform"
+          if (Test-Path $workspace) { Remove-Item $workspace -Recurse -Force }
+          New-Item -ItemType Directory -Path $workspace | Out-Null
+          
+          # Copy current DataEngine code to workspace
+          Copy-Item -Path "*" -Destination "$workspace/" -Recurse -Exclude @($workspace, ".git", "target")
+          
+          # Clone all dependencies into workspace
+          Set-Location $workspace
+          
+          Write-Host "  📥 Cloning dependencies..." -ForegroundColor Gray
+          git clone https://github.com/Nwagbara-Group-LLC/databaseschema.git --depth 1 --quiet
+          git clone https://github.com/Nwagbara-Group-LLC/redisutils.git --depth 1 --quiet  
+          git clone https://github.com/Nwagbara-Group-LLC/LoggingEngine.git --depth 1 --quiet
+          git clone https://github.com/Nwagbara-Group-LLC/MessageBrokerEngine.git --depth 1 --quiet
+          
+          Set-Location ..
+          Write-Host "✅ Workspace ready" -ForegroundColor Green
+
+      - name: Deploy Infrastructure Stack
+        shell: powershell
+        run: |
+          Write-Host "🏗️ Deploying infrastructure stack..." -ForegroundColor Green
+          
+          # Create namespace
+          kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create image pull secret for private registry
+          kubectl create secret docker-registry ghcr-secret `
+            --namespace $env:NAMESPACE `
+            --docker-server=ghcr.io `
+            --docker-username="${{ github.actor }}" `
+            --docker-password="${{ secrets.GITHUB_TOKEN }}" `
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Build chart dependencies (will automatically fetch required repos)
+          Write-Host "🔧 Building Helm chart dependencies..." -ForegroundColor Gray
+          helm dependency build $env:DATABASE_SCHEMA_CHART
+          helm dependency build $env:MESSAGE_BROKER_CHART
+          
+          # Deploy Database Schema with PostgreSQL
+          Write-Host "  📊 Deploying Database Schema & PostgreSQL..." -ForegroundColor Yellow
+          helm upgrade --install database-schema $env:DATABASE_SCHEMA_CHART `
+            --namespace $env:NAMESPACE `
+            --set postgresql.auth.postgresPassword="${{ secrets.DATABASE_PASSWORD }}" `
+            --set postgresql.auth.database=trading_platform `
+            --set postgresql.primary.persistence.size=20Gi `
+            --set postgresql.primary.resources.requests.memory=2Gi `
+            --set postgresql.primary.resources.requests.cpu=1000m `
+            --wait --timeout=$env:DEPLOY_TIMEOUT
+          
+          # Deploy Redis Utils with Redis
+          Write-Host "  🔴 Deploying Redis Utils & Redis..." -ForegroundColor Yellow  
+          helm upgrade --install redis-utils $env:REDIS_UTILS_CHART `
+            --namespace $env:NAMESPACE `
+            --set redis.password="${{ secrets.REDIS_PASSWORD }}" `
+            --wait --timeout=$env:DEPLOY_TIMEOUT
+          
+          # Deploy MessageBrokerEngine for ultra-fast message streaming
+          Write-Host "  📨 Deploying MessageBrokerEngine..." -ForegroundColor Yellow
+          helm upgrade --install message-broker $env:MESSAGE_BROKER_CHART `
+            --namespace $env:NAMESPACE `
+            --set replicaCount=1 `
+            --set image.tag="latest" `
+            --set image.pullPolicy="Never" `
+            --set resources.requests.memory=1Gi `
+            --set resources.requests.cpu=500m `
+            --wait --timeout=$env:DEPLOY_TIMEOUT
+          
+          Write-Host "✅ Infrastructure stack deployed" -ForegroundColor Green
+
+      - name: Configure Database-Only Deployment
+        if: env.DEPLOY_ENV == 'database-only'
+        shell: powershell
+        run: |
+          Write-Host "📊 Database-Only Deployment Selected" -ForegroundColor Cyan
+          Write-Host "  DataEngine will run in database-only mode" -ForegroundColor Yellow
+          Write-Host "  Features: WebSocket data ingestion only, MessageBrokerEngine disabled, no API services" -ForegroundColor Yellow
+          Write-Host "  Using values-database-only.yaml configuration" -ForegroundColor Yellow
+
+
+
+      - name: Build DataEngine Application
+        shell: powershell
+        run: |
+          Write-Host "🐳 Building DataEngine and MessageBrokerEngine..." -ForegroundColor Green
+          
+          # Build MessageBrokerEngine first
+          Write-Host "📦 Building MessageBrokerEngine image..." -ForegroundColor Yellow
+          Set-Location "TradingPlatform/MessageBrokerEngine"
+          docker build -t "message-broker-engine:latest" .
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ MessageBrokerEngine build failed" -ForegroundColor Red
+            exit 1
+          }
+          Set-Location "../.."
+          Write-Host "✅ MessageBrokerEngine image built successfully" -ForegroundColor Green
+          
+          # Create optimized multi-stage Dockerfile for DataEngine
+          $dockerfile = "FROM rust:1.75-slim as builder`n"
+          $dockerfile += "WORKDIR /workspace`n"
+          $dockerfile += "RUN apt-get update && apt-get install -y pkg-config libssl-dev libpq-dev build-essential && rm -rf /var/lib/apt/lists/*`n"
+          $dockerfile += "COPY TradingPlatform/ ./`n"
+          $dockerfile += "WORKDIR /workspace/DataEngine`n"
+          $dockerfile += "RUN cargo build --release --bin program`n`n"
+          $dockerfile += "FROM debian:bookworm-slim as runtime`n"
+          $dockerfile += "RUN apt-get update && apt-get install -y libpq5 libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*`n"
+          $dockerfile += "WORKDIR /app`n"
+          $dockerfile += "COPY --from=builder /workspace/DataEngine/target/release/program ./dataengine`n"
+          $dockerfile += "EXPOSE 8080`n"
+          $dockerfile += "CMD ['./dataengine']"
+          
+          $dockerfile | Out-File -FilePath "Dockerfile" -Encoding UTF8
+          
+          # Build DataEngine image
+          Write-Host "📦 Building DataEngine image: $env:IMAGE_NAME`:$env:IMAGE_TAG" -ForegroundColor Yellow
+          
+          docker build -t "$env:IMAGE_NAME`:$env:IMAGE_TAG" .
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ DataEngine build failed" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "✅ Both images built successfully" -ForegroundColor Green
+
+      - name: Deploy DataEngine via Helm
+        shell: powershell
+        run: |
+          Write-Host "🚀 Deploying DataEngine application..." -ForegroundColor Green
+          
+          # Deploy DataEngine using environment-based values file
+          Write-Host "📋 Using values file: values-$env:DEPLOY_ENV.yaml" -ForegroundColor Yellow
+          
+          helm upgrade --install $env:RELEASE_NAME $env:CHART_PATH `
+            --namespace $env:NAMESPACE `
+            --values "$env:CHART_PATH/values-$env:DEPLOY_ENV.yaml" `
+            --set "image.repository=$env:IMAGE_REGISTRY/$env:IMAGE_NAME" `
+            --set "image.tag=$env:IMAGE_TAG" `
+            --set "config.environment=$env:DEPLOY_ENV" `
+            --set "secrets.database.password=${{ secrets.DATABASE_PASSWORD }}" `
+            --set "secrets.redis.password=${{ secrets.REDIS_PASSWORD }}" `
+            --set "secrets.api_keys.kraken_api_key=${{ secrets.KRAKEN_API_KEY }}" `
+            --set "secrets.api_keys.kraken_secret_key=${{ secrets.KRAKEN_SECRET_KEY }}" `
+            --wait --timeout=$env:DEPLOY_TIMEOUT
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ DataEngine deployed successfully" -ForegroundColor Green
+          } else {
+            Write-Host "❌ DataEngine deployment failed" -ForegroundColor Red
+            helm status data-engine --namespace $env:NAMESPACE
+            exit 1
+          }
+
+      - name: Verify Complete Deployment
+        shell: powershell
+        run: |
+          $deployType = if ($env:DEPLOY_ENV -eq "database-only") { "Infrastructure Only" } else { "Complete DataEngine Stack" }
+          Write-Host "🔍 Verifying $deployType..." -ForegroundColor Yellow
+          
+          Write-Host "`n📊 Infrastructure Status:" -ForegroundColor Cyan
+          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=database-schema
+          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=redis-utils  
+          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=message-broker
+          
+          Write-Host "`n🚀 DataEngine Status:" -ForegroundColor Cyan
+          kubectl get services -n $env:NAMESPACE
+          
+          # Check DataEngine deployment (all environments including database-only)
+          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/name=data-engine
+          
+          # Wait for DataEngine to be ready
+          Write-Host "`n⏳ Waiting for DataEngine readiness..." -ForegroundColor Yellow
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine `
+            --namespace $env:NAMESPACE --timeout=300s
+          
+          # Health check behavior depends on deployment mode
+          $podName = kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[0].metadata.name}'
+          
+          if ($podName) {
+            Write-Host "`n📋 DataEngine Logs:" -ForegroundColor Cyan
+            kubectl logs $podName -n $env:NAMESPACE --tail=10
+            
+            # Health check only for non-database-only deployments (service disabled in database-only mode)
+            if ($env:DEPLOY_ENV -ne "database-only") {
+              Write-Host "`n🏥 Health Check:" -ForegroundColor Cyan
+              Start-Process kubectl -ArgumentList "port-forward $podName 8080:8080 -n $env:NAMESPACE" -NoNewWindow
+              Start-Sleep 10
+              
+              try {
+                $health = Invoke-RestMethod -Uri "http://localhost:8080/health" -TimeoutSec 15
+                Write-Host "✅ DataEngine is healthy!" -ForegroundColor Green
+                Write-Host $health -ForegroundColor Gray
+              } catch {
+                Write-Host "⚠️ Health check inconclusive: $($_.Exception.Message)" -ForegroundColor Yellow
+              } finally {
+                Get-Process kubectl -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*port-forward*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+              }
+            } else {
+              Write-Host "📊 Database-only mode: Service disabled, health check via logs only" -ForegroundColor Yellow
+            }
+          }
+          
+          Write-Host "`n🎉 Deployment Summary:" -ForegroundColor Green
+          Write-Host "  Environment: $env:DEPLOY_ENV" -ForegroundColor White
+          Write-Host "  Namespace: $env:NAMESPACE" -ForegroundColor White  
+          Write-Host "  DataEngine: $env:IMAGE_NAME`:$env:IMAGE_TAG" -ForegroundColor White
+          Write-Host "  PostgreSQL: database-schema-postgresql:5432" -ForegroundColor White
+          Write-Host "  Redis: redis-utils:6379" -ForegroundColor White
+          Write-Host "  MessageBrokerEngine: message-broker-message-broker-engine:8080" -ForegroundColor White
