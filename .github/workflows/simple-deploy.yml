@@ -40,11 +40,11 @@ jobs:
       - name: Setup Environment
         shell: powershell
         run: |
-          Write-Host "🎯 Deploying DataEngine stack to: $env:DEPLOY_ENV" -ForegroundColor Green
+          Write-Host "Deploying DataEngine stack to: $env:DEPLOY_ENV" -ForegroundColor Green
           
-          # Login to GitHub Container Registry (if using remote images)
+          # Login to GitHub Container Registry if using remote images
           if ($env:IMAGE_REGISTRY -like "*ghcr.io*") {
-            Write-Host "🔐 Authenticating with GitHub Container Registry..." -ForegroundColor Yellow
+            Write-Host "Authenticating with GitHub Container Registry..." -ForegroundColor Yellow
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           }
 
