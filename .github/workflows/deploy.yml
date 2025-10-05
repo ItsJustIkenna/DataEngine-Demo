@@ -50,22 +50,23 @@ jobs:
             Write-Host "Authenticating with GitHub Container Registry..." -ForegroundColor Yellow
             Write-Host "Using username: ${{ github.actor }}" -ForegroundColor Gray
             
-            # Try with github.actor first, then fallback to specific username
+            # Use lowercase username for GHCR (case sensitive)
             $loginSuccess = $false
-            try {
-              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-              if ($LASTEXITCODE -eq 0) { $loginSuccess = $true }
-            } catch {
-              Write-Host "Login with github.actor failed, trying with itsjustikenna..." -ForegroundColor Yellow
+            Write-Host "Attempting login with lowercase username..." -ForegroundColor Yellow
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "itsjustikenna" --password-stdin
+            if ($LASTEXITCODE -eq 0) { 
+              $loginSuccess = $true 
+              Write-Host "✅ Login successful with itsjustikenna" -ForegroundColor Green
             }
             
             if (-not $loginSuccess) {
-              Write-Host "Trying with itsjustikenna username..." -ForegroundColor Yellow
-              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "itsjustikenna" --password-stdin
+              Write-Host "Trying fallback with GITHUB_TOKEN and lowercase username..." -ForegroundColor Yellow
+              echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "itsjustikenna" --password-stdin
               if ($LASTEXITCODE -eq 0) { 
                 $loginSuccess = $true 
+                Write-Host "✅ Login successful with GITHUB_TOKEN" -ForegroundColor Green
               } else {
-                Write-Host "Fallback: Trying with GITHUB_TOKEN..." -ForegroundColor Yellow
+                Write-Host "Trying GITHUB_TOKEN with GitHub Actor..." -ForegroundColor Yellow
                 echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
                 if ($LASTEXITCODE -eq 0) { $loginSuccess = $true }
               }
