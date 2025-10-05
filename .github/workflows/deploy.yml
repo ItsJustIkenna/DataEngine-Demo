@@ -55,6 +55,9 @@ jobs:
       - name: Verify System
         shell: powershell
         run: |
+          # Set error handling
+          $ErrorActionPreference = "Continue"
+          
           Write-Host "Verifying system readiness..." -ForegroundColor Yellow
           
           # Check Docker
@@ -64,47 +67,80 @@ jobs:
           # Check Kubernetes - Configure for Docker Desktop
           Write-Host "Configuring Kubernetes context..." -ForegroundColor Gray
           
-          # Set the correct Docker Desktop context
-          kubectl config use-context docker-desktop 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Docker Desktop context not found. Attempting to configure..." -ForegroundColor Yellow
-            
-            # Try to set up docker-desktop context if it doesn't exist
-            kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true 2>$null
-            kubectl config set-context docker-desktop --cluster=docker-desktop 2>$null
-            kubectl config use-context docker-desktop 2>$null
+          # Check if docker-desktop context exists
+          $contextExists = $false
+          try {
+            kubectl config get-contexts docker-desktop | Out-Null
+            $contextExists = ($LASTEXITCODE -eq 0)
+          } catch {
+            $contextExists = $false
           }
           
-          Write-Host "Checking Kubernetes cluster..." -ForegroundColor Gray
-          kubectl get nodes --request-timeout=30s
-          if ($LASTEXITCODE -ne 0) { 
-            Write-Host "Kubernetes cluster not available. Checking alternative endpoints..." -ForegroundColor Yellow
+          if (-not $contextExists) {
+            Write-Host "Docker Desktop context not found. Creating configuration..." -ForegroundColor Yellow
             
-            # Try alternative approaches
-            $kubectlWorking = $false
+            # Create docker-desktop cluster and context
+            kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true
+            kubectl config set-context docker-desktop --cluster=docker-desktop
             
-            # Try with explicit server
-            kubectl get nodes --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true --request-timeout=30s 2>$null
+            # Also try localhost as backup
+            kubectl config set-cluster docker-desktop-local --server=https://localhost:6443 --insecure-skip-tls-verify=true
+            kubectl config set-context docker-desktop-local --cluster=docker-desktop-local
+          }
+          
+          # Try to use docker-desktop context
+          kubectl config use-context docker-desktop
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Trying alternative context..." -ForegroundColor Yellow
+            kubectl config use-context docker-desktop-local
+          }
+          
+          Write-Host "Testing Kubernetes connectivity..." -ForegroundColor Gray
+          
+          # Try multiple connection methods
+          $kubectlWorking = $false
+          
+          # Method 1: Current context
+          try {
+            kubectl get nodes --request-timeout=15s | Out-Null
             if ($LASTEXITCODE -eq 0) { 
               $kubectlWorking = $true
-              Write-Host "Kubernetes accessible via kubernetes.docker.internal:6443" -ForegroundColor Green
+              Write-Host "Kubernetes accessible via current context" -ForegroundColor Green
             }
-            
-            if (-not $kubectlWorking) {
-              # Try localhost with different port
-              kubectl get nodes --server=https://localhost:6443 --insecure-skip-tls-verify=true --request-timeout=30s 2>$null
+          } catch { }
+          
+          # Method 2: Direct to kubernetes.docker.internal
+          if (-not $kubectlWorking) {
+            try {
+              kubectl get nodes --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true --request-timeout=15s | Out-Null
+              if ($LASTEXITCODE -eq 0) { 
+                $kubectlWorking = $true
+                Write-Host "Kubernetes accessible via kubernetes.docker.internal:6443" -ForegroundColor Green
+                # Update context to use this server
+                kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true
+              }
+            } catch { }
+          }
+          
+          # Method 3: Localhost
+          if (-not $kubectlWorking) {
+            try {
+              kubectl get nodes --server=https://localhost:6443 --insecure-skip-tls-verify=true --request-timeout=15s | Out-Null
               if ($LASTEXITCODE -eq 0) { 
                 $kubectlWorking = $true
                 Write-Host "Kubernetes accessible via localhost:6443" -ForegroundColor Green
+                # Update context to use this server
+                kubectl config set-cluster docker-desktop --server=https://localhost:6443 --insecure-skip-tls-verify=true
               }
-            }
-            
-            if (-not $kubectlWorking) {
-              Write-Host "WARNING: Kubernetes cluster validation failed, but continuing deployment..." -ForegroundColor Yellow
-              Write-Host "Deployment commands will include their own connectivity validation" -ForegroundColor Yellow
-            }
+            } catch { }
+          }
+          
+          if ($kubectlWorking) {
+            Write-Host "Kubernetes cluster is ready for deployment" -ForegroundColor Green
           } else {
-            Write-Host "Kubernetes cluster is ready" -ForegroundColor Green
+            Write-Host "WARNING: Kubernetes cluster validation failed" -ForegroundColor Yellow
+            Write-Host "Will attempt deployment anyway - errors will be caught during actual operations" -ForegroundColor Yellow
+            Write-Host "Ensure Docker Desktop Kubernetes is enabled and running" -ForegroundColor Yellow
           }
           
           # Check/Install Helm
