@@ -7,7 +7,7 @@ on:
 env:
   # Container Configuration
   IMAGE_NAME: data-engine
-  IMAGE_REGISTRY: ghcr.io/trading-platform
+  IMAGE_REGISTRY: ghcr.io/nwagbara-group-llc
   
   # Kubernetes Configuration  
   NAMESPACE: trading-platform
