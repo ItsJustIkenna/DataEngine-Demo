@@ -41,11 +41,46 @@ jobs:
         shell: powershell
         run: |
           Write-Host "Deploying DataEngine stack to: $env:DEPLOY_ENV" -ForegroundColor Green
+          Write-Host "Debug - GitHub Actor: ${{ github.actor }}" -ForegroundColor Cyan
+          Write-Host "Debug - Image Registry: $env:IMAGE_REGISTRY" -ForegroundColor Cyan
+          Write-Host "Debug - GHCR Token exists: $([bool]'${{ secrets.GHCR_TOKEN }}')" -ForegroundColor Cyan
           
           # Login to GitHub Container Registry if using remote images
           if ($env:IMAGE_REGISTRY -like "*ghcr.io*") {
             Write-Host "Authenticating with GitHub Container Registry..." -ForegroundColor Yellow
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            Write-Host "Using username: ${{ github.actor }}" -ForegroundColor Gray
+            
+            # Try with github.actor first, then fallback to specific username
+            $loginSuccess = $false
+            try {
+              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+              if ($LASTEXITCODE -eq 0) { $loginSuccess = $true }
+            } catch {
+              Write-Host "Login with github.actor failed, trying with itsjustikenna..." -ForegroundColor Yellow
+            }
+            
+            if (-not $loginSuccess) {
+              Write-Host "Trying with itsjustikenna username..." -ForegroundColor Yellow
+              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "itsjustikenna" --password-stdin
+              if ($LASTEXITCODE -eq 0) { 
+                $loginSuccess = $true 
+              } else {
+                Write-Host "Fallback: Trying with GITHUB_TOKEN..." -ForegroundColor Yellow
+                echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+                if ($LASTEXITCODE -eq 0) { $loginSuccess = $true }
+              }
+            }
+            
+            if (-not $loginSuccess) {
+              Write-Host "❌ All login attempts failed" -ForegroundColor Red
+              Write-Host "Please check:" -ForegroundColor Red
+              Write-Host "1. GHCR_TOKEN secret is set" -ForegroundColor Red
+              Write-Host "2. PAT has write:packages scope" -ForegroundColor Red
+              Write-Host "3. Repository has read/write permissions" -ForegroundColor Red
+              exit 1
+            }
+            
+            Write-Host "✅ Successfully authenticated with GHCR" -ForegroundColor Green
           }
 
       - name: Verify System
