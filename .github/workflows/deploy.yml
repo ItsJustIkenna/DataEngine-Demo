@@ -127,7 +127,6 @@ jobs:
               kubectl config set-cluster docker-desktop --server=https://localhost:6443 --insecure-skip-tls-verify=true 2>$null
             }
           }
-          }
           
           if ($kubectlWorking) {
             Write-Host "Kubernetes cluster is ready for deployment" -ForegroundColor Green
