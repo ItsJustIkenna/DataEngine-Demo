@@ -60,8 +60,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Host "Docker not found"; exit 1 }
           
           # Check Kubernetes  
-          kubectl cluster-info --request-timeout=10s
-          if ($LASTEXITCODE -ne 0) { Write-Host "Kubernetes not available"; exit 1 }
+          Write-Host "Checking Kubernetes cluster..." -ForegroundColor Gray
+          kubectl get nodes --request-timeout=10s
+          if ($LASTEXITCODE -ne 0) { 
+            Write-Host "Kubernetes cluster not available. Please ensure:" -ForegroundColor Red
+            Write-Host "1. Docker Desktop is running" -ForegroundColor Red
+            Write-Host "2. Kubernetes is enabled in Docker Desktop settings" -ForegroundColor Red
+            Write-Host "3. Kubernetes cluster is healthy" -ForegroundColor Red
+            exit 1 
+          }
+          Write-Host "Kubernetes cluster is ready" -ForegroundColor Green
           
           # Check/Install Helm
           helm version --short
