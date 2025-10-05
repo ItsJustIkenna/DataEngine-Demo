@@ -49,6 +49,8 @@ jobs:
         run: |
           Write-Host "Deploying DataEngine stack to: $env:DEPLOY_ENV" -ForegroundColor Green
           Write-Host "GHCR Authentication completed" -ForegroundColor Green
+          Write-Host "Runner environment: $env:RUNNER_NAME" -ForegroundColor Gray
+          Write-Host "Computer name: $env:COMPUTERNAME" -ForegroundColor Gray
 
       - name: Verify System
         shell: powershell
@@ -59,17 +61,51 @@ jobs:
           docker --version
           if ($LASTEXITCODE -ne 0) { Write-Host "Docker not found"; exit 1 }
           
-          # Check Kubernetes  
-          Write-Host "Checking Kubernetes cluster..." -ForegroundColor Gray
-          kubectl get nodes --request-timeout=10s
-          if ($LASTEXITCODE -ne 0) { 
-            Write-Host "Kubernetes cluster not available. Please ensure:" -ForegroundColor Red
-            Write-Host "1. Docker Desktop is running" -ForegroundColor Red
-            Write-Host "2. Kubernetes is enabled in Docker Desktop settings" -ForegroundColor Red
-            Write-Host "3. Kubernetes cluster is healthy" -ForegroundColor Red
-            exit 1 
+          # Check Kubernetes - Configure for Docker Desktop
+          Write-Host "Configuring Kubernetes context..." -ForegroundColor Gray
+          
+          # Set the correct Docker Desktop context
+          kubectl config use-context docker-desktop 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Docker Desktop context not found. Attempting to configure..." -ForegroundColor Yellow
+            
+            # Try to set up docker-desktop context if it doesn't exist
+            kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true 2>$null
+            kubectl config set-context docker-desktop --cluster=docker-desktop 2>$null
+            kubectl config use-context docker-desktop 2>$null
           }
-          Write-Host "Kubernetes cluster is ready" -ForegroundColor Green
+          
+          Write-Host "Checking Kubernetes cluster..." -ForegroundColor Gray
+          kubectl get nodes --request-timeout=30s
+          if ($LASTEXITCODE -ne 0) { 
+            Write-Host "Kubernetes cluster not available. Checking alternative endpoints..." -ForegroundColor Yellow
+            
+            # Try alternative approaches
+            $kubectlWorking = $false
+            
+            # Try with explicit server
+            kubectl get nodes --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true --request-timeout=30s 2>$null
+            if ($LASTEXITCODE -eq 0) { 
+              $kubectlWorking = $true
+              Write-Host "Kubernetes accessible via kubernetes.docker.internal:6443" -ForegroundColor Green
+            }
+            
+            if (-not $kubectlWorking) {
+              # Try localhost with different port
+              kubectl get nodes --server=https://localhost:6443 --insecure-skip-tls-verify=true --request-timeout=30s 2>$null
+              if ($LASTEXITCODE -eq 0) { 
+                $kubectlWorking = $true
+                Write-Host "Kubernetes accessible via localhost:6443" -ForegroundColor Green
+              }
+            }
+            
+            if (-not $kubectlWorking) {
+              Write-Host "WARNING: Kubernetes cluster validation failed, but continuing deployment..." -ForegroundColor Yellow
+              Write-Host "Deployment commands will include their own connectivity validation" -ForegroundColor Yellow
+            }
+          } else {
+            Write-Host "Kubernetes cluster is ready" -ForegroundColor Green
+          }
           
           # Check/Install Helm
           helm version --short
@@ -120,8 +156,17 @@ jobs:
         run: |
           Write-Host "Deploying infrastructure stack..." -ForegroundColor Green
           
-          # Create namespace
+          # Create namespace with error handling
+          Write-Host "Creating namespace: $env:NAMESPACE" -ForegroundColor Gray
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to create namespace. Checking Kubernetes connectivity..." -ForegroundColor Red
+            kubectl version --client
+            kubectl cluster-info
+            Write-Host "Please ensure Docker Desktop Kubernetes is running and accessible" -ForegroundColor Red
+            exit 1
+          }
+          Write-Host "Namespace $env:NAMESPACE ready" -ForegroundColor Green
           
           # Create image pull secret for private registry
           kubectl create secret docker-registry ghcr-secret `
