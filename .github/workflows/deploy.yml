@@ -48,44 +48,44 @@ jobs:
         shell: powershell
         run: |
           Write-Host "Deploying DataEngine stack to: $env:DEPLOY_ENV" -ForegroundColor Green
-          Write-Host "✅ GHCR Authentication completed" -ForegroundColor Green
+          Write-Host "GHCR Authentication completed" -ForegroundColor Green
 
       - name: Verify System
         shell: powershell
         run: |
-          Write-Host "🔍 Verifying system readiness..." -ForegroundColor Yellow
+          Write-Host "Verifying system readiness..." -ForegroundColor Yellow
           
           # Check Docker
           docker --version
-          if ($LASTEXITCODE -ne 0) { Write-Host "❌ Docker not found"; exit 1 }
+          if ($LASTEXITCODE -ne 0) { Write-Host "Docker not found"; exit 1 }
           
           # Check Kubernetes  
           kubectl cluster-info --request-timeout=10s
-          if ($LASTEXITCODE -ne 0) { Write-Host "❌ Kubernetes not available"; exit 1 }
+          if ($LASTEXITCODE -ne 0) { Write-Host "Kubernetes not available"; exit 1 }
           
           # Check/Install Helm
           helm version --short
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "📥 Installing Helm..." -ForegroundColor Yellow
+            Write-Host "Installing Helm..." -ForegroundColor Yellow
             winget install Helm.Helm --silent
           }
           
           # Verify Kubernetes context and resources
-          Write-Host "🔍 Verifying Kubernetes resources..." -ForegroundColor Gray
+          Write-Host "Verifying Kubernetes resources..." -ForegroundColor Gray
           kubectl get nodes --no-headers | Measure-Object | ForEach-Object { 
             if ($_.Count -eq 0) { 
-              Write-Host "❌ No Kubernetes nodes available" -ForegroundColor Red; exit 1 
+              Write-Host "No Kubernetes nodes available" -ForegroundColor Red; exit 1 
             } else {
-              Write-Host "✅ Found $($_.Count) Kubernetes node(s)" -ForegroundColor Green
+              Write-Host "Found $($_.Count) Kubernetes node(s)" -ForegroundColor Green
             }
           }
           
-          Write-Host "✅ System ready" -ForegroundColor Green
+          Write-Host "System ready" -ForegroundColor Green
 
       - name: Setup DataEngine Workspace
         shell: powershell
         run: |
-          Write-Host "📦 Setting up DataEngine workspace..." -ForegroundColor Yellow
+          Write-Host "Setting up DataEngine workspace..." -ForegroundColor Yellow
           
           # Create workspace directory
           $workspace = "TradingPlatform"
@@ -98,19 +98,19 @@ jobs:
           # Clone all dependencies into workspace
           Set-Location $workspace
           
-          Write-Host "  📥 Cloning dependencies..." -ForegroundColor Gray
+          Write-Host "  Cloning dependencies..." -ForegroundColor Gray
           git clone https://github.com/Nwagbara-Group-LLC/databaseschema.git --depth 1 --quiet
           git clone https://github.com/Nwagbara-Group-LLC/redisutils.git --depth 1 --quiet  
           git clone https://github.com/Nwagbara-Group-LLC/LoggingEngine.git --depth 1 --quiet
           git clone https://github.com/Nwagbara-Group-LLC/MessageBrokerEngine.git --depth 1 --quiet
           
           Set-Location ..
-          Write-Host "✅ Workspace ready" -ForegroundColor Green
+          Write-Host "Workspace ready" -ForegroundColor Green
 
       - name: Deploy Infrastructure Stack
         shell: powershell
         run: |
-          Write-Host "🏗️ Deploying infrastructure stack..." -ForegroundColor Green
+          Write-Host "Deploying infrastructure stack..." -ForegroundColor Green
           
           # Create namespace
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
@@ -124,12 +124,12 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
           
           # Build chart dependencies (will automatically fetch required repos)
-          Write-Host "🔧 Building Helm chart dependencies..." -ForegroundColor Gray
+          Write-Host "Building Helm chart dependencies..." -ForegroundColor Gray
           helm dependency build $env:DATABASE_SCHEMA_CHART
           helm dependency build $env:MESSAGE_BROKER_CHART
           
           # Deploy Database Schema with PostgreSQL
-          Write-Host "  📊 Deploying Database Schema & PostgreSQL..." -ForegroundColor Yellow
+          Write-Host "  Deploying Database Schema & PostgreSQL..." -ForegroundColor Yellow
           helm upgrade --install database-schema $env:DATABASE_SCHEMA_CHART `
             --namespace $env:NAMESPACE `
             --set postgresql.auth.postgresPassword="${{ secrets.DATABASE_PASSWORD }}" `
@@ -140,14 +140,14 @@ jobs:
             --wait --timeout=$env:DEPLOY_TIMEOUT
           
           # Deploy Redis Utils with Redis
-          Write-Host "  🔴 Deploying Redis Utils & Redis..." -ForegroundColor Yellow  
+          Write-Host "  Deploying Redis Utils & Redis..." -ForegroundColor Yellow  
           helm upgrade --install redis-utils $env:REDIS_UTILS_CHART `
             --namespace $env:NAMESPACE `
             --set redis.password="${{ secrets.REDIS_PASSWORD }}" `
             --wait --timeout=$env:DEPLOY_TIMEOUT
           
           # Deploy MessageBrokerEngine for ultra-fast message streaming
-          Write-Host "  📨 Deploying MessageBrokerEngine..." -ForegroundColor Yellow
+          Write-Host "  Deploying MessageBrokerEngine..." -ForegroundColor Yellow
           helm upgrade --install message-broker $env:MESSAGE_BROKER_CHART `
             --namespace $env:NAMESPACE `
             --set replicaCount=1 `
@@ -157,13 +157,13 @@ jobs:
             --set resources.requests.cpu=500m `
             --wait --timeout=$env:DEPLOY_TIMEOUT
           
-          Write-Host "✅ Infrastructure stack deployed" -ForegroundColor Green
+          Write-Host "Infrastructure stack deployed" -ForegroundColor Green
 
       - name: Configure Database-Only Deployment
         if: env.DEPLOY_ENV == 'database-only'
         shell: powershell
         run: |
-          Write-Host "📊 Database-Only Deployment Selected" -ForegroundColor Cyan
+          Write-Host "Database-Only Deployment Selected" -ForegroundColor Cyan
           Write-Host "  DataEngine will run in database-only mode" -ForegroundColor Yellow
           Write-Host "  Features: WebSocket data ingestion only, MessageBrokerEngine disabled, no API services" -ForegroundColor Yellow
           Write-Host "  Using values-database-only.yaml configuration" -ForegroundColor Yellow
@@ -173,18 +173,18 @@ jobs:
       - name: Build DataEngine Application
         shell: powershell
         run: |
-          Write-Host "🐳 Building DataEngine and MessageBrokerEngine..." -ForegroundColor Green
+          Write-Host "Building DataEngine and MessageBrokerEngine..." -ForegroundColor Green
           
           # Build MessageBrokerEngine first
-          Write-Host "📦 Building MessageBrokerEngine image..." -ForegroundColor Yellow
+          Write-Host "Building MessageBrokerEngine image..." -ForegroundColor Yellow
           Set-Location "TradingPlatform/MessageBrokerEngine"
           docker build -t "message-broker-engine:latest" .
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ MessageBrokerEngine build failed" -ForegroundColor Red
+            Write-Host "MessageBrokerEngine build failed" -ForegroundColor Red
             exit 1
           }
           Set-Location "../.."
-          Write-Host "✅ MessageBrokerEngine image built successfully" -ForegroundColor Green
+          Write-Host "MessageBrokerEngine image built successfully" -ForegroundColor Green
           
           # Create optimized multi-stage Dockerfile for DataEngine
           $dockerfile = "FROM rust:1.75-slim as builder`n"
@@ -203,23 +203,23 @@ jobs:
           $dockerfile | Out-File -FilePath "Dockerfile" -Encoding UTF8
           
           # Build DataEngine image
-          Write-Host "📦 Building DataEngine image: $env:IMAGE_NAME`:$env:IMAGE_TAG" -ForegroundColor Yellow
+          Write-Host "Building DataEngine image: $env:IMAGE_NAME`:$env:IMAGE_TAG" -ForegroundColor Yellow
           
           docker build -t "$env:IMAGE_NAME`:$env:IMAGE_TAG" .
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ DataEngine build failed" -ForegroundColor Red
+            Write-Host "DataEngine build failed" -ForegroundColor Red
             exit 1
           }
           
-          Write-Host "✅ Both images built successfully" -ForegroundColor Green
+          Write-Host "Both images built successfully" -ForegroundColor Green
 
       - name: Deploy DataEngine via Helm
         shell: powershell
         run: |
-          Write-Host "🚀 Deploying DataEngine application..." -ForegroundColor Green
+          Write-Host "Deploying DataEngine application..." -ForegroundColor Green
           
           # Deploy DataEngine using environment-based values file
-          Write-Host "📋 Using values file: values-$env:DEPLOY_ENV.yaml" -ForegroundColor Yellow
+          Write-Host "Using values file: values-$env:DEPLOY_ENV.yaml" -ForegroundColor Yellow
           
           helm upgrade --install $env:RELEASE_NAME $env:CHART_PATH `
             --namespace $env:NAMESPACE `
@@ -234,7 +234,7 @@ jobs:
             --wait --timeout=$env:DEPLOY_TIMEOUT
           
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ DataEngine deployed successfully" -ForegroundColor Green
+            Write-Host "DataEngine deployed successfully" -ForegroundColor Green
           } else {
             Write-Host "❌ DataEngine deployment failed" -ForegroundColor Red
             helm status data-engine --namespace $env:NAMESPACE
