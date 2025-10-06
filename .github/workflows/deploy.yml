@@ -75,14 +75,6 @@ jobs:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: MessageBrokerEngine
 
-      - name: Add Bitnami Helm Repository
-        shell: powershell
-        run: |
-          Write-Host "Adding Bitnami Helm repository..." -ForegroundColor Yellow
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm repo update
-          Write-Host "SUCCESS: Helm repositories updated" -ForegroundColor Green
-
       - name: Deploy DataEngine with Helm
         shell: powershell
         run: |

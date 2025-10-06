@@ -455,19 +455,24 @@ externalRedis:
 # Database Dependencies (Disabled - Using External Services)
 # =============================================================================
 
-# TimescaleDB (PostgreSQL) configuration - DISABLED for external use
+# TimescaleDB (PostgreSQL) configuration - Custom deployment with GHCR image
 postgresql:
-  enabled: false  # Disabled - using external database
-  # External database configuration is handled via externalDatabase section
+  enabled: false  # Will be enabled via Helm --set flags
+  image:
+    registry: ghcr.io
+    repository: baosystems/postgis
+    tag: "15-3.3"
   auth:
-    postgresPassword: ""
+    username: "dataengine"
+    password: "dataengine123"
     database: "dataengine"
-    username: ""
-    password: ""
   primary:
     persistence:
-      enabled: false
-      size: 100Gi
+      enabled: true
+      size: 10Gi
+    service:
+      ports:
+        postgresql: 5432
     resources:
       limits:
         cpu: "1000m"
@@ -478,17 +483,20 @@ postgresql:
   metrics:
     enabled: false
 
-# Redis configuration - DISABLED for external use
+# Redis configuration - Custom deployment with GHCR image
 redis:
-  enabled: false  # Disabled - using external Redis
-  # External Redis configuration is handled via externalRedis section
+  enabled: false  # Will be enabled via Helm --set flags
+  image:
+    registry: ghcr.io
+    repository: nwagbara-group-llc/redis-utils
+    tag: "latest"
   auth:
     enabled: false
     password: ""
   master:
     persistence:
-      enabled: false
-      size: 10Gi
+      enabled: true
+      size: 5Gi
     resources:
       limits:
         cpu: "500m"

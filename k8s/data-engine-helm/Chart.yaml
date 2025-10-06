@@ -21,22 +21,16 @@ annotations:
   category: Analytics
   licenses: MIT
 
-dependencies:
-  - name: redis
-    version: "17.15.6"
-    repository: "https://charts.bitnami.com/bitnami"
-    condition: redis.enabled
-  - name: postgresql
-    version: "12.12.10"
-    repository: "https://charts.bitnami.com/bitnami"
-    condition: postgresql.enabled
-  - name: prometheus
-    version: "23.4.0"
-    repository: "https://prometheus-community.github.io/helm-charts"
-    condition: monitoring.prometheus.enabled
-    alias: prometheus
-  - name: grafana
-    version: "6.60.6"
-    repository: "https://grafana.github.io/helm-charts"
-    condition: monitoring.grafana.enabled
-    alias: grafana
+dependencies: []
+  # No external chart dependencies - using simple custom deployments with GHCR images
+  # - name: prometheus
+  #   version: "23.4.0"
+  #   repository: "https://prometheus-community.github.io/helm-charts"
+  #   condition: monitoring.prometheus.enabled
+  #   alias: prometheus
+  # - name: grafana
+  #   version: "6.60.6"
+  #   repository: "https://grafana.github.io/helm-charts"
+  #   condition: monitoring.grafana.enabled
+  #   alias: grafana
+

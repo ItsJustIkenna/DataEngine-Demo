@@ -34,7 +34,7 @@ spec:
             - sh
             - -c
             - |
-              until pg_isready -h {{ include "data-engine.postgresql.host" . }} -p {{ .Values.postgresql.primary.service.ports.postgresql }} -U {{ .Values.postgresql.auth.username }}; do
+              until pg_isready -h {{ include "data-engine.postgresql.host" . }} -p {{ .Values.primary.service.ports.postgresql | default 5432 }} -U {{ .Values.postgresql.auth.username }}; do
                 echo "Waiting for PostgreSQL..."
                 sleep 2
               done
@@ -50,7 +50,7 @@ spec:
             - name: POSTGRES_HOST
               value: {{ include "data-engine.postgresql.host" . }}
             - name: POSTGRES_PORT
-              value: {{ .Values.postgresql.primary.service.ports.postgresql | quote }}
+              value: {{ .Values.postgresql.primary.service.ports.postgresql | default 5432 | quote }}
             - name: POSTGRES_DB
               value: {{ .Values.postgresql.auth.database }}
             - name: POSTGRES_USERNAME
