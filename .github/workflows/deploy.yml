@@ -417,6 +417,26 @@ jobs:
             Write-Host "GOOD: No charts/ directory before helm command" -ForegroundColor Green
           }
           
+          # WORKAROUND: Pre-create ServiceAccount to avoid Helm race condition
+          Write-Host "`nCreating ServiceAccount before Helm deployment..." -ForegroundColor Yellow
+          $serviceAccountYaml = @"
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: $env:RELEASE_NAME-data-engine
+            namespace: $env:NAMESPACE
+            labels:
+              helm.sh/chart: data-engine-1.0.0
+              app.kubernetes.io/name: data-engine
+              app.kubernetes.io/instance: $env:RELEASE_NAME
+              app.kubernetes.io/version: "1.0.0"
+              app.kubernetes.io/managed-by: Helm
+              app.kubernetes.io/component: data-engine
+          automountServiceAccountToken: true
+          "@
+          $serviceAccountYaml | kubectl apply -f - 2>&1 | Write-Host
+          Write-Host "ServiceAccount created/updated" -ForegroundColor Green
+          
           $helmArgs = @(
             "upgrade", "--install", $env:RELEASE_NAME
             $env:CHART_PATH
