@@ -1,607 +1,523 @@
-name: Deploy DataEngine Stack to Remote Desktop
+name: Deploy DataEngine Microservice
 
 on:
   push:
     branches: [main, develop]
 
 env:
-  # Container Configuration
+  REGISTRY: ghcr.io/nwagbara-group-llc
   IMAGE_NAME: data-engine
-  IMAGE_REGISTRY: ghcr.io/itsjustikenna
-  
-  # Kubernetes Configuration  
-  NAMESPACE: trading-platform
-  RELEASE_NAME: data-engine
-  
-  # Helm Chart Configuration
-  CHART_PATH: "./k8s/data-engine-helm"
-  CHART_OVERRIDE_PATH: "./k8s/overrides"
-  
-  # Infrastructure Configuration
-  DATABASE_SCHEMA_CHART: "./TradingPlatform/databaseschema/k8s/database-schema-helm"
-  REDIS_UTILS_CHART: "./TradingPlatform/redisutils/k8s/redis-utils-helm"
-  MESSAGE_BROKER_CHART: "./TradingPlatform/MessageBrokerEngine/k8s/message-broker-engine"
-  
-  # Timeouts
-  DEPLOY_TIMEOUT: "300s"
-  HEALTH_CHECK_TIMEOUT: "60s"
+  NAMESPACE: dataengine-prod
 
 jobs:
-  deploy-complete-stack:
-    name: Deploy DataEngine with Dependencies  
+  deploy:
     runs-on: [self-hosted, windows, x64]
-    env:
-      DEPLOY_ENV: ${{ github.ref == 'refs/heads/develop' && 'dev' || 'database-only' }}
-      IMAGE_TAG: ${{ github.sha }}
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Login to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: itsjustikenna
-          password: ${{ secrets.GHCR_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Environment
+      - name: Setup Kubernetes Context
         shell: powershell
         run: |
-          Write-Host "Deploying DataEngine stack to: $env:DEPLOY_ENV" -ForegroundColor Green
-          Write-Host "GHCR Authentication completed" -ForegroundColor Green
-          Write-Host "Runner environment: $env:RUNNER_NAME" -ForegroundColor Gray
-          Write-Host "Computer name: $env:COMPUTERNAME" -ForegroundColor Gray
-
-      - name: Verify System
-        shell: powershell
-        run: |
-          # Set error handling to prevent premature script exit
-          $ErrorActionPreference = "Continue"
-          $global:LASTEXITCODE = 0
+          Write-Host "� Setting up Kubernetes context..." -ForegroundColor Yellow
           
-          Write-Host "Verifying system readiness..." -ForegroundColor Yellow
-          
-          # Check Docker
-          docker --version
-          if ($LASTEXITCODE -ne 0) { Write-Host "Docker not found"; exit 1 }
-          
-          # Check Kubernetes - Configure for Docker Desktop
-          Write-Host "Configuring Kubernetes context..." -ForegroundColor Gray
-          
-          # Check if docker-desktop context exists
-          $contextExists = $false
-          try {
-            kubectl config get-contexts docker-desktop | Out-Null
-            $contextExists = ($LASTEXITCODE -eq 0)
-          } catch {
-            $contextExists = $false
-          }
-          
-          if (-not $contextExists) {
-            Write-Host "Docker Desktop context not found. Creating configuration..." -ForegroundColor Yellow
-            
-            # Create docker-desktop cluster and context
-            kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true
-            kubectl config set-context docker-desktop --cluster=docker-desktop
-            
-            # Also try localhost as backup
-            kubectl config set-cluster docker-desktop-local --server=https://localhost:6443 --insecure-skip-tls-verify=true
-            kubectl config set-context docker-desktop-local --cluster=docker-desktop-local
-          }
-          
-          # Try to use docker-desktop context
-          kubectl config use-context docker-desktop
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Trying alternative context..." -ForegroundColor Yellow
-            kubectl config use-context docker-desktop-local
-          }
-          
-          Write-Host "Testing Kubernetes connectivity..." -ForegroundColor Gray
-          
-          # Try multiple connection methods
-          $kubectlWorking = $false
-          
-          # Method 1: Current context
-          $output = kubectl get nodes --request-timeout=10s 2>&1
-          if ($LASTEXITCODE -eq 0 -and $output -notmatch "error:|EOF") { 
-            $kubectlWorking = $true
-            Write-Host "Kubernetes accessible via current context" -ForegroundColor Green
-          }
-          
-          # Method 2: Direct to kubernetes.docker.internal  
-          if (-not $kubectlWorking) {
-            $output = kubectl get nodes --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true --request-timeout=10s 2>&1
-            if ($LASTEXITCODE -eq 0 -and $output -notmatch "error:|EOF") { 
-              $kubectlWorking = $true
-              Write-Host "Kubernetes accessible via kubernetes.docker.internal:6443" -ForegroundColor Green
-              kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true 2>$null
-            }
-          }
-          
-          # Method 3: Localhost
-          if (-not $kubectlWorking) {
-            $output = kubectl get nodes --server=https://localhost:6443 --insecure-skip-tls-verify=true --request-timeout=10s 2>&1
-            if ($LASTEXITCODE -eq 0 -and $output -notmatch "error:|EOF") { 
-              $kubectlWorking = $true
-              Write-Host "Kubernetes accessible via localhost:6443" -ForegroundColor Green
-              kubectl config set-cluster docker-desktop --server=https://localhost:6443 --insecure-skip-tls-verify=true 2>$null
-            }
-          }
-          
-          if ($kubectlWorking) {
-            Write-Host "Kubernetes cluster is ready for deployment" -ForegroundColor Green
-          } else {
-            Write-Host "WARNING: Kubernetes cluster validation failed" -ForegroundColor Yellow
-            Write-Host "Will attempt deployment anyway - errors will be caught during actual operations" -ForegroundColor Yellow
-            Write-Host "Ensure Docker Desktop Kubernetes is enabled and running" -ForegroundColor Yellow
-          }
-          
-          # Check/Install Helm
-          Write-Host "Checking Helm installation..." -ForegroundColor Gray
-          helm version --short 2>$null
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Installing Helm..." -ForegroundColor Yellow
-            try {
-              winget install Helm.Helm --silent --accept-package-agreements --accept-source-agreements
-              if ($LASTEXITCODE -ne 0) {
-                Write-Host "Winget install failed, trying alternative method..." -ForegroundColor Yellow
-                # Alternative helm installation method
-                Invoke-WebRequest -Uri "https://get.helm.sh/helm-v3.18.6-windows-amd64.zip" -OutFile "helm.zip"
-                Expand-Archive "helm.zip" -DestinationPath "helm-temp"
-                Copy-Item "helm-temp\windows-amd64\helm.exe" -Destination "C:\Windows\System32\helm.exe" -Force
-                Remove-Item "helm.zip", "helm-temp" -Recurse -Force
-              }
-            } catch {
-              Write-Host "WARNING: Helm installation may have failed, continuing..." -ForegroundColor Yellow
-            }
-          } else {
-            Write-Host "Helm is already installed" -ForegroundColor Green
-          }
-          
-          # Verify Kubernetes context and resources
-          Write-Host "Verifying Kubernetes resources..." -ForegroundColor Gray
-          
-          # Try to get nodes with better error handling
-          $nodeCheck = $false
-          $retries = 3
-          for ($i = 1; $i -le $retries; $i++) {
-            try {
-              $nodes = kubectl get nodes --no-headers --request-timeout=20s 2>$null
-              if ($LASTEXITCODE -eq 0 -and $nodes) {
-                $nodeCount = ($nodes | Measure-Object).Count
-                if ($nodeCount -gt 0) {
-                  Write-Host "Found $nodeCount Kubernetes node(s)" -ForegroundColor Green
-                  $nodeCheck = $true
-                  break
-                }
-              }
-            } catch {
-              Write-Host "Attempt $i failed, retrying..." -ForegroundColor Yellow
-            }
-            Start-Sleep 2
-          }
-          
-          if (-not $nodeCheck) {
-            Write-Host "WARNING: Could not verify Kubernetes nodes, but continuing..." -ForegroundColor Yellow
-            Write-Host "This may be due to temporary connectivity issues" -ForegroundColor Yellow
-          }
-          
-          Write-Host "System ready" -ForegroundColor Green
-          
-          # Ensure successful exit
-          exit 0
-
-      - name: Setup DataEngine Workspace
-        shell: powershell
-        run: |
-          Write-Host "Setting up DataEngine workspace..." -ForegroundColor Yellow
-          
-          # Create workspace directory
-          $workspace = "TradingPlatform"
-          if (Test-Path $workspace) { Remove-Item $workspace -Recurse -Force }
-          New-Item -ItemType Directory -Path $workspace | Out-Null
-          
-          # Copy current DataEngine code to workspace
-          Copy-Item -Path "*" -Destination "$workspace/" -Recurse -Exclude @($workspace, ".git", "target")
-          
-          # Clone all dependencies into workspace
-          Set-Location $workspace
-          
-          Write-Host "  Cloning dependencies..." -ForegroundColor Gray
-          git clone https://github.com/Nwagbara-Group-LLC/databaseschema.git --depth 1 --quiet
-          git clone https://github.com/Nwagbara-Group-LLC/redisutils.git --depth 1 --quiet  
-          git clone https://github.com/Nwagbara-Group-LLC/LoggingEngine.git --depth 1 --quiet
-          git clone https://github.com/Nwagbara-Group-LLC/MessageBrokerEngine.git --depth 1 --quiet
-          
-          Set-Location ..
-          Write-Host "Workspace ready" -ForegroundColor Green
-
-      - name: Deploy Infrastructure Stack
-        shell: powershell
-        run: |
-          Write-Host "Deploying infrastructure stack..." -ForegroundColor Green
-          
-          # Set up Kubernetes authentication for self-hosted runner
-          Write-Host "Configuring Kubernetes authentication..." -ForegroundColor Gray
-          
-          # Use insecure connection for local Docker Desktop
+          # Configure Docker Desktop Kubernetes context
           kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true
           kubectl config set-context docker-desktop --cluster=docker-desktop
           kubectl config use-context docker-desktop
           
-          # Test basic connectivity first
-          Write-Host "Testing Kubernetes connectivity..." -ForegroundColor Gray
+          # Test Kubernetes connectivity
           $k8sReady = $false
           $attempts = 0
-          $maxAttempts = 5
+          $maxAttempts = 3
           
           while (-not $k8sReady -and $attempts -lt $maxAttempts) {
             $attempts++
-            Write-Host "Attempt $attempts/$maxAttempts..." -ForegroundColor Gray
+            Write-Host "Testing Kubernetes connectivity (attempt $attempts/$maxAttempts)..." -ForegroundColor Gray
             
             try {
-              $result = kubectl get namespaces --request-timeout=10s 2>&1
-              if ($LASTEXITCODE -eq 0 -and $result -notmatch "error:|EOF|Please enter") {
+              $result = kubectl get nodes --request-timeout=10s 2>&1
+              if ($LASTEXITCODE -eq 0 -and $result -notmatch "error:|EOF") {
                 $k8sReady = $true
-                Write-Host "Kubernetes connectivity established" -ForegroundColor Green
+                Write-Host "✅ Kubernetes cluster is ready!" -ForegroundColor Green
                 break
               }
             } catch { }
             
             if ($attempts -lt $maxAttempts) {
-              Write-Host "Retrying in 5 seconds..." -ForegroundColor Yellow
               Start-Sleep 5
             }
           }
           
           if (-not $k8sReady) {
-            Write-Host "❌ Cannot establish Kubernetes connectivity" -ForegroundColor Red
-            Write-Host "This may be because:" -ForegroundColor Red  
-            Write-Host "1. Docker Desktop Kubernetes is not enabled" -ForegroundColor Red
-            Write-Host "2. Kubernetes API server is not accessible from self-hosted runner" -ForegroundColor Red
-            Write-Host "3. Network connectivity issues" -ForegroundColor Red
-            
-            Write-Host "🐳 Falling back to Docker-only deployment..." -ForegroundColor Yellow
-            Write-Host "Will deploy DataEngine as standalone Docker containers" -ForegroundColor Yellow
-            
-            # Set environment variable to skip Kubernetes steps
-            echo "SKIP_K8S_DEPLOYMENT=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            exit 0
-          }
-          
-          # Create namespace with error handling
-          Write-Host "Creating namespace: $env:NAMESPACE" -ForegroundColor Gray
-          kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Failed to create namespace, but Kubernetes was accessible..." -ForegroundColor Red
-            Write-Host "This might be a permissions issue" -ForegroundColor Red
+            Write-Host "❌ Cannot connect to Kubernetes cluster" -ForegroundColor Red
+            Write-Host "Please ensure Docker Desktop Kubernetes is enabled" -ForegroundColor Red
             exit 1
           }
-          Write-Host "Namespace $env:NAMESPACE ready" -ForegroundColor Green
           
-          # Create image pull secret for private registry
+          # Install/Verify Helm
+          Write-Host "🔧 Checking Helm installation..." -ForegroundColor Yellow
+          if (!(Get-Command helm -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing Helm..." -ForegroundColor Yellow
+            winget install Helm.Helm --silent --accept-package-agreements --accept-source-agreements
+          }
+          
+          helm version --short
+          Write-Host "✅ Kubernetes and Helm are ready!" -ForegroundColor Green
+
+      - name: Create Helm Chart Structure
+        shell: powershell
+        run: |
+          Write-Host "📦 Creating Helm chart structure..." -ForegroundColor Yellow
+          
+          # Create chart directory
+          if (Test-Path "dataengine-chart") {
+            Remove-Item -Recurse -Force "dataengine-chart"
+          }
+          
+          mkdir dataengine-chart/templates -Force
+          
+          # Create Chart.yaml
+          $chartYaml = @"
+          apiVersion: v2
+          name: dataengine
+          description: DataEngine Trading Platform Microservice
+          version: 1.0.0
+          appVersion: "latest"
+          dependencies:
+          - name: postgresql
+            version: 12.x.x
+            repository: https://charts.bitnami.com/bitnami
+          - name: redis
+            version: 18.x.x
+            repository: https://charts.bitnami.com/bitnami
+          - name: elasticsearch
+            version: 19.x.x
+            repository: https://helm.elastic.co
+          "@
+          
+          $chartYaml | Out-File -FilePath "dataengine-chart/Chart.yaml" -Encoding UTF8
+          
+          # Create values.yaml
+          $valuesYaml = @"
+          global:
+            imageRegistry: $env:REGISTRY
+            imagePullSecrets:
+              - ghcr-secret
+          
+          dataengine:
+            image:
+              repository: $env:REGISTRY/data-engine
+              tag: latest
+              pullPolicy: Always
+            service:
+              type: LoadBalancer
+              port: 8080
+            resources:
+              requests:
+                memory: "1Gi"
+                cpu: "500m"
+              limits:
+                memory: "2Gi"
+                cpu: "1000m"
+                
+          loggingengine:
+            image:
+              repository: $env:REGISTRY/logging-engine
+              tag: latest
+              pullPolicy: Always
+            service:
+              port: 8081
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          
+          postgresql:
+            enabled: true
+            auth:
+              database: trading_platform
+              password: "${{ secrets.DATABASE_PASSWORD }}"
+            primary:
+              persistence:
+                size: 20Gi
+              resources:
+                requests:
+                  memory: 2Gi
+                  cpu: 1000m
+          
+          redis:
+            enabled: true
+            auth:
+              password: "${{ secrets.REDIS_PASSWORD }}"
+            master:
+              persistence:
+                size: 8Gi
+            replica:
+              replicaCount: 1
+          
+          elasticsearch:
+            enabled: true
+            replicas: 1
+            minimumMasterNodes: 1
+            esConfig:
+              elasticsearch.yml: |
+                xpack.security.enabled: false
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2Gi
+            volumeClaimTemplate:
+              resources:
+                requests:
+                  storage: 10Gi
+          "@
+          
+          $valuesYaml | Out-File -FilePath "dataengine-chart/values.yaml" -Encoding UTF8
+          
+          Write-Host "✅ Helm chart structure created!" -ForegroundColor Green
+
+      - name: Create Helm Templates
+        shell: powershell
+        run: |
+          Write-Host "📝 Creating Helm templates..." -ForegroundColor Yellow
+          
+          # Create DataEngine deployment template
+          $dataEngineDeployment = @"
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: {{ include "dataengine.fullname" . }}-app
+            namespace: {{ .Release.Namespace }}
+            labels:
+              app: data-engine
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: data-engine
+            template:
+              metadata:
+                labels:
+                  app: data-engine
+              spec:
+                imagePullSecrets:
+                {{- if .Values.global.imagePullSecrets }}
+                {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+                {{- end }}
+                containers:
+                - name: data-engine
+                  image: "{{ .Values.dataengine.image.repository }}:{{ .Values.dataengine.image.tag }}"
+                  imagePullPolicy: {{ .Values.dataengine.image.pullPolicy }}
+                  ports:
+                  - containerPort: {{ .Values.dataengine.service.port }}
+                  env:
+                  - name: DATABASE_URL
+                    value: "postgresql://postgres:{{ .Values.postgresql.auth.password }}@{{ include "dataengine.fullname" . }}-postgresql:5432/{{ .Values.postgresql.auth.database }}"
+                  - name: REDIS_URL
+                    value: "redis://:{{ .Values.redis.auth.password }}@{{ include "dataengine.fullname" . }}-redis-master:6379"
+                  - name: LOGGING_ENGINE_URL
+                    value: "http://{{ include "dataengine.fullname" . }}-logging:8081"
+                  - name: ELASTICSEARCH_URL
+                    value: "http://{{ include "dataengine.fullname" . }}-elasticsearch-master:9200"
+                  {{- if .Values.dataengine.env.KRAKEN_API_KEY }}
+                  - name: KRAKEN_API_KEY
+                    value: "{{ .Values.dataengine.env.KRAKEN_API_KEY }}"
+                  {{- end }}
+                  {{- if .Values.dataengine.env.KRAKEN_SECRET_KEY }}
+                  - name: KRAKEN_SECRET_KEY
+                    value: "{{ .Values.dataengine.env.KRAKEN_SECRET_KEY }}"
+                  {{- end }}
+                  livenessProbe:
+                    httpGet:
+                      path: /health
+                      port: {{ .Values.dataengine.service.port }}
+                    initialDelaySeconds: 60
+                    periodSeconds: 30
+                  readinessProbe:
+                    httpGet:
+                      path: /health
+                      port: {{ .Values.dataengine.service.port }}
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                  resources:
+                    {{- toYaml .Values.dataengine.resources | nindent 12 }}
+          "@
+          
+          $dataEngineDeployment | Out-File -FilePath "dataengine-chart/templates/dataengine-deployment.yaml" -Encoding UTF8
+          
+          # Create DataEngine service template
+          $dataEngineService = @"
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: {{ include "dataengine.fullname" . }}-app
+            namespace: {{ .Release.Namespace }}
+          spec:
+            selector:
+              app: data-engine
+            ports:
+            - port: {{ .Values.dataengine.service.port }}
+              targetPort: {{ .Values.dataengine.service.port }}
+            type: {{ .Values.dataengine.service.type }}
+          "@
+          
+          $dataEngineService | Out-File -FilePath "dataengine-chart/templates/dataengine-service.yaml" -Encoding UTF8
+          
+          # Create LoggingEngine deployment template
+          $loggingEngineDeployment = @"
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: {{ include "dataengine.fullname" . }}-logging
+            namespace: {{ .Release.Namespace }}
+            labels:
+              app: logging-engine
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: logging-engine
+            template:
+              metadata:
+                labels:
+                  app: logging-engine
+              spec:
+                imagePullSecrets:
+                {{- if .Values.global.imagePullSecrets }}
+                {{- toYaml .Values.global.imagePullSecrets | nindent 8 }}
+                {{- end }}
+                containers:
+                - name: logging-engine
+                  image: "{{ .Values.loggingengine.image.repository }}:{{ .Values.loggingengine.image.tag }}"
+                  imagePullPolicy: {{ .Values.loggingengine.image.pullPolicy }}
+                  ports:
+                  - containerPort: {{ .Values.loggingengine.service.port }}
+                  env:
+                  - name: ELASTICSEARCH_URL
+                    value: "http://{{ include "dataengine.fullname" . }}-elasticsearch-master:9200"
+                  - name: LOG_LEVEL
+                    value: "INFO"
+                  - name: SERVICE_NAME
+                    value: "LoggingEngine"
+                  livenessProbe:
+                    httpGet:
+                      path: /health
+                      port: {{ .Values.loggingengine.service.port }}
+                    initialDelaySeconds: 30
+                    periodSeconds: 10
+                  readinessProbe:
+                    httpGet:
+                      path: /health
+                      port: {{ .Values.loggingengine.service.port }}
+                    initialDelaySeconds: 10
+                    periodSeconds: 5
+                  resources:
+                    {{- toYaml .Values.loggingengine.resources | nindent 12 }}
+          "@
+          
+          $loggingEngineDeployment | Out-File -FilePath "dataengine-chart/templates/logging-deployment.yaml" -Encoding UTF8
+          
+          # Create LoggingEngine service template
+          $loggingEngineService = @"
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: {{ include "dataengine.fullname" . }}-logging
+            namespace: {{ .Release.Namespace }}
+          spec:
+            selector:
+              app: logging-engine
+            ports:
+            - port: {{ .Values.loggingengine.service.port }}
+              targetPort: {{ .Values.loggingengine.service.port }}
+          "@
+          
+          $loggingEngineService | Out-File -FilePath "dataengine-chart/templates/logging-service.yaml" -Encoding UTF8
+          
+          # Create helpers template
+          $helpers = @"
+          {{/*
+          Expand the name of the chart.
+          */}}
+          {{- define "dataengine.name" -}}
+          {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
+          {{- end }}
+          
+          {{/*
+          Create a default fully qualified app name.
+          */}}
+          {{- define "dataengine.fullname" -}}
+          {{- if .Values.fullnameOverride }}
+          {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+          {{- else }}
+          {{- `$name` := default .Chart.Name .Values.nameOverride }}
+          {{- if contains `$name` .Release.Name }}
+          {{- .Release.Name | trunc 63 | trimSuffix "-" }}
+          {{- else }}
+          {{- printf "%s-%s" .Release.Name `$name` | trunc 63 | trimSuffix "-" }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
+          
+          {{/*
+          Create chart name and version as used by the chart label.
+          */}}
+          {{- define "dataengine.chart" -}}
+          {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+          {{- end }}
+          "@
+          
+          $helpers | Out-File -FilePath "dataengine-chart/templates/_helpers.tpl" -Encoding UTF8
+          
+          Write-Host "✅ Helm templates created!" -ForegroundColor Green
+
+      - name: Deploy with Helm Chart
+        shell: powershell
+        run: |
+          Write-Host "🚀 Deploying DataEngine with Helm chart..." -ForegroundColor Green
+          
+          # Create namespace
+          kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create GHCR image pull secret
           kubectl create secret docker-registry ghcr-secret `
             --namespace $env:NAMESPACE `
             --docker-server=ghcr.io `
-            --docker-username="itsjustikenna" `
-            --docker-password="${{ secrets.GHCR_TOKEN }}" `
+            --docker-username="${{ github.actor }}" `
+            --docker-password="${{ secrets.GITHUB_TOKEN }}" `
             --dry-run=client -o yaml | kubectl apply -f -
           
-          # Build chart dependencies (will automatically fetch required repos)
-          Write-Host "Building Helm chart dependencies..." -ForegroundColor Gray
-          helm dependency build $env:DATABASE_SCHEMA_CHART
-          helm dependency build $env:MESSAGE_BROKER_CHART
+          # Add required Helm repositories for dependencies
+          Write-Host "Adding Helm repositories..." -ForegroundColor Yellow
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add elastic https://helm.elastic.co
+          helm repo update
           
-          # Deploy Database Schema with PostgreSQL
-          Write-Host "  Deploying Database Schema & PostgreSQL..." -ForegroundColor Yellow
-          helm upgrade --install database-schema $env:DATABASE_SCHEMA_CHART `
+          # Build dependency charts
+          Write-Host "Building Helm dependencies..." -ForegroundColor Yellow
+          cd dataengine-chart
+          helm dependency build
+          cd ..
+          
+          # Deploy the complete stack with Helm
+          Write-Host "📊 Deploying complete DataEngine stack..." -ForegroundColor Yellow
+          helm upgrade --install dataengine-stack ./dataengine-chart `
             --namespace $env:NAMESPACE `
             --set postgresql.auth.postgresPassword="${{ secrets.DATABASE_PASSWORD }}" `
-            --set postgresql.auth.database=trading_platform `
-            --set postgresql.primary.persistence.size=20Gi `
-            --set postgresql.primary.resources.requests.memory=2Gi `
-            --set postgresql.primary.resources.requests.cpu=1000m `
-            --wait --timeout=$env:DEPLOY_TIMEOUT
+            --set redis.auth.password="${{ secrets.REDIS_PASSWORD }}" `
+            --set dataengine.env.KRAKEN_API_KEY="${{ secrets.KRAKEN_API_KEY }}" `
+            --set dataengine.env.KRAKEN_SECRET_KEY="${{ secrets.KRAKEN_SECRET_KEY }}" `
+            --wait --timeout=900s
           
-          # Deploy Redis Utils with Redis
-          Write-Host "  Deploying Redis Utils & Redis..." -ForegroundColor Yellow  
-          helm upgrade --install redis-utils $env:REDIS_UTILS_CHART `
-            --namespace $env:NAMESPACE `
-            --set redis.password="${{ secrets.REDIS_PASSWORD }}" `
-            --wait --timeout=$env:DEPLOY_TIMEOUT
-          
-          # Deploy MessageBrokerEngine for ultra-fast message streaming
-          Write-Host "  Deploying MessageBrokerEngine..." -ForegroundColor Yellow
-          helm upgrade --install message-broker $env:MESSAGE_BROKER_CHART `
-            --namespace $env:NAMESPACE `
-            --set replicaCount=1 `
-            --set image.tag="latest" `
-            --set image.pullPolicy="Never" `
-            --set resources.requests.memory=1Gi `
-            --set resources.requests.cpu=500m `
-            --wait --timeout=$env:DEPLOY_TIMEOUT
-          
-          Write-Host "Infrastructure stack deployed" -ForegroundColor Green
+          Write-Host "✅ Helm deployment completed successfully!" -ForegroundColor Green
 
-      - name: Configure Database-Only Deployment
-        if: env.DEPLOY_ENV == 'database-only'
+
+
+      - name: Verify Deployment
         shell: powershell
         run: |
-          Write-Host "Database-Only Deployment Selected" -ForegroundColor Cyan
-          Write-Host "  DataEngine will run in database-only mode" -ForegroundColor Yellow
-          Write-Host "  Features: WebSocket data ingestion only, MessageBrokerEngine disabled, no API services" -ForegroundColor Yellow
-          Write-Host "  Using values-database-only.yaml configuration" -ForegroundColor Yellow
-
-
-
-      - name: Build DataEngine Application
-        shell: powershell
-        run: |
-          Write-Host "Building DataEngine and MessageBrokerEngine..." -ForegroundColor Green
+          Write-Host "🔍 Verifying Helm deployment..." -ForegroundColor Yellow
           
-          # Check if we're on Windows and handle MessageBrokerEngine accordingly
-          $isWindows = $env:OS -eq "Windows_NT"
-          if ($isWindows) {
-            Write-Host "Windows runner detected - using pre-built MessageBrokerEngine image" -ForegroundColor Yellow
-            
-            # Try to pull existing image or use a lightweight alternative
-            docker pull redis:alpine 2>$null
-            if ($LASTEXITCODE -eq 0) {
-              # Pull Windows-compatible Redis image
-              Write-Host "Pulling Windows-compatible Redis image..." -ForegroundColor Gray
-              docker pull redis/redis-stack-server:latest 2>$null
-              if ($LASTEXITCODE -eq 0) {
-                docker tag redis/redis-stack-server:latest message-broker-engine:latest
-              } else {
-                # Fallback to minimal Windows container
-                Write-Host "Redis not available, using minimal Windows container..." -ForegroundColor Yellow
-                $dockerfile = @"
-          FROM mcr.microsoft.com/windows/nanoserver:ltsc2022
-          EXPOSE 8080
-          CMD ["ping", "localhost", "-t"]
-          "@
-                $dockerfile | Out-File -FilePath "MessageBrokerEngine.Dockerfile" -Encoding UTF8
-                docker build -f MessageBrokerEngine.Dockerfile -t "message-broker-engine:latest" .
-              }
-              Write-Host "Using Redis/minimal container as MessageBrokerEngine placeholder" -ForegroundColor Yellow
-            } else {
-              Write-Host "Creating minimal MessageBrokerEngine image..." -ForegroundColor Yellow
-              $dockerfile = @"
-          FROM mcr.microsoft.com/windows/nanoserver:ltsc2022
-          EXPOSE 8080
-          CMD ["ping", "localhost", "-t"]
-          "@
-              $dockerfile | Out-File -FilePath "MessageBrokerEngine.Dockerfile" -Encoding UTF8
-              docker build -f MessageBrokerEngine.Dockerfile -t "message-broker-engine:latest" .
-            }
-          } else {
-            # Linux/Mac - build normally
-            Write-Host "Building MessageBrokerEngine image..." -ForegroundColor Yellow
-            Set-Location "TradingPlatform/MessageBrokerEngine"
-            docker build -t "message-broker-engine:latest" .
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "MessageBrokerEngine build failed" -ForegroundColor Red
-              exit 1
-            }
-            Set-Location "../.."
-          }
-          Write-Host "MessageBrokerEngine image ready" -ForegroundColor Green
+          # Check Helm release status
+          Write-Host "Checking Helm release status..." -ForegroundColor Gray
+          helm list -n $env:NAMESPACE
+          helm status dataengine-stack -n $env:NAMESPACE
           
-          # Use pre-built DataEngine image to avoid Windows compatibility issues
-          Write-Host "Using pre-built DataEngine image: $env:IMAGE_REGISTRY/$env:IMAGE_NAME`:latest" -ForegroundColor Yellow
+          # Wait for pods to be ready
+          Write-Host "Waiting for application pods to be ready..." -ForegroundColor Gray
+          kubectl wait --for=condition=ready pod -l app=logging-engine --namespace $env:NAMESPACE --timeout=300s
+          kubectl wait --for=condition=ready pod -l app=data-engine --namespace $env:NAMESPACE --timeout=300s
           
-          # Pull the existing image and tag it with the current commit SHA
-          docker pull "$env:IMAGE_REGISTRY/$env:IMAGE_NAME`:latest"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Failed to pull pre-built image, attempting local build..." -ForegroundColor Yellow
-            
-            # Fallback: Create optimized multi-stage Dockerfile for DataEngine (Linux containers)
-            $dockerfile = "FROM rust:1.75-slim as builder`n"
-            $dockerfile += "WORKDIR /workspace`n"
-            $dockerfile += "RUN apt-get update && apt-get install -y pkg-config libssl-dev libpq-dev build-essential && rm -rf /var/lib/apt/lists/*`n"
-            $dockerfile += "COPY TradingPlatform/ ./`n"
-            $dockerfile += "WORKDIR /workspace/DataEngine`n"
-            $dockerfile += "RUN cargo build --release --bin program`n`n"
-            $dockerfile += "FROM debian:bookworm-slim as runtime`n"
-            $dockerfile += "RUN apt-get update && apt-get install -y libpq5 libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*`n"
-            $dockerfile += "WORKDIR /app`n"
-            $dockerfile += "COPY --from=builder /workspace/DataEngine/target/release/program ./dataengine`n"
-            $dockerfile += "EXPOSE 8080`n"
-            $dockerfile += "CMD ['./dataengine']"
-            
-            $dockerfile | Out-File -FilePath "Dockerfile" -Encoding UTF8
-            
-            # Switch Docker to Linux containers for build
-            Write-Host "Switching to Linux containers for build..." -ForegroundColor Gray
-            & "C:\Program Files\Docker\Docker\DockerCli.exe" -SwitchLinuxEngine
-            Start-Sleep 10
-            
-            docker build -t "$env:IMAGE_NAME`:$env:IMAGE_TAG" .
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "DataEngine build failed" -ForegroundColor Red
-              exit 1
-            }
-          } else {
-            # Tag the pulled image with current commit SHA
-            docker tag "$env:IMAGE_REGISTRY/$env:IMAGE_NAME`:latest" "$env:IMAGE_NAME`:$env:IMAGE_TAG"
-            Write-Host "Successfully tagged pre-built image" -ForegroundColor Green
-          }
+          # Show comprehensive deployment status
+          Write-Host "`n📊 Complete Deployment Status:" -ForegroundColor Cyan
+          Write-Host "Pods:" -ForegroundColor White
+          kubectl get pods -n $env:NAMESPACE -o wide
           
-          Write-Host "Both images built successfully" -ForegroundColor Green
-
-      - name: Deploy DataEngine via Helm
-        shell: powershell
-        run: |
-          Write-Host "Deploying DataEngine application..." -ForegroundColor Green
-          
-          # Deploy DataEngine using environment-based values file
-          Write-Host "Using values file: values-$env:DEPLOY_ENV.yaml" -ForegroundColor Yellow
-          
-          helm upgrade --install $env:RELEASE_NAME $env:CHART_PATH `
-            --namespace $env:NAMESPACE `
-            --values "$env:CHART_PATH/values-$env:DEPLOY_ENV.yaml" `
-            --set "image.repository=$env:IMAGE_REGISTRY/$env:IMAGE_NAME" `
-            --set "image.tag=$env:IMAGE_TAG" `
-            --set "config.environment=$env:DEPLOY_ENV" `
-            --set "secrets.database.password=${{ secrets.DATABASE_PASSWORD }}" `
-            --set "secrets.redis.password=${{ secrets.REDIS_PASSWORD }}" `
-            --set "secrets.api_keys.kraken_api_key=${{ secrets.KRAKEN_API_KEY }}" `
-            --set "secrets.api_keys.kraken_secret_key=${{ secrets.KRAKEN_SECRET_KEY }}" `
-            --wait --timeout=$env:DEPLOY_TIMEOUT
-          
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "DataEngine deployed successfully" -ForegroundColor Green
-          } else {
-            Write-Host "❌ DataEngine deployment failed" -ForegroundColor Red
-            helm status data-engine --namespace $env:NAMESPACE
-            exit 1
-          }
-
-      - name: Verify Complete Deployment
-        shell: powershell
-        run: |
-          $deployType = if ($env:DEPLOY_ENV -eq "database-only") { "Infrastructure Only" } else { "Complete DataEngine Stack" }
-          Write-Host "🔍 Verifying $deployType..." -ForegroundColor Yellow
-          
-          Write-Host "`n📊 Infrastructure Status:" -ForegroundColor Cyan
-          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=database-schema
-          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=redis-utils  
-          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=message-broker
-          
-          Write-Host "`n🚀 DataEngine Status:" -ForegroundColor Cyan
+          Write-Host "`nServices:" -ForegroundColor White
           kubectl get services -n $env:NAMESPACE
           
-          # Check DataEngine deployment (all environments including database-only)
-          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/name=data-engine
+          Write-Host "`nPersistent Volume Claims:" -ForegroundColor White
+          kubectl get pvc -n $env:NAMESPACE
           
-          # Wait for DataEngine to be ready
-          Write-Host "`n⏳ Waiting for DataEngine readiness..." -ForegroundColor Yellow
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine `
-            --namespace $env:NAMESPACE --timeout=300s
+          # Get DataEngine service details
+          Write-Host "`n🌐 Service Access Information:" -ForegroundColor Cyan
+          $serviceName = "dataengine-stack-app"
           
-          # Health check behavior depends on deployment mode
-          $podName = kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[0].metadata.name}'
-          
-          if ($podName) {
-            Write-Host "`n📋 DataEngine Logs:" -ForegroundColor Cyan
-            kubectl logs $podName -n $env:NAMESPACE --tail=10
+          try {
+            $dataEngineService = kubectl get service $serviceName -n $env:NAMESPACE -o json | ConvertFrom-Json
+            $serviceType = $dataEngineService.spec.type
+            $servicePort = $dataEngineService.spec.ports[0].port
             
-            # Health check only for non-database-only deployments (service disabled in database-only mode)
-            if ($env:DEPLOY_ENV -ne "database-only") {
-              Write-Host "`n🏥 Health Check:" -ForegroundColor Cyan
-              Start-Process kubectl -ArgumentList "port-forward $podName 8080:8080 -n $env:NAMESPACE" -NoNewWindow
-              Start-Sleep 10
+            Write-Host "DataEngine Service Details:" -ForegroundColor Green
+            Write-Host "  Name: $serviceName" -ForegroundColor White
+            Write-Host "  Type: $serviceType" -ForegroundColor White
+            Write-Host "  Port: $servicePort" -ForegroundColor White
+            
+            if ($serviceType -eq "LoadBalancer") {
+              Write-Host "  Internal: http://${serviceName}:${servicePort}" -ForegroundColor White
+              Write-Host "  External: http://localhost:${servicePort} (via port-forward)" -ForegroundColor White
               
-              try {
-                $health = Invoke-RestMethod -Uri "http://localhost:8080/health" -TimeoutSec 15
-                Write-Host "✅ DataEngine is healthy!" -ForegroundColor Green
-                Write-Host $health -ForegroundColor Gray
-              } catch {
-                Write-Host "⚠️ Health check inconclusive: $($_.Exception.Message)" -ForegroundColor Yellow
-              } finally {
-                Get-Process kubectl -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*port-forward*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+              # Set up port forwarding for local access
+              Write-Host "Setting up port forwarding..." -ForegroundColor Gray
+              Start-Process kubectl -ArgumentList "port-forward service/$serviceName ${servicePort}:${servicePort} -n $env:NAMESPACE" -WindowStyle Hidden
+              Start-Sleep 15
+            }
+          } catch {
+            Write-Host "Could not get service details: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "Available services:" -ForegroundColor Gray
+            kubectl get services -n $env:NAMESPACE --no-headers
+          }
+          
+          # Health check with retry logic
+          Write-Host "`n🏥 Performing health checks..." -ForegroundColor Yellow
+          $maxRetries = 3
+          $retryCount = 0
+          $healthCheckPassed = $false
+          
+          while ($retryCount -lt $maxRetries -and -not $healthCheckPassed) {
+            $retryCount++
+            Write-Host "Health check attempt $retryCount/$maxRetries..." -ForegroundColor Gray
+            
+            try {
+              $health = Invoke-RestMethod -Uri "http://localhost:8080/health" -TimeoutSec 20
+              Write-Host "`n✅ DataEngine is healthy!" -ForegroundColor Green
+              Write-Host "Response: $($health | ConvertTo-Json -Compress)" -ForegroundColor Gray
+              $healthCheckPassed = $true
+            } catch {
+              Write-Host "`n⚠️ Health check attempt $retryCount failed: $($_.Exception.Message)" -ForegroundColor Yellow
+              
+              if ($retryCount -eq $maxRetries) {
+                Write-Host "Checking pod logs for troubleshooting..." -ForegroundColor Gray
+                try {
+                  kubectl logs -l app=data-engine -n $env:NAMESPACE --tail=20
+                } catch {
+                  Write-Host "Could not retrieve logs" -ForegroundColor Red
+                }
+              } else {
+                Start-Sleep 10
               }
-            } else {
-              Write-Host "📊 Database-only mode: Service disabled, health check via logs only" -ForegroundColor Yellow
             }
           }
           
-          Write-Host "Deployment Summary:" -ForegroundColor Green
-          Write-Host "  Environment: $env:DEPLOY_ENV" -ForegroundColor White
-          Write-Host "  Namespace: $env:NAMESPACE" -ForegroundColor White  
-          Write-Host "  DataEngine: $env:IMAGE_NAME`:$env:IMAGE_TAG" -ForegroundColor White
-          Write-Host "  PostgreSQL: database-schema-postgresql:5432" -ForegroundColor White
-          Write-Host "  Redis: redis-utils:6379" -ForegroundColor White
-          Write-Host "  MessageBrokerEngine: message-broker-message-broker-engine:8080" -ForegroundColor White
-
-  # Fallback Docker-only deployment when Kubernetes is not available
-  docker-fallback-deployment:
-    name: Docker-Only Deployment (Fallback)
-    runs-on: [self-hosted, windows, x64]
-    if: always() && (failure() || contains(github.event.head_commit.message, '[docker-only]'))
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: itsjustikenna
-          password: ${{ secrets.GHCR_TOKEN }}
-
-      - name: Deploy with Docker Compose
-        shell: powershell
-        run: |
-          Write-Host "🐳 Starting Docker-only deployment..." -ForegroundColor Green
+          # Final deployment summary
+          Write-Host "`n🎉 Helm + Kubernetes deployment completed!" -ForegroundColor Green
+          Write-Host "📋 Deployment Summary:" -ForegroundColor Cyan
+          Write-Host "  • Helm Release: dataengine-stack" -ForegroundColor White
+          Write-Host "  • Namespace: $env:NAMESPACE" -ForegroundColor White
+          Write-Host "  • DataEngine: http://localhost:8080" -ForegroundColor White
+          Write-Host "  • LoggingEngine: http://localhost:8081" -ForegroundColor White
           
-          # Create Docker Compose file with cross-platform image support
-          if ($IsWindows) {
-            Write-Host "Creating Windows-compatible Docker Compose..." -ForegroundColor Yellow
-            $compose = @"
-          version: '3.8'
-          services:
-            dataengine:
-              image: ghcr.io/itsjustikenna/data-engine:latest
-              ports:
-                - "8080:8080"
-              environment:
-                - REDIS_URL=redis://host.docker.internal:6379
-                - DATABASE_URL=postgresql://postgres:${{ secrets.DATABASE_PASSWORD }}@host.docker.internal:5432/trading_platform
-                
-          "@
-          } else {
-            Write-Host "Creating Linux Docker Compose..." -ForegroundColor Yellow
-            $compose = @"
-          version: '3.8'
-          services:
-            redis:
-              image: redis:7-alpine
-              ports:
-                - "6379:6379"
-              volumes:
-                - redis_data:/data
-                
-            postgres:
-              image: postgres:15-alpine
-              environment:
-                POSTGRES_DB: trading_platform
-                POSTGRES_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
-              ports:
-                - "5432:5432"
-              volumes:
-                - postgres_data:/var/lib/postgresql/data
-                
-            dataengine:
-              image: ghcr.io/itsjustikenna/data-engine:latest
-              ports:
-                - "8080:8080"
-              environment:
-                - DATABASE_URL=postgresql://postgres:${{ secrets.DATABASE_PASSWORD }}@postgres:5432/trading_platform
-                - REDIS_URL=redis://redis:6379
-              depends_on:
-                - postgres
-                - redis
-                
-          volumes:
-            redis_data:
-            postgres_data:
-          "@
-          }
-          
-          $compose | Out-File -FilePath "docker-compose.yml" -Encoding UTF8
-          
-          # Start the services
-          Write-Host "Starting DataEngine stack with Docker Compose..." -ForegroundColor Yellow
-          docker-compose up -d
-          
-          # Wait for services to be ready
-          Write-Host "Waiting for services to be ready..." -ForegroundColor Yellow
-          Start-Sleep 30
-          
-          # Check service status
-          Write-Host "Service Status:" -ForegroundColor Green
-          docker-compose ps
-          
-          Write-Host "✅ Docker-only deployment completed!" -ForegroundColor Green
-          Write-Host "DataEngine is accessible at: http://localhost:8080" -ForegroundColor Cyan
+          # Show resource usage
+          Write-Host "`n📈 Resource Usage:" -ForegroundColor Cyan
+          kubectl top pods -n $env:NAMESPACE --no-headers 2>$null || Write-Host "Metrics not available (metrics-server may not be installed)" -ForegroundColor Gray
