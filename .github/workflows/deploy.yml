@@ -1,4 +1,4 @@
-name: Deploy DataEngine Micr          Write-Host "[SETUP] Setting up Kubernetes context..." -ForegroundColor Yellowservice
+name: Deploy DataEngine Micr          Write-Host "[SETUP] Setting up Kubernetes context..." -ForegroundColor Yellow         Write-Host "[SETUP] Setting up Kubernetes context..." -ForegroundColor Yellowservice
 
 on:
   push:
@@ -28,38 +28,131 @@ jobs:
         run: |
           Write-Host "� Setting up Kubernetes context..." -ForegroundColor Yellow
           
-          # Configure Docker Desktop Kubernetes context
-          kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true
-          kubectl config set-context docker-desktop --cluster=docker-desktop
-          kubectl config use-context docker-desktop
+          # Check if Docker Desktop is running
+          Write-Host "Checking Docker Desktop status..." -ForegroundColor Gray
+          try {
+            $dockerInfo = docker info 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "[ERROR] Docker Desktop is not running" -ForegroundColor Red
+              Write-Host "Please start Docker Desktop and try again" -ForegroundColor Red
+              exit 1
+            }
+            Write-Host "[OK] Docker Desktop is running" -ForegroundColor Green
+          } catch {
+            Write-Host "[ERROR] Cannot connect to Docker: $($_.Exception.Message)" -ForegroundColor Red
+            exit 1
+          }
           
-          # Test Kubernetes connectivity
+          # Check current kubectl context and available contexts
+          Write-Host "Checking kubectl configuration..." -ForegroundColor Gray
+          $currentContext = kubectl config current-context 2>&1
+          Write-Host "Current context: $currentContext" -ForegroundColor Gray
+          
+          $contexts = kubectl config get-contexts -o name 2>&1
+          Write-Host "Available contexts: $($contexts -join ', ')" -ForegroundColor Gray
+          
+          # Configure and use docker-desktop context
+          if ($contexts -contains "docker-desktop") {
+            Write-Host "Using existing docker-desktop context..." -ForegroundColor Yellow
+            kubectl config use-context docker-desktop
+          } else {
+            Write-Host "Creating docker-desktop context..." -ForegroundColor Yellow
+            kubectl config set-cluster docker-desktop --server=https://kubernetes.docker.internal:6443 --insecure-skip-tls-verify=true
+            kubectl config set-context docker-desktop --cluster=docker-desktop --user=docker-desktop
+            kubectl config use-context docker-desktop
+          }
+          
+          # Test Kubernetes connectivity with enhanced error handling
           $k8sReady = $false
           $attempts = 0
-          $maxAttempts = 3
+          $maxAttempts = 6
           
+          Write-Host "Testing Kubernetes connectivity..." -ForegroundColor Yellow
           while (-not $k8sReady -and $attempts -lt $maxAttempts) {
             $attempts++
-            Write-Host "Testing Kubernetes connectivity (attempt $attempts/$maxAttempts)..." -ForegroundColor Gray
+            Write-Host "Attempt $attempts/$maxAttempts..." -ForegroundColor Gray
             
             try {
-              $result = kubectl get nodes --request-timeout=10s 2>&1
-              if ($LASTEXITCODE -eq 0 -and $result -notmatch "error:|EOF") {
+              $result = kubectl get nodes --request-timeout=15s 2>&1
+              Write-Host "kubectl output: $result" -ForegroundColor Gray
+              
+              if ($LASTEXITCODE -eq 0 -and $result -notmatch "error:|EOF|connection refused|timeout|Unable to connect") {
                 $k8sReady = $true
                 Write-Host "[OK] Kubernetes cluster is ready!" -ForegroundColor Green
+                Write-Host "Available nodes: $result" -ForegroundColor Green
                 break
+              } else {
+                Write-Host "[RETRY] Connection failed - kubectl exit code: $LASTEXITCODE" -ForegroundColor Yellow
               }
-            } catch { }
+            } catch {
+              Write-Host "[RETRY] Exception: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
             
             if ($attempts -lt $maxAttempts) {
-              Start-Sleep 5
+              Write-Host "Waiting 10 seconds before retry..." -ForegroundColor Gray
+              Start-Sleep 10
             }
           }
           
+          # Enhanced troubleshooting if connection fails
           if (-not $k8sReady) {
-            Write-Host "❌ Cannot connect to Kubernetes cluster" -ForegroundColor Red
-            Write-Host "Please ensure Docker Desktop Kubernetes is enabled" -ForegroundColor Red
-            exit 1
+            Write-Host "[ERROR] Cannot connect to Kubernetes after $maxAttempts attempts" -ForegroundColor Red
+            Write-Host "" -ForegroundColor White
+            Write-Host "TROUBLESHOOTING STEPS:" -ForegroundColor Yellow
+            Write-Host "1. Ensure Docker Desktop is running" -ForegroundColor White
+            Write-Host "2. Enable Kubernetes in Docker Desktop:" -ForegroundColor White
+            Write-Host "   - Open Docker Desktop" -ForegroundColor White
+            Write-Host "   - Go to Settings (gear icon)" -ForegroundColor White
+            Write-Host "   - Click 'Kubernetes' tab" -ForegroundColor White
+            Write-Host "   - Check 'Enable Kubernetes'" -ForegroundColor White
+            Write-Host "   - Click 'Apply & Restart'" -ForegroundColor White
+            Write-Host "3. Wait for Kubernetes status indicator to turn green" -ForegroundColor White
+            Write-Host "" -ForegroundColor White
+            
+            # Try alternative connection methods
+            Write-Host "Trying alternative connection methods..." -ForegroundColor Yellow
+            
+            # Try localhost with different ports
+            $alternativePorts = @(6443, 6445, 16443)
+            foreach ($port in $alternativePorts) {
+              Write-Host "Trying localhost:$port..." -ForegroundColor Gray
+              try {
+                kubectl config set-cluster docker-desktop --server=https://localhost:$port --insecure-skip-tls-verify=true
+                $testResult = kubectl get nodes --request-timeout=10s 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                  Write-Host "[OK] Connected using localhost:$port" -ForegroundColor Green
+                  $k8sReady = $true
+                  break
+                }
+              } catch { }
+            }
+            
+            # Try alternative Kubernetes distributions
+            if (-not $k8sReady) {
+              Write-Host "Checking for alternative Kubernetes contexts..." -ForegroundColor Yellow
+              $alternativeContexts = @("kind-kind", "minikube", "k3d-*")
+              foreach ($pattern in $alternativeContexts) {
+                $matchingContexts = $contexts | Where-Object { $_ -like $pattern }
+                if ($matchingContexts) {
+                  $ctx = $matchingContexts[0]
+                  Write-Host "Found alternative context: $ctx" -ForegroundColor Yellow
+                  kubectl config use-context $ctx
+                  $testResult = kubectl get nodes --request-timeout=10s 2>&1
+                  if ($LASTEXITCODE -eq 0) {
+                    Write-Host "[OK] Using alternative Kubernetes: $ctx" -ForegroundColor Green
+                    $k8sReady = $true
+                    break
+                  }
+                }
+              }
+            }
+            
+            if (-not $k8sReady) {
+              Write-Host "" -ForegroundColor White
+              Write-Host "MANUAL SETUP REQUIRED:" -ForegroundColor Red
+              Write-Host "Please enable Kubernetes in Docker Desktop and restart the workflow" -ForegroundColor Red
+              exit 1
+            }
           }
           
           # Install/Verify Helm
