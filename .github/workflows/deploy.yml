@@ -137,24 +137,34 @@ jobs:
           
           # Force delete any remaining Bitnami StatefulSets
           Write-Host "Checking for Bitnami StatefulSets..." -ForegroundColor Yellow
-          $statefulsets = kubectl get statefulsets -n $env:NAMESPACE -o json 2>&1 | ConvertFrom-Json
-          if ($statefulsets.items) {
-            foreach ($sts in $statefulsets.items) {
-              $name = $sts.metadata.name
-              if ($name -match "postgresql|redis") {
-                Write-Host "Force deleting StatefulSet: $name" -ForegroundColor Yellow
-                kubectl delete statefulset $name -n $env:NAMESPACE --force --grace-period=0 2>&1 | Out-Null
+          try {
+            $statefulsets = kubectl get statefulsets -n $env:NAMESPACE -o json 2>&1 | ConvertFrom-Json
+            if ($statefulsets.items -and $statefulsets.items.Count -gt 0) {
+              foreach ($sts in $statefulsets.items) {
+                $name = $sts.metadata.name
+                if ($name -match "postgresql|redis") {
+                  Write-Host "Force deleting StatefulSet: $name" -ForegroundColor Yellow
+                  kubectl delete statefulset $name -n $env:NAMESPACE --force --grace-period=0 --ignore-not-found=true 2>&1 | Out-Null
+                }
               }
+            } else {
+              Write-Host "No StatefulSets found to delete" -ForegroundColor Gray
             }
+          } catch {
+            Write-Host "No StatefulSets found or error checking (this is OK)" -ForegroundColor Gray
           }
           
           # Force delete any remaining pods
           Write-Host "Checking for remaining pods..." -ForegroundColor Yellow
-          kubectl delete pods --all -n $env:NAMESPACE --force --grace-period=0 2>&1 | Out-Null
+          $pods = kubectl get pods -n $env:NAMESPACE --no-headers 2>&1
+          if ($pods -and $LASTEXITCODE -eq 0) {
+            Write-Host "Deleting remaining pods..." -ForegroundColor Gray
+            kubectl delete pods --all -n $env:NAMESPACE --force --grace-period=0 --ignore-not-found=true 2>&1 | Out-Null
+          }
           
           # Clean PVCs (optional - comment out if you want to preserve data)
           Write-Host "Cleaning PersistentVolumeClaims..." -ForegroundColor Yellow
-          kubectl delete pvc --all -n $env:NAMESPACE 2>&1 | Out-Null
+          kubectl delete pvc --all -n $env:NAMESPACE --ignore-not-found=true 2>&1 | Out-Null
           
           Write-Host "Waiting for cleanup to complete..." -ForegroundColor Gray
           Start-Sleep -Seconds 15
