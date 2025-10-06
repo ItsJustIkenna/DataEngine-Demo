@@ -115,9 +115,51 @@ jobs:
           
           Write-Host "Filebeat deployed successfully! Logs will appear in your Elastic Cloud Kibana." -ForegroundColor Green
 
-      - name: Clean Helm Chart Cache
+      - name: Clean Existing Deployment (Remove Bitnami Resources)
         shell: powershell
         run: |
+          Write-Host "Cleaning existing deployment and Bitnami resources..." -ForegroundColor Yellow
+          
+          # Check if release exists
+          $releaseExists = helm list -n $env:NAMESPACE 2>&1 | Select-String -Pattern $env:RELEASE_NAME
+          
+          if ($releaseExists) {
+            Write-Host "Found existing Helm release '$env:RELEASE_NAME'. Deleting..." -ForegroundColor Yellow
+            helm delete $env:RELEASE_NAME --namespace $env:NAMESPACE 2>&1 | Out-Null
+            Write-Host "Helm release deleted" -ForegroundColor Green
+            
+            # Wait for resources to be removed
+            Write-Host "Waiting for resources to be cleaned up..." -ForegroundColor Gray
+            Start-Sleep -Seconds 10
+          } else {
+            Write-Host "No existing Helm release found" -ForegroundColor Gray
+          }
+          
+          # Force delete any remaining Bitnami StatefulSets
+          Write-Host "Checking for Bitnami StatefulSets..." -ForegroundColor Yellow
+          $statefulsets = kubectl get statefulsets -n $env:NAMESPACE -o json 2>&1 | ConvertFrom-Json
+          if ($statefulsets.items) {
+            foreach ($sts in $statefulsets.items) {
+              $name = $sts.metadata.name
+              if ($name -match "postgresql|redis") {
+                Write-Host "Force deleting StatefulSet: $name" -ForegroundColor Yellow
+                kubectl delete statefulset $name -n $env:NAMESPACE --force --grace-period=0 2>&1 | Out-Null
+              }
+            }
+          }
+          
+          # Force delete any remaining pods
+          Write-Host "Checking for remaining pods..." -ForegroundColor Yellow
+          kubectl delete pods --all -n $env:NAMESPACE --force --grace-period=0 2>&1 | Out-Null
+          
+          # Clean PVCs (optional - comment out if you want to preserve data)
+          Write-Host "Cleaning PersistentVolumeClaims..." -ForegroundColor Yellow
+          kubectl delete pvc --all -n $env:NAMESPACE 2>&1 | Out-Null
+          
+          Write-Host "Waiting for cleanup to complete..." -ForegroundColor Gray
+          Start-Sleep -Seconds 15
+          
+          # Clean Helm chart cache
           Write-Host "Cleaning Helm chart cache..." -ForegroundColor Yellow
           $chartDir = "DataEngine/$env:CHART_PATH"
           if (Test-Path "$chartDir/charts") {
@@ -128,6 +170,8 @@ jobs:
             Remove-Item "$chartDir/Chart.lock" -Force
             Write-Host "Removed Chart.lock" -ForegroundColor Green
           }
+          
+          Write-Host "Cleanup complete! Ready for fresh deployment." -ForegroundColor Green
 
       - name: Deploy DataEngine with Helm
         shell: powershell
