@@ -77,10 +77,21 @@ jobs:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: MessageBrokerEngine
 
-      - name: Deploy ELK Stack
+      - name: Deploy Filebeat to Elastic Cloud
         shell: powershell
+        env:
+          ELASTIC_CLOUD_ID: ${{ secrets.ELASTIC_CLOUD_ID }}
+          ELASTIC_CLOUD_AUTH: ${{ secrets.ELASTIC_CLOUD_AUTH }}
         run: |
-          Write-Host "Deploying ELK Stack (Elasticsearch, Kibana, Filebeat)..." -ForegroundColor Yellow
+          Write-Host "Deploying Filebeat to send logs to Elastic Cloud..." -ForegroundColor Yellow
+          
+          if (-not $env:ELASTIC_CLOUD_ID -or -not $env:ELASTIC_CLOUD_AUTH) {
+            Write-Host "WARNING: ELASTIC_CLOUD_ID or ELASTIC_CLOUD_AUTH not set. Skipping Filebeat deployment." -ForegroundColor Yellow
+            Write-Host "To enable logging to Elastic Cloud, add these secrets to your repository:" -ForegroundColor Gray
+            Write-Host "  - ELASTIC_CLOUD_ID: Your Elastic Cloud ID" -ForegroundColor Gray
+            Write-Host "  - ELASTIC_CLOUD_AUTH: username:password (e.g., elastic:yourpassword)" -ForegroundColor Gray
+            exit 0
+          }
           
           # Add Elastic Helm repository
           helm repo add elastic https://helm.elastic.co 2>&1 | Out-Null
@@ -89,34 +100,12 @@ jobs:
           # Create logging namespace
           kubectl create namespace logging --dry-run=client -o yaml | kubectl apply -f -
           
-          # Deploy Elasticsearch (single node for development)
-          Write-Host "Deploying Elasticsearch..." -ForegroundColor Cyan
-          helm upgrade --install elasticsearch elastic/elasticsearch `
-            --namespace logging `
-            --set replicas=1 `
-            --set minimumMasterNodes=1 `
-            --set resources.requests.cpu=500m `
-            --set resources.requests.memory=1Gi `
-            --set resources.limits.cpu=1000m `
-            --set resources.limits.memory=2Gi `
-            --timeout 10m `
-            --wait
-          
-          # Deploy Kibana
-          Write-Host "Deploying Kibana..." -ForegroundColor Cyan
-          helm upgrade --install kibana elastic/kibana `
-            --namespace logging `
-            --set resources.requests.cpu=250m `
-            --set resources.requests.memory=512Mi `
-            --set resources.limits.cpu=500m `
-            --set resources.limits.memory=1Gi `
-            --timeout 10m `
-            --wait
-          
-          # Deploy Filebeat to collect logs from all pods
+          # Deploy Filebeat configured for Elastic Cloud
           Write-Host "Deploying Filebeat..." -ForegroundColor Cyan
           helm upgrade --install filebeat elastic/filebeat `
             --namespace logging `
+            --set config.cloud.id="$env:ELASTIC_CLOUD_ID" `
+            --set config.cloud.auth="$env:ELASTIC_CLOUD_AUTH" `
             --set resources.requests.cpu=100m `
             --set resources.requests.memory=128Mi `
             --set resources.limits.cpu=200m `
@@ -124,9 +113,7 @@ jobs:
             --timeout 5m `
             --wait
           
-          Write-Host "ELK Stack deployed successfully!" -ForegroundColor Green
-          Write-Host "Kibana will be available at: http://localhost:5601" -ForegroundColor Yellow
-          Write-Host "Run: kubectl port-forward -n logging svc/kibana-kibana 5601:5601" -ForegroundColor Gray
+          Write-Host "Filebeat deployed successfully! Logs will appear in your Elastic Cloud Kibana." -ForegroundColor Green
 
       - name: Clean Helm Chart Cache
         shell: powershell
