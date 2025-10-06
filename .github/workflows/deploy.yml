@@ -179,6 +179,15 @@ jobs:
             Write-Host "No PVCs found or error deleting (this is OK)" -ForegroundColor Gray
           }
           
+          # Clean secrets (to avoid Helm ownership conflicts)
+          Write-Host "Cleaning existing secrets..." -ForegroundColor Yellow
+          try {
+            kubectl delete secret "$env:RELEASE_NAME-postgresql" -n $env:NAMESPACE --ignore-not-found=true 2>&1 | Out-Null
+            kubectl delete secret "$env:RELEASE_NAME-redis" -n $env:NAMESPACE --ignore-not-found=true 2>&1 | Out-Null
+          } catch {
+            Write-Host "No secrets found or error deleting (this is OK)" -ForegroundColor Gray
+          }
+          
           Write-Host "Waiting for cleanup to complete..." -ForegroundColor Gray
           Start-Sleep -Seconds 15
           
@@ -202,7 +211,6 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'dataengine123' }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD || '' }}
         run: |
-          
           Write-Host "Deploying DataEngine to Kubernetes..." -ForegroundColor Yellow
           Write-Host "Chart Path: $env:CHART_PATH" -ForegroundColor Cyan
           Write-Host "Namespace: $env:NAMESPACE" -ForegroundColor Cyan
@@ -211,23 +219,8 @@ jobs:
           # Create namespace if it doesn't exist
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
           
-          # Create PostgreSQL secret that Bitnami chart expects
-          Write-Host "Creating PostgreSQL secret..." -ForegroundColor Yellow
-          kubectl create secret generic "$env:RELEASE_NAME-postgresql" `
-            --from-literal=password=$env:POSTGRES_PASSWORD `
-            --from-literal=postgres-password=$env:POSTGRES_PASSWORD `
-            --namespace $env:NAMESPACE `
-            --dry-run=client -o yaml | kubectl apply -f -
-          
-          # Create Redis secret that Bitnami chart expects
-          if ($env:REDIS_PASSWORD) {
-            Write-Host "Creating Redis secret..." -ForegroundColor Yellow
-            kubectl create secret generic "$env:RELEASE_NAME-redis" `
-              --from-literal=password=$env:REDIS_PASSWORD `
-              --from-literal=redis-password=$env:REDIS_PASSWORD `
-              --namespace $env:NAMESPACE `
-              --dry-run=client -o yaml | kubectl apply -f -
-          }
+          # Note: We don't create secrets manually anymore - Helm will manage them
+          # This avoids the "invalid ownership metadata" error
           
           # Check for stuck Helm operations and clean them up
           Write-Host "Checking for stuck Helm operations..." -ForegroundColor Yellow
