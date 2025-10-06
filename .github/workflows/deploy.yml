@@ -31,6 +31,16 @@ on:
         required: false
         default: 'dataengine'
         type: string
+      force_build:
+        description: 'Force rebuild image even if it exists'
+        required: false
+        default: false
+        type: boolean
+      skip_build:
+        description: 'Skip image build entirely (use existing image)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   REGISTRY: ghcr.io/nwagbara-group-llc
@@ -39,6 +49,8 @@ env:
   CHART_OVERRIDE_PATH: ${{ github.event.inputs.chart_override_path || './k8s/data-engine-helm/values-database-only.yaml' }}
   NAMESPACE: ${{ github.event.inputs.namespace || 'dataengine' }}
   RELEASE_NAME: ${{ github.event.inputs.release_name || 'dataengine' }}
+  FORCE_BUILD: ${{ github.event.inputs.force_build || 'false' }}
+  SKIP_BUILD: ${{ github.event.inputs.skip_build || 'false' }}
 
 jobs:
   deploy:
@@ -71,34 +83,67 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push DataEngine image
+      - name: Check if image exists and build if needed
         shell: powershell
         run: |
-          Write-Host "Building DataEngine Docker image..." -ForegroundColor Yellow
-          
           # Construct image tags
           $registry = "$env:REGISTRY"
           $imageName = "$env:IMAGE_NAME"
           $latestTag = "${registry}/${imageName}:latest"
           $shaTag = "${registry}/${imageName}:${{ github.sha }}"
           
-          Write-Host "Building with tags: $latestTag and $shaTag" -ForegroundColor Gray
-          docker build -f Dockerfile -t $latestTag -t $shaTag .
+          Write-Host "Checking build requirements..." -ForegroundColor Yellow
+          Write-Host "Skip Build: $env:SKIP_BUILD" -ForegroundColor Gray
+          Write-Host "Force Build: $env:FORCE_BUILD" -ForegroundColor Gray
           
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Docker build failed" -ForegroundColor Red
-            exit 1
+          $shouldBuild = $false
+          
+          if ($env:SKIP_BUILD -eq 'true') {
+            Write-Host "🚫 Skipping build - using existing image: $latestTag" -ForegroundColor Cyan
+            $shouldBuild = $false
+          }
+          elseif ($env:FORCE_BUILD -eq 'true') {
+            Write-Host "🔨 Force build requested" -ForegroundColor Yellow
+            $shouldBuild = $true
+          }
+          else {
+            # Check if image exists in registry
+            Write-Host "Checking if image exists: $latestTag" -ForegroundColor Gray
+            docker manifest inspect $latestTag > $null 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "✅ Image already exists in registry: $latestTag" -ForegroundColor Green
+              Write-Host "Skipping build. Use 'force_build: true' to rebuild." -ForegroundColor Cyan
+              $shouldBuild = $false
+            } else {
+              Write-Host "❌ Image not found in registry, building new image..." -ForegroundColor Yellow
+              $shouldBuild = $true
+            }
           }
           
-          Write-Host "Pushing images..." -ForegroundColor Yellow
-          docker push $latestTag
-          docker push $shaTag
-          
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ Successfully built and pushed DataEngine images" -ForegroundColor Green
+          if ($shouldBuild) {
+            Write-Host "Building DataEngine Docker image..." -ForegroundColor Yellow
+            Write-Host "Building with tags: $latestTag and $shaTag" -ForegroundColor Gray
+            
+            docker build -f Dockerfile -t $latestTag -t $shaTag .
+            
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "Docker build failed" -ForegroundColor Red
+              exit 1
+            }
+            
+            Write-Host "Pushing images..." -ForegroundColor Yellow
+            docker push $latestTag
+            docker push $shaTag
+            
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "✅ Successfully built and pushed DataEngine images" -ForegroundColor Green
+            } else {
+              Write-Host "❌ Failed to push images" -ForegroundColor Red
+              exit 1
+            }
           } else {
-            Write-Host "❌ Failed to push images" -ForegroundColor Red
-            exit 1
+            Write-Host "✅ Using existing image: $latestTag" -ForegroundColor Green
           }
 
       - name: Add Bitnami Helm Repository
