@@ -48,6 +48,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: DataEngine
+          ref: main
+          clean: true
+          fetch-depth: 1
 
       - name: Checkout databaseschema (public)
         uses: actions/checkout@v4
@@ -375,6 +378,13 @@ jobs:
             Write-Host "FOUND: postgresql-deployment.yaml" -ForegroundColor Green
             Write-Host "First 10 lines:" -ForegroundColor Gray
             Get-Content "$chartPath/templates/postgresql-deployment.yaml" -First 10 | Write-Host
+            Write-Host "Checking for customPostgresql reference:" -ForegroundColor Yellow
+            $hasCustomRef = (Get-Content "$chartPath/templates/postgresql-deployment.yaml" | Select-String -Pattern "customPostgresql" -Quiet)
+            if ($hasCustomRef) {
+              Write-Host "  ✓ Template uses customPostgresql (CORRECT)" -ForegroundColor Green
+            } else {
+              Write-Host "  ✗ Template still uses old 'postgresql' reference (WRONG!)" -ForegroundColor Red
+            }
           } else {
             Write-Host "MISSING: postgresql-deployment.yaml" -ForegroundColor Red
           }
@@ -382,6 +392,13 @@ jobs:
             Write-Host "FOUND: redis-deployment.yaml" -ForegroundColor Green  
             Write-Host "First 10 lines:" -ForegroundColor Gray
             Get-Content "$chartPath/templates/redis-deployment.yaml" -First 10 | Write-Host
+            Write-Host "Checking for customRedis reference:" -ForegroundColor Yellow
+            $hasCustomRef = (Get-Content "$chartPath/templates/redis-deployment.yaml" | Select-String -Pattern "customRedis" -Quiet)
+            if ($hasCustomRef) {
+              Write-Host "  ✓ Template uses customRedis (CORRECT)" -ForegroundColor Green
+            } else {
+              Write-Host "  ✗ Template still uses old 'redis' reference (WRONG!)" -ForegroundColor Red
+            }
           } else {
             Write-Host "MISSING: redis-deployment.yaml" -ForegroundColor Red
           }
