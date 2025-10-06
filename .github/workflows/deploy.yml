@@ -1,13 +1,44 @@
-﻿name: Deploy DataEngine
+﻿name: Deploy DataEngine with Helm + Kubernetes
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      chart_path:
+        description: 'Helm Chart Path'
+        required: false
+        default: './k8s/data-engine-helm/'
+        type: string
+      chart_override_path:
+        description: 'Chart Override Values Path'
+        required: false
+        type: choice
+        default: './k8s/data-engine-helm/values-database-only.yaml'
+        options:
+          - './k8s/data-engine-helm/values-database-only.yaml'
+          - './k8s/data-engine-helm/values-prod.yaml'
+          - './k8s/data-engine-helm/values-qa.yaml'
+          - './k8s/data-engine-helm/values-dev.yaml'
+          - 'none'
+      namespace:
+        description: 'Kubernetes Namespace'
+        required: false
+        default: 'dataengine'
+        type: string
+      release_name:
+        description: 'Helm Release Name'
+        required: false
+        default: 'dataengine'
+        type: string
 
 env:
   REGISTRY: ghcr.io/nwagbara-group-llc
   IMAGE_NAME: data-engine
+  CHART_PATH: ${{ github.event.inputs.chart_path || './k8s/data-engine-helm/' }}
+  CHART_OVERRIDE_PATH: ${{ github.event.inputs.chart_override_path || './k8s/data-engine-helm/values-database-only.yaml' }}
+  NAMESPACE: ${{ github.event.inputs.namespace || 'dataengine' }}
+  RELEASE_NAME: ${{ github.event.inputs.release_name || 'dataengine' }}
 
 jobs:
   deploy:
@@ -16,12 +47,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create stub directories
+      - name: Create stub directories for Docker build
+        shell: powershell
         run: |
-          mkdir -p databaseschema redisutils LoggingEngine MessageBrokerEngine
-          mkdir -p LoggingEngine/ultra-logger/src
-          echo '[package]\nname = "ultra-logger"\nversion = "0.1.0"\nedition = "2021"' > LoggingEngine/ultra-logger/Cargo.toml
-          echo 'pub fn init() {}' > LoggingEngine/ultra-logger/src/lib.rs
+          Write-Host "Creating stub directories for Docker build..." -ForegroundColor Yellow
+          $dirs = @("databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
+          foreach ($dir in $dirs) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            Write-Host "Created: $dir" -ForegroundColor Gray
+          }
+          
+          # Create LoggingEngine/ultra-logger specifically
+          New-Item -ItemType Directory -Path "LoggingEngine\ultra-logger\src" -Force | Out-Null
+          "[package]`nname = `"ultra-logger`"`nversion = `"0.1.0`"`nedition = `"2021`"`n" | Out-File -FilePath "LoggingEngine\ultra-logger\Cargo.toml" -Encoding UTF8
+          "pub fn init() {}`npub fn info(_: &str) {}`npub fn error(_: &str) {}" | Out-File -FilePath "LoggingEngine\ultra-logger\src\lib.rs" -Encoding UTF8
+          
+          Write-Host "✅ Stub directories created" -ForegroundColor Green
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -30,7 +71,112 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push
+      - name: Build and push DataEngine image
+        shell: powershell
         run: |
-          docker build -f Dockerfile -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          Write-Host "Building DataEngine Docker image..." -ForegroundColor Yellow
+          
+          # Construct image tags
+          $registry = "$env:REGISTRY"
+          $imageName = "$env:IMAGE_NAME"
+          $latestTag = "${registry}/${imageName}:latest"
+          $shaTag = "${registry}/${imageName}:${{ github.sha }}"
+          
+          Write-Host "Building with tags: $latestTag and $shaTag" -ForegroundColor Gray
+          docker build -f Dockerfile -t $latestTag -t $shaTag .
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Docker build failed" -ForegroundColor Red
+            exit 1
+          }
+          
+          Write-Host "Pushing images..." -ForegroundColor Yellow
+          docker push $latestTag
+          docker push $shaTag
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Successfully built and pushed DataEngine images" -ForegroundColor Green
+          } else {
+            Write-Host "❌ Failed to push images" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Add Bitnami Helm Repository
+        shell: powershell
+        run: |
+          Write-Host "Adding Bitnami Helm repository..." -ForegroundColor Yellow
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          Write-Host "✅ Helm repositories updated" -ForegroundColor Green
+
+      - name: Deploy to Kubernetes with Helm
+        shell: powershell
+        run: |
+          Write-Host "Deploying DataEngine to Kubernetes..." -ForegroundColor Yellow
+          Write-Host "Chart Path: $env:CHART_PATH" -ForegroundColor Cyan
+          Write-Host "Namespace: $env:NAMESPACE" -ForegroundColor Cyan
+          Write-Host "Release Name: $env:RELEASE_NAME" -ForegroundColor Cyan
+          
+          # Create namespace if it doesn't exist
+          kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Build Helm command
+          $registry = "$env:REGISTRY"
+          $imageName = "$env:IMAGE_NAME"
+          $imageRepository = "${registry}/${imageName}"
+          
+          $helmArgs = @(
+            "upgrade", "--install", $env:RELEASE_NAME
+            $env:CHART_PATH
+            "--namespace", $env:NAMESPACE
+            "--create-namespace"
+            "--wait"
+            "--timeout", "15m"
+            "--set", "image.repository=${imageRepository}"
+            "--set", "image.tag=latest"
+            "--set", "image.pullPolicy=Always"
+            "--set", "redis.enabled=true"
+            "--set", "postgresql.enabled=true"
+            "--set", "monitoring.prometheus.enabled=true"
+            "--set", "monitoring.grafana.enabled=true"
+            "--set", "replicaCount=2"
+          )
+          
+          # Add override file if specified and not 'none'
+          $overrideFile = $env:CHART_OVERRIDE_PATH
+          if ($overrideFile -and $overrideFile -ne "none" -and (Test-Path $overrideFile)) {
+            Write-Host "Using override file: $overrideFile" -ForegroundColor Cyan
+            $helmArgs += @("-f", $overrideFile)
+          } elseif ($overrideFile -and $overrideFile -ne "none") {
+            Write-Host "⚠️  Override file not found: $overrideFile" -ForegroundColor Yellow
+            Write-Host "Continuing with default values..." -ForegroundColor Gray
+          }
+          
+          # Execute Helm deployment
+          Write-Host "Executing: helm $($helmArgs -join ' ')" -ForegroundColor Gray
+          & helm @helmArgs
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ DataEngine deployed successfully" -ForegroundColor Green
+          } else {
+            Write-Host "❌ Deployment failed" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Verify Deployment
+        shell: powershell
+        run: |
+          Write-Host "Verifying deployment..." -ForegroundColor Yellow
+          
+          # List Helm releases
+          Write-Host "`nHelm releases:" -ForegroundColor Cyan
+          helm list -n $env:NAMESPACE
+          helm status $env:RELEASE_NAME -n $env:NAMESPACE
+          
+          # Check Kubernetes resources
+          Write-Host "`nKubernetes resources:" -ForegroundColor Cyan
+          kubectl get deployments -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME
+          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME
+          kubectl get services -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME
+          
+          Write-Host "✅ Deployment verification complete" -ForegroundColor Green
