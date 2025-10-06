@@ -31,16 +31,6 @@ on:
         required: false
         default: 'dataengine'
         type: string
-      force_build:
-        description: 'Force rebuild image even if it exists'
-        required: false
-        default: false
-        type: boolean
-      skip_build:
-        description: 'Skip image build entirely (use existing image)'
-        required: false
-        default: false
-        type: boolean
 
 env:
   REGISTRY: ghcr.io/nwagbara-group-llc
@@ -49,32 +39,43 @@ env:
   CHART_OVERRIDE_PATH: ${{ github.event.inputs.chart_override_path || './k8s/data-engine-helm/values-database-only.yaml' }}
   NAMESPACE: ${{ github.event.inputs.namespace || 'dataengine' }}
   RELEASE_NAME: ${{ github.event.inputs.release_name || 'dataengine' }}
-  FORCE_BUILD: ${{ github.event.inputs.force_build || 'false' }}
-  SKIP_BUILD: ${{ github.event.inputs.skip_build || 'false' }}
 
 jobs:
   deploy:
     runs-on: [self-hosted, windows, x64]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Create stub directories for Docker build
+      - name: Setup TradingPlatform workspace
         shell: powershell
         run: |
-          Write-Host "Creating stub directories for Docker build..." -ForegroundColor Yellow
-          $dirs = @("databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
-          foreach ($dir in $dirs) {
-            New-Item -ItemType Directory -Path $dir -Force | Out-Null
-            Write-Host "Created: $dir" -ForegroundColor Gray
+          Write-Host "Setting up TradingPlatform workspace structure..." -ForegroundColor Yellow
+          
+          # Create TradingPlatform directory structure
+          New-Item -ItemType Directory -Path "TradingPlatform" -Force | Out-Null
+          Set-Location "TradingPlatform"
+          
+          # Clone all required repositories
+          $repos = @{
+            "DataEngine" = "Nwagbara-Group-LLC/DataEngine"
+            "databaseschema" = "Nwagbara-Group-LLC/databaseschema"  
+            "redisutils" = "Nwagbara-Group-LLC/redisutils"
+            "LoggingEngine" = "Nwagbara-Group-LLC/LoggingEngine"
+            "MessageBrokerEngine" = "Nwagbara-Group-LLC/MessageBrokerEngine"
           }
           
-          # Create LoggingEngine/ultra-logger specifically
-          New-Item -ItemType Directory -Path "LoggingEngine\ultra-logger\src" -Force | Out-Null
-          "[package]`nname = `"ultra-logger`"`nversion = `"0.1.0`"`nedition = `"2021`"`n" | Out-File -FilePath "LoggingEngine\ultra-logger\Cargo.toml" -Encoding UTF8
-          "pub fn init() {}`npub fn info(_: &str) {}`npub fn error(_: &str) {}" | Out-File -FilePath "LoggingEngine\ultra-logger\src\lib.rs" -Encoding UTF8
+          foreach ($dir in $repos.Keys) {
+            $repo = $repos[$dir]
+            Write-Host "Cloning $repo into $dir..." -ForegroundColor Gray
+            git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$repo.git" $dir
+            
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "SUCCESS: Cloned $dir" -ForegroundColor Green
+            } else {
+              Write-Host "ERROR: Failed to clone $dir" -ForegroundColor Red
+              exit 1
+            }
+          }
           
-          Write-Host "SUCCESS: Stub directories created" -ForegroundColor Green
+          Write-Host "SUCCESS: TradingPlatform workspace ready" -ForegroundColor Green
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -83,78 +84,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check if image exists and build if needed
+      - name: Build and push DataEngine image
         shell: powershell
         run: |
-          # Construct image tags
-          $registry = "$env:REGISTRY"
-          $imageName = "$env:IMAGE_NAME"
-          $latestTag = "${registry}/${imageName}:latest"
-          $shaTag = "${registry}/${imageName}:${{ github.sha }}"
+          Set-Location "TradingPlatform"
           
-          Write-Host "Checking build requirements..." -ForegroundColor Yellow
-          Write-Host "Skip Build: $env:SKIP_BUILD" -ForegroundColor Gray
-          Write-Host "Force Build: $env:FORCE_BUILD" -ForegroundColor Gray
+          $latestTag = "$env:REGISTRY/$env:IMAGE_NAME:latest"
+          $shaTag = "$env:REGISTRY/$env:IMAGE_NAME:${{ github.sha }}"
           
-          $shouldBuild = $false
+          Write-Host "Building DataEngine with all dependencies..." -ForegroundColor Yellow
+          Write-Host "Tags: $latestTag, $shaTag" -ForegroundColor Gray
           
-          if ($env:SKIP_BUILD -eq 'true') {
-            Write-Host "SKIP: Using existing image: $latestTag" -ForegroundColor Cyan
-            $shouldBuild = $false
-          }
-          elseif ($env:FORCE_BUILD -eq 'true') {
-            Write-Host "FORCE BUILD: Rebuilding image as requested" -ForegroundColor Yellow
-            $shouldBuild = $true
-          }
-          else {
-            # Check if image exists by trying to pull it (simple and reliable)
-            Write-Host "Checking if image exists: $latestTag" -ForegroundColor Gray
-            
-            # First check if image exists locally
-            docker inspect $latestTag > $null 2>&1
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "SUCCESS: Image found locally: $latestTag" -ForegroundColor Green
-              Write-Host "Skipping build. Use 'force_build: true' to rebuild." -ForegroundColor Cyan
-              $shouldBuild = $false
-            } else {
-              # Try to pull the image to see if it exists in registry
-              Write-Host "Image not found locally, checking registry..." -ForegroundColor Gray
-              docker pull $latestTag > $null 2>&1
-              
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "SUCCESS: Image pulled from registry: $latestTag" -ForegroundColor Green
-                Write-Host "Skipping build. Use 'force_build: true' to rebuild." -ForegroundColor Cyan
-                $shouldBuild = $false
-              } else {
-                Write-Host "NOT FOUND: Image not found in registry, building new image..." -ForegroundColor Yellow
-                $shouldBuild = $true
-              }
-            }
+          # Build from TradingPlatform root with all dependencies available
+          docker build -f DataEngine/Dockerfile -t $latestTag -t $shaTag .
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ERROR: Docker build failed" -ForegroundColor Red
+            exit 1
           }
           
-          if ($shouldBuild) {
-            Write-Host "Building DataEngine Docker image..." -ForegroundColor Yellow
-            Write-Host "Building with tags: $latestTag and $shaTag" -ForegroundColor Gray
-            
-            docker build -f Dockerfile -t $latestTag -t $shaTag .
-            
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "Docker build failed" -ForegroundColor Red
-              exit 1
-            }
-            
-            Write-Host "Pushing images..." -ForegroundColor Yellow
-            docker push $latestTag
-            docker push $shaTag
-            
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "SUCCESS: Built and pushed DataEngine images" -ForegroundColor Green
-            } else {
-              Write-Host "ERROR: Failed to push images" -ForegroundColor Red
-              exit 1
-            }
+          Write-Host "Pushing images to registry..." -ForegroundColor Yellow
+          docker push $latestTag
+          docker push $shaTag
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "SUCCESS: Images pushed to registry" -ForegroundColor Green
           } else {
-            Write-Host "SUCCESS: Using existing image: $latestTag" -ForegroundColor Green
+            Write-Host "ERROR: Failed to push images" -ForegroundColor Red
+            exit 1
           }
 
       - name: Add Bitnami Helm Repository
@@ -165,9 +122,11 @@ jobs:
           helm repo update
           Write-Host "SUCCESS: Helm repositories updated" -ForegroundColor Green
 
-      - name: Deploy to Kubernetes with Helm
+      - name: Deploy DataEngine with Helm
         shell: powershell
         run: |
+          Set-Location "TradingPlatform"
+          
           Write-Host "Deploying DataEngine to Kubernetes..." -ForegroundColor Yellow
           Write-Host "Chart Path: $env:CHART_PATH" -ForegroundColor Cyan
           Write-Host "Namespace: $env:NAMESPACE" -ForegroundColor Cyan
@@ -177,9 +136,7 @@ jobs:
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
           
           # Build Helm command
-          $registry = "$env:REGISTRY"
-          $imageName = "$env:IMAGE_NAME"
-          $imageRepository = "${registry}/${imageName}"
+          $imageRepository = "$env:REGISTRY/$env:IMAGE_NAME"
           
           $helmArgs = @(
             "upgrade", "--install", $env:RELEASE_NAME
