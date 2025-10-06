@@ -134,10 +134,18 @@ jobs:
             Write-Host "Waiting for namespace deletion to complete..." -ForegroundColor Yellow
             $maxWait = 60
             $waited = 0
-            while ((kubectl get namespace $env:NAMESPACE 2>&1 | Select-String -Pattern $env:NAMESPACE) -and ($waited -lt $maxWait)) {
+            while ($waited -lt $maxWait) {
+              $ErrorActionPreference = 'SilentlyContinue'
+              $nsCheck = kubectl get namespace $env:NAMESPACE 2>&1
+              $ErrorActionPreference = 'Continue'
+              
+              if ($nsCheck -match "NotFound" -or $nsCheck -match "not found") {
+                break
+              }
+              
               Start-Sleep -Seconds 2
               $waited += 2
-              Write-Host "." -NoNewline
+              Write-Host "." -NoNewline -ForegroundColor Gray
             }
             Write-Host ""
             Write-Host "Namespace deleted - ALL Helm history purged!" -ForegroundColor Green
