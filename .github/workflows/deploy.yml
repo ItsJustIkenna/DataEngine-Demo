@@ -203,13 +203,41 @@ jobs:
             Write-Host "Removed Chart.lock" -ForegroundColor Green
           }
           
-          # Also clean global Helm cache
+          # Also clean global Helm cache (AGGRESSIVE CLEANUP)
           Write-Host "Cleaning global Helm cache..." -ForegroundColor Yellow
-          $helmCachePath = "$env:LOCALAPPDATA\Temp\helm"
-          if (Test-Path $helmCachePath) {
-            Remove-Item "$helmCachePath\*" -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Host "Cleaned global Helm cache" -ForegroundColor Green
+          
+          # Clean all possible Helm cache locations
+          $helmCachePaths = @(
+            "$env:LOCALAPPDATA\Temp\helm",
+            "$env:LOCALAPPDATA\Temp\2\helm",
+            "$env:TEMP\helm",
+            "$env:TEMP\2\helm"
+          )
+          
+          foreach ($cachePath in $helmCachePaths) {
+            if (Test-Path $cachePath) {
+              Write-Host "Removing cache at: $cachePath" -ForegroundColor Gray
+              Remove-Item "$cachePath\*" -Recurse -Force -ErrorAction SilentlyContinue
+            }
           }
+          
+          # Remove Bitnami repository from Helm (if it exists)
+          Write-Host "Removing Bitnami repository from Helm..." -ForegroundColor Yellow
+          try {
+            $helmRepos = helm repo list 2>&1 | Out-String
+            if ($helmRepos -match "bitnami") {
+              helm repo remove bitnami 2>&1 | Out-Null
+              Write-Host "Removed Bitnami repository" -ForegroundColor Green
+            } else {
+              Write-Host "Bitnami repository not found (already removed)" -ForegroundColor Gray
+            }
+          } catch {
+            Write-Host "No Helm repositories found or error checking (this is OK)" -ForegroundColor Gray
+          }
+          
+          # Force rebuild Helm cache
+          Write-Host "Rebuilding Helm repository cache..." -ForegroundColor Yellow
+          helm repo update 2>&1 | Out-Null
           
           Write-Host "Cleanup complete! Ready for fresh deployment." -ForegroundColor Green
 
