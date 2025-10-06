@@ -195,12 +195,20 @@ jobs:
           Write-Host "Cleaning Helm chart cache..." -ForegroundColor Yellow
           $chartDir = "DataEngine/$env:CHART_PATH"
           if (Test-Path "$chartDir/charts") {
-            Remove-Item "$chartDir/charts/*" -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Host "Removed cached chart dependencies" -ForegroundColor Green
+            Remove-Item "$chartDir/charts" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Removed entire charts directory" -ForegroundColor Green
           }
           if (Test-Path "$chartDir/Chart.lock") {
             Remove-Item "$chartDir/Chart.lock" -Force
             Write-Host "Removed Chart.lock" -ForegroundColor Green
+          }
+          
+          # Also clean global Helm cache
+          Write-Host "Cleaning global Helm cache..." -ForegroundColor Yellow
+          $helmCachePath = "$env:LOCALAPPDATA\Temp\helm"
+          if (Test-Path $helmCachePath) {
+            Remove-Item "$helmCachePath\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Cleaned global Helm cache" -ForegroundColor Green
           }
           
           Write-Host "Cleanup complete! Ready for fresh deployment." -ForegroundColor Green
