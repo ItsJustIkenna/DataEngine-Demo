@@ -428,6 +428,7 @@ jobs:
             "--set", "image.tag=latest"
             "--set", "image.pullPolicy=Always"
             "--set", "image.pullSecrets[0].name=ghcr-secret"
+            "--set", "serviceAccount.create=true"
             "--set", "migration.enabled=true"
             "--set", "migration.image.repository=ghcr.io/nwagbara-group-llc/databaseschema"
             "--set", "migration.image.tag=latest"
