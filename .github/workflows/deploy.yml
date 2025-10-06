@@ -341,6 +341,14 @@ jobs:
             Write-Host "ERROR: Chart.yaml not found at $chartPath/Chart.yaml" -ForegroundColor Red
           }
           
+          # DEBUG: Check Helm dependency list
+          Write-Host "`nDEBUG: Checking Helm dependencies..." -ForegroundColor Magenta
+          try {
+            helm dependency list "$chartPath" 2>&1 | Write-Host
+          } catch {
+            Write-Host "No dependencies or error listing" -ForegroundColor Gray
+          }
+          
           # DEBUG: Check if charts directory gets created DURING helm command
           Write-Host "`nDEBUG: Chart directory state BEFORE helm command:" -ForegroundColor Magenta
           if (Test-Path "$chartPath/charts") {

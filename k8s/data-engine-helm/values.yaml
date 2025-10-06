@@ -452,16 +452,20 @@ externalRedis:
   # Connection string format: redis://:password@host:port
 
 # =============================================================================
-# Database Dependencies (Disabled - Using External Services)
+# Database Dependencies - Custom Deployments (NOT Bitnami charts!)
 # =============================================================================
 
-# TimescaleDB (PostgreSQL) configuration - Custom deployment with GHCR image
+# IMPORTANT: These sections control our CUSTOM StatefulSet deployments
+# They do NOT trigger Bitnami chart dependencies
+
+# Custom PostgreSQL configuration
 postgresql:
-  enabled: false  # Will be enabled via Helm --set flags
+  enabled: false  # Set to true to deploy custom PostgreSQL StatefulSet
   image:
     registry: ghcr.io
     repository: baosystems/postgis
     tag: "15-3.3"
+    pullSecrets: []
   auth:
     username: "dataengine"
     password: "dataengine123"
@@ -470,9 +474,6 @@ postgresql:
     persistence:
       enabled: true
       size: 10Gi
-    service:
-      ports:
-        postgresql: 5432
     resources:
       limits:
         cpu: "1000m"
@@ -480,16 +481,15 @@ postgresql:
       requests:
         cpu: "500m"
         memory: "1Gi"
-  metrics:
-    enabled: false
 
-# Redis configuration - Custom deployment with GHCR image
+# Custom Redis configuration
 redis:
-  enabled: false  # Will be enabled via Helm --set flags
+  enabled: false  # Set to true to deploy custom Redis StatefulSet
   image:
     registry: ghcr.io
     repository: nwagbara-group-llc/redis-utils
     tag: "latest"
+    pullSecrets: []
   auth:
     enabled: false
     password: ""
@@ -504,8 +504,6 @@ redis:
       requests:
         cpu: "250m"
         memory: "512Mi"
-  metrics:
-    enabled: false
 
 # =============================================================================
 # Monitoring & Observability
