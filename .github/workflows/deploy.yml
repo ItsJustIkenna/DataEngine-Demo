@@ -417,7 +417,7 @@ jobs:
             Write-Host "GOOD: No charts/ directory before helm command" -ForegroundColor Green
           }
           
-          # WORKAROUND: Pre-create ServiceAccount to avoid Helm race condition
+          # WORKAROUND: Pre-create ServiceAccount with Helm annotations to avoid race condition
           Write-Host "`nCreating ServiceAccount before Helm deployment..." -ForegroundColor Yellow
           $serviceAccountYaml = @"
           apiVersion: v1
@@ -432,6 +432,9 @@ jobs:
               app.kubernetes.io/version: "1.0.0"
               app.kubernetes.io/managed-by: Helm
               app.kubernetes.io/component: data-engine
+            annotations:
+              meta.helm.sh/release-name: $env:RELEASE_NAME
+              meta.helm.sh/release-namespace: $env:NAMESPACE
           automountServiceAccountToken: true
           "@
           $serviceAccountYaml | kubectl apply -f - 2>&1 | Write-Host
