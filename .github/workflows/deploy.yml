@@ -49,22 +49,21 @@ jobs:
         with:
           path: DataEngine
 
-      - name: Checkout databaseschema
+      - name: Checkout databaseschema (public)
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
-          token: ${{ secrets.GHCR_TOKEN }}
           path: databaseschema
 
-      - name: Checkout redisutils
+      - name: Checkout redisutils (public)
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
-          token: ${{ secrets.GHCR_TOKEN }}
           path: redisutils
 
       - name: Checkout LoggingEngine
         uses: actions/checkout@v4
+        continue-on-error: true
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
           token: ${{ secrets.GHCR_TOKEN }}
@@ -72,6 +71,7 @@ jobs:
 
       - name: Checkout MessageBrokerEngine
         uses: actions/checkout@v4
+        continue-on-error: true
         with:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
           token: ${{ secrets.GHCR_TOKEN }}
