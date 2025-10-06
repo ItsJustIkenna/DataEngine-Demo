@@ -59,9 +59,15 @@ jobs:
         run: |
           Write-Host "Building DataEngine Docker image..." -ForegroundColor Yellow
           
-          # Construct proper image tags
-          $latestTag = "$env:REGISTRY/$env:IMAGE_NAME:latest"
-          $shaTag = "$env:REGISTRY/$env:IMAGE_NAME:${{ github.sha }}"
+          # Debug environment variables
+          Write-Host "REGISTRY: $env:REGISTRY" -ForegroundColor Gray
+          Write-Host "IMAGE_NAME: $env:IMAGE_NAME" -ForegroundColor Gray
+          
+          # Construct proper image tags with explicit concatenation
+          $registry = "$env:REGISTRY"
+          $imageName = "$env:IMAGE_NAME"
+          $latestTag = "${registry}/${imageName}:latest"
+          $shaTag = "${registry}/${imageName}:${{ github.sha }}"
           
           Write-Host "Building with tags: $latestTag and $shaTag" -ForegroundColor Gray
           docker build -f DataEngine/Dockerfile -t $latestTag -t $shaTag .
@@ -122,6 +128,7 @@ jobs:
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
           
           # Build base Helm command
+          $imageRepository = "${registry}/${imageName}"
           $helmArgs = @(
             "upgrade", "--install", $env:RELEASE_NAME
             $env:CHART_PATH
@@ -129,7 +136,7 @@ jobs:
             "--create-namespace"
             "--wait"
             "--timeout", "15m"
-            "--set", "image.repository=$env:REGISTRY/$env:IMAGE_NAME"
+            "--set", "image.repository=${imageRepository}"
             "--set", "image.tag=latest"
             "--set", "image.pullPolicy=Always"
             "--set", "redis.enabled=true"
