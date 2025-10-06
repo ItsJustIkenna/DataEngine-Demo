@@ -25,6 +25,26 @@ image:
   pullPolicy: IfNotPresent  # Changed for local development
   pullSecrets: []
 
+# Database Migration Configuration
+migration:
+  enabled: true
+  image:
+    repository: ghcr.io/nwagbara-group-llc/databaseschema
+    tag: "latest"
+    pullPolicy: Always
+  backoffLimit: 3
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+  env: []
+    # Additional environment variables for migration job
+    # - name: MIGRATION_TIMEOUT
+    #   value: "300"
+
 # Deployment configuration  
 replicaCount: 2
 strategy:

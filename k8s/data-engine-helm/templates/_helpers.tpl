@@ -90,6 +90,17 @@ PostgreSQL Secret name
 {{- end }}
 
 {{/*
+PostgreSQL host
+*/}}
+{{- define "data-engine.postgresql.host" -}}
+{{- if .Values.postgresql.enabled }}
+{{- printf "%s-primary" (include "data-engine.postgresql.fullname" .) }}
+{{- else }}
+{{- .Values.externalDatabase.host }}
+{{- end }}
+{{- end }}
+
+{{/*
 Redis fullname
 */}}
 {{- define "data-engine.redis.fullname" -}}
