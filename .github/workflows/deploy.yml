@@ -291,9 +291,27 @@ jobs:
           # Build Helm command
           $imageRepository = "$env:REGISTRY/$env:IMAGE_NAME"
           
+          # CRITICAL: Remove charts directory RIGHT BEFORE deployment
+          Write-Host "`nCRITICAL: Final cleanup of charts directory..." -ForegroundColor Magenta
+          $chartPath = "DataEngine/$env:CHART_PATH"
+          if (Test-Path "$chartPath/charts") {
+            Write-Host "Removing charts/ directory..." -ForegroundColor Yellow
+            Remove-Item "$chartPath/charts" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Charts directory removed!" -ForegroundColor Green
+          } else {
+            Write-Host "Charts directory does not exist (GOOD!)" -ForegroundColor Green
+          }
+          
+          if (Test-Path "$chartPath/Chart.lock") {
+            Write-Host "Removing Chart.lock..." -ForegroundColor Yellow
+            Remove-Item "$chartPath/Chart.lock" -Force -ErrorAction SilentlyContinue
+            Write-Host "Chart.lock removed!" -ForegroundColor Green
+          } else {
+            Write-Host "Chart.lock does not exist (GOOD!)" -ForegroundColor Green
+          }
+          
           # DEBUG: Show what Chart.yaml actually contains
           Write-Host "`nDEBUG: Checking Chart.yaml contents..." -ForegroundColor Magenta
-          $chartPath = "DataEngine/$env:CHART_PATH"
           if (Test-Path "$chartPath/Chart.yaml") {
             Write-Host "Chart.yaml contents:" -ForegroundColor Gray
             Get-Content "$chartPath/Chart.yaml" | Write-Host
@@ -301,14 +319,13 @@ jobs:
             Write-Host "ERROR: Chart.yaml not found at $chartPath/Chart.yaml" -ForegroundColor Red
           }
           
-          # DEBUG: Check for any remaining dependencies
-          if (Test-Path "$chartPath/Chart.lock") {
-            Write-Host "`nWARNING: Chart.lock still exists!" -ForegroundColor Red
-            Get-Content "$chartPath/Chart.lock" | Write-Host
-          }
+          # DEBUG: Check if charts directory gets created DURING helm command
+          Write-Host "`nDEBUG: Chart directory state BEFORE helm command:" -ForegroundColor Magenta
           if (Test-Path "$chartPath/charts") {
-            Write-Host "`nWARNING: charts/ directory still exists!" -ForegroundColor Red
+            Write-Host "WARNING: charts/ directory EXISTS before helm command!" -ForegroundColor Red
             Get-ChildItem "$chartPath/charts" -Recurse | Select-Object FullName | Write-Host
+          } else {
+            Write-Host "GOOD: No charts/ directory before helm command" -ForegroundColor Green
           }
           
           $helmArgs = @(
@@ -359,6 +376,16 @@ jobs:
           # Execute Helm deployment
           Write-Host "Executing: helm $($helmArgs -join ' ')" -ForegroundColor Gray
           & helm @helmArgs
+          
+          # DEBUG: Check if charts directory was created AFTER helm command
+          Write-Host "`nDEBUG: Chart directory state AFTER helm command:" -ForegroundColor Magenta
+          if (Test-Path "$chartPath/charts") {
+            Write-Host "WARNING: charts/ directory was CREATED by helm command!" -ForegroundColor Red
+            Write-Host "Listing contents:" -ForegroundColor Yellow
+            Get-ChildItem "$chartPath/charts" -Recurse | Select-Object FullName, Length | Format-Table -AutoSize | Out-String | Write-Host
+          } else {
+            Write-Host "GOOD: No charts/ directory created" -ForegroundColor Green
+          }
           
           if ($LASTEXITCODE -eq 0) {
             Write-Host "SUCCESS: Helm chart deployed" -ForegroundColor Green
