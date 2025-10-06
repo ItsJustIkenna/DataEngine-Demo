@@ -231,15 +231,21 @@ jobs:
           
           # Check for stuck Helm operations and clean them up
           Write-Host "Checking for stuck Helm operations..." -ForegroundColor Yellow
-          $helmStatus = helm status $env:RELEASE_NAME --namespace $env:NAMESPACE 2>&1
-          if ($LASTEXITCODE -eq 0) {
-            $statusOutput = $helmStatus | Out-String
-            if ($statusOutput -match "STATUS:\s*(pending-install|pending-upgrade|pending-rollback)") {
+          try {
+            $ErrorActionPreference = 'SilentlyContinue'
+            $helmStatus = helm status $env:RELEASE_NAME --namespace $env:NAMESPACE 2>&1 | Out-String
+            $ErrorActionPreference = 'Continue'
+            
+            if ($LASTEXITCODE -eq 0 -and $helmStatus -match "STATUS:\s*(pending-install|pending-upgrade|pending-rollback)") {
               Write-Host "WARNING: Found stuck Helm operation. Deleting release..." -ForegroundColor Yellow
               helm delete $env:RELEASE_NAME --namespace $env:NAMESPACE 2>&1 | Out-Null
               Start-Sleep -Seconds 5
               Write-Host "Release deleted. Proceeding with fresh installation..." -ForegroundColor Green
+            } else {
+              Write-Host "No stuck Helm operations found" -ForegroundColor Gray
             }
+          } catch {
+            Write-Host "No existing release or error checking (this is OK)" -ForegroundColor Gray
           }
           
           # Build Helm command
