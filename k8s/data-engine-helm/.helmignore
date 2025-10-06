@@ -18,6 +18,9 @@
 *~
 # Various IDEs
 .project
+# Ignore chart dependencies - using custom deployments
+charts/
+Chart.lock
 .idea/
 *.tmproj
 .vscode/

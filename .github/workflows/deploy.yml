@@ -145,8 +145,7 @@ jobs:
             $env:CHART_PATH
             "--namespace", $env:NAMESPACE
             "--create-namespace"
-            "--wait"
-            "--timeout", "10m"
+            "--timeout", "5m"
             "--set", "image.repository=${imageRepository}"
             "--set", "image.tag=latest"
             "--set", "image.pullPolicy=Always"
@@ -184,16 +183,32 @@ jobs:
           & helm @helmArgs
           
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "SUCCESS: DataEngine deployed successfully" -ForegroundColor Green
+            Write-Host "SUCCESS: Helm chart deployed" -ForegroundColor Green
+            
+            # Wait and check pod status
+            Write-Host "`nWaiting for pods to be ready..." -ForegroundColor Yellow
+            Start-Sleep -Seconds 10
+            
+            Write-Host "`nPod Status:" -ForegroundColor Cyan
+            kubectl get pods -n $env:NAMESPACE -o wide
+            
+            Write-Host "`nChecking for ImagePullBackOff errors..." -ForegroundColor Yellow
+            $imagePullErrors = kubectl get pods -n $env:NAMESPACE -o json | ConvertFrom-Json | 
+              Select-Object -ExpandProperty items | 
+              Where-Object { $_.status.containerStatuses.state.waiting.reason -match "ImagePull" }
+            
+            if ($imagePullErrors) {
+              Write-Host "WARNING: Found ImagePullBackOff errors!" -ForegroundColor Red
+              kubectl describe pods -n $env:NAMESPACE | Select-String -Pattern "Failed to pull image" -Context 2
+            }
+            
           } else {
-            Write-Host "ERROR: Deployment failed" -ForegroundColor Red
+            Write-Host "ERROR: Helm deployment failed" -ForegroundColor Red
             Write-Host "`nDiagnostic Information:" -ForegroundColor Yellow
             Write-Host "Pods status:" -ForegroundColor Cyan
-            kubectl get pods -n $env:NAMESPACE
-            Write-Host "`nPod details:" -ForegroundColor Cyan
-            kubectl describe pods -n $env:NAMESPACE -l "app.kubernetes.io/instance=$env:RELEASE_NAME"
-            Write-Host "`nPod logs (if available):" -ForegroundColor Cyan
-            kubectl logs -n $env:NAMESPACE -l "app.kubernetes.io/instance=$env:RELEASE_NAME" --tail=50 --all-containers=true --ignore-errors=true
+            kubectl get pods -n $env:NAMESPACE -o wide
+            Write-Host "`nEvents:" -ForegroundColor Cyan
+            kubectl get events -n $env:NAMESPACE --sort-by='.lastTimestamp' | Select-Object -Last 20
             exit 1
           }
 
