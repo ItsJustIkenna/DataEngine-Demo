@@ -125,12 +125,26 @@ jobs:
           
           if ($releaseExists) {
             Write-Host "Found existing Helm release '$env:RELEASE_NAME'. Deleting..." -ForegroundColor Yellow
-            helm delete $env:RELEASE_NAME --namespace $env:NAMESPACE 2>&1 | Out-Null
-            Write-Host "Helm release deleted" -ForegroundColor Green
             
-            # Wait for resources to be removed
-            Write-Host "Waiting for resources to be cleaned up..." -ForegroundColor Gray
-            Start-Sleep -Seconds 10
+            # CRITICAL: Delete the namespace entirely to purge ALL Helm release history stored in secrets
+            Write-Host "PURGING namespace to remove Helm release history from Kubernetes..." -ForegroundColor Red
+            kubectl delete namespace $env:NAMESPACE --ignore-not-found=true 2>&1 | Out-Null
+            
+            # Wait for namespace to be fully deleted
+            Write-Host "Waiting for namespace deletion to complete..." -ForegroundColor Yellow
+            $maxWait = 60
+            $waited = 0
+            while ((kubectl get namespace $env:NAMESPACE 2>&1 | Select-String -Pattern $env:NAMESPACE) -and ($waited -lt $maxWait)) {
+              Start-Sleep -Seconds 2
+              $waited += 2
+              Write-Host "." -NoNewline
+            }
+            Write-Host ""
+            Write-Host "Namespace deleted - ALL Helm history purged!" -ForegroundColor Green
+            
+            # Recreate the namespace fresh
+            kubectl create namespace $env:NAMESPACE 2>&1 | Out-Null
+            Write-Host "Fresh namespace created" -ForegroundColor Green
           } else {
             Write-Host "No existing Helm release found" -ForegroundColor Gray
           }
