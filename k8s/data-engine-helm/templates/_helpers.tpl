@@ -66,10 +66,10 @@ Create the name of the service account to use
 PostgreSQL fullname
 */}}
 {{- define "data-engine.postgresql.fullname" -}}
-{{- if .Values.postgresql.fullnameOverride }}
-{{- .Values.postgresql.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- if .Values.customPostgresql.fullnameOverride }}
+{{- .Values.customPostgresql.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- $name := default "postgresql" .Values.postgresql.nameOverride }}
+{{- $name := default "postgresql" .Values.customPostgresql.nameOverride }}
 {{- if contains $name .Release.Name }}
 {{- .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -82,8 +82,8 @@ PostgreSQL fullname
 PostgreSQL Secret name
 */}}
 {{- define "data-engine.postgresql.secretName" -}}
-{{- if .Values.postgresql.auth.existingSecret }}
-{{- .Values.postgresql.auth.existingSecret }}
+{{- if .Values.customPostgresql.auth.existingSecret }}
+{{- .Values.customPostgresql.auth.existingSecret }}
 {{- else }}
 {{- printf "%s" (include "data-engine.postgresql.fullname" .) }}
 {{- end }}
@@ -93,7 +93,7 @@ PostgreSQL Secret name
 PostgreSQL host
 */}}
 {{- define "data-engine.postgresql.host" -}}
-{{- if .Values.postgresql.enabled }}
+{{- if .Values.customPostgresql.enabled }}
 {{- printf "%s-primary" (include "data-engine.postgresql.fullname" .) }}
 {{- else }}
 {{- .Values.externalDatabase.host }}
@@ -104,10 +104,10 @@ PostgreSQL host
 Redis fullname
 */}}
 {{- define "data-engine.redis.fullname" -}}
-{{- if .Values.redis.fullnameOverride }}
-{{- .Values.redis.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- if .Values.customRedis.fullnameOverride }}
+{{- .Values.customRedis.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- $name := default "redis" .Values.redis.nameOverride }}
+{{- $name := default "redis" .Values.customRedis.nameOverride }}
 {{- if contains $name .Release.Name }}
 {{- .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -120,8 +120,8 @@ Redis fullname
 Redis Secret name
 */}}
 {{- define "data-engine.redis.secretName" -}}
-{{- if .Values.redis.auth.existingSecret }}
-{{- .Values.redis.auth.existingSecret }}
+{{- if .Values.customRedis.auth.existingSecret }}
+{{- .Values.customRedis.auth.existingSecret }}
 {{- else }}
 {{- printf "%s" (include "data-engine.redis.fullname" .) }}
 {{- end }}
@@ -155,7 +155,7 @@ Compile all warnings into a single message.
 Validate database configuration
 */}}
 {{- define "data-engine.validateValues.database" -}}
-{{- if and (not .Values.postgresql.enabled) (not .Values.externalDatabase.enabled) -}}
+{{- if and (not .Values.customPostgresql.enabled) (not .Values.externalDatabase.enabled) -}}
 data-engine: database
     You must enable either postgresql or externalDatabase
 {{- end -}}
@@ -165,7 +165,7 @@ data-engine: database
 Validate redis configuration  
 */}}
 {{- define "data-engine.validateValues.redis" -}}
-{{- if and (not .Values.redis.enabled) (not .Values.externalRedis.enabled) -}}
+{{- if and (not .Values.customRedis.enabled) (not .Values.externalRedis.enabled) -}}
 data-engine: redis
     You must enable either redis or externalRedis
 {{- end -}}

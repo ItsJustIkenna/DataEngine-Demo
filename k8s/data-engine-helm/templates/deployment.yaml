@@ -64,14 +64,14 @@ spec:
           args:
             - |
               echo "Waiting for dependencies to be ready..."
-              {{- if .Values.postgresql.enabled }}
+              {{- if .Values.customPostgresql.enabled }}
               until nc -z {{ include "data-engine.postgresql.fullname" . }}-primary 5432; do
                 echo "Waiting for PostgreSQL at {{ include "data-engine.postgresql.fullname" . }}-primary:5432..."
                 sleep 2
               done
               echo "PostgreSQL is ready!"
               {{- end }}
-              {{- if .Values.redis.enabled }}
+              {{- if .Values.customRedis.enabled }}
               until nc -z {{ include "data-engine.redis.fullname" . }}-master 6379; do
                 echo "Waiting for Redis at {{ include "data-engine.redis.fullname" . }}-master:6379..."
                 sleep 2
@@ -141,11 +141,11 @@ spec:
             {{- end }}
             
             # Database configuration
-            {{- if .Values.postgresql.enabled }}
+            {{- if .Values.customPostgresql.enabled }}
             - name: DATABASE_URL
-              value: "postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "data-engine.postgresql.fullname" . }}:5432/{{ .Values.postgresql.auth.database }}"
+              value: "postgresql://{{ .Values.customPostgresql.auth.username }}:{{ .Values.customPostgresql.auth.password }}@{{ include "data-engine.postgresql.fullname" . }}:5432/{{ .Values.customPostgresql.auth.database }}"
             - name: POSTGRES_PASSWORD
-              value: {{ .Values.postgresql.auth.password | quote }}
+              value: {{ .Values.customPostgresql.auth.password | quote }}
             {{- else if .Values.externalDatabase.enabled }}
             {{- if .Values.externalDatabase.useCompleteUrl }}
             - name: DATABASE_URL
@@ -165,12 +165,12 @@ spec:
             {{- end }}
             
             # Redis configuration
-            {{- if .Values.redis.enabled }}
-            {{- if .Values.redis.auth.enabled }}
+            {{- if .Values.customRedis.enabled }}
+            {{- if .Values.customRedis.auth.enabled }}
             - name: REDIS_URL
-              value: "redis://:{{ .Values.redis.auth.password }}@{{ include "data-engine.redis.fullname" . }}-master:6379"
+              value: "redis://:{{ .Values.customRedis.auth.password }}@{{ include "data-engine.redis.fullname" . }}-master:6379"
             - name: REDIS_PASSWORD
-              value: {{ .Values.redis.auth.password | quote }}
+              value: {{ .Values.customRedis.auth.password | quote }}
             {{- else }}
             - name: REDIS_URL
               value: "redis://{{ include "data-engine.redis.fullname" . }}-master:6379"
