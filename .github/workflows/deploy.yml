@@ -210,6 +210,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'dataengine123' }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD || '' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           Write-Host "Deploying DataEngine to Kubernetes..." -ForegroundColor Yellow
           Write-Host "Chart Path: $env:CHART_PATH" -ForegroundColor Cyan
@@ -218,6 +219,16 @@ jobs:
           
           # Create namespace if it doesn't exist
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create image pull secret for GHCR
+          Write-Host "Creating image pull secret for GitHub Container Registry..." -ForegroundColor Yellow
+          kubectl create secret docker-registry ghcr-secret `
+            --docker-server=ghcr.io `
+            --docker-username=${{ github.actor }} `
+            --docker-password=$env:GHCR_TOKEN `
+            --docker-email=${{ github.actor }}@users.noreply.github.com `
+            --namespace $env:NAMESPACE `
+            --dry-run=client -o yaml | kubectl apply -f -
           
           # Note: We don't create secrets manually anymore - Helm will manage them
           # This avoids the "invalid ownership metadata" error
@@ -253,17 +264,21 @@ jobs:
             "--set", "image.repository=${imageRepository}"
             "--set", "image.tag=latest"
             "--set", "image.pullPolicy=Always"
+            "--set", "imagePullSecrets[0].name=ghcr-secret"
             "--set", "migration.enabled=true"
             "--set", "migration.image.repository=ghcr.io/nwagbara-group-llc/databaseschema"
             "--set", "migration.image.tag=latest"
+            "--set", "migration.imagePullSecrets[0].name=ghcr-secret"
             "--set", "redis.enabled=true"
             "--set", "redis.image.registry=ghcr.io"
             "--set", "redis.image.repository=nwagbara-group-llc/redis-utils"
             "--set", "redis.image.tag=latest"
+            "--set", "redis.image.pullSecrets[0]=ghcr-secret"
             "--set", "postgresql.enabled=true"
             "--set", "postgresql.image.registry=ghcr.io"
             "--set", "postgresql.image.repository=baosystems/postgis"
             "--set", "postgresql.image.tag=15-3.3"
+            "--set", "postgresql.image.pullSecrets[0]=ghcr-secret"
             "--set", "postgresql.auth.username=dataengine"
             "--set", "postgresql.auth.password=$env:POSTGRES_PASSWORD"
             "--set", "postgresql.auth.database=dataengine"
