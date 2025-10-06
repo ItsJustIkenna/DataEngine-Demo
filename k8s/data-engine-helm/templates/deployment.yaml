@@ -141,12 +141,9 @@ spec:
             # Database configuration
             {{- if .Values.postgresql.enabled }}
             - name: DATABASE_URL
-              value: "postgresql://{{ .Values.postgresql.auth.username }}:$(POSTGRES_PASSWORD)@{{ include "data-engine.postgresql.fullname" . }}:{{ .Values.postgresql.primary.service.ports.postgresql }}/{{ .Values.postgresql.auth.database }}"
+              value: "postgresql://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "data-engine.postgresql.fullname" . }}:5432/{{ .Values.postgresql.auth.database }}"
             - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "data-engine.postgresql.secretName" . }}
-                  key: postgres-password
+              value: {{ .Values.postgresql.auth.password | quote }}
             {{- else if .Values.externalDatabase.enabled }}
             {{- if .Values.externalDatabase.useCompleteUrl }}
             - name: DATABASE_URL
@@ -167,13 +164,15 @@ spec:
             
             # Redis configuration
             {{- if .Values.redis.enabled }}
+            {{- if .Values.redis.auth.enabled }}
             - name: REDIS_URL
-              value: "redis://:$(REDIS_PASSWORD)@{{ include "data-engine.redis.fullname" . }}-master:{{ .Values.redis.master.service.ports.redis }}"
+              value: "redis://:{{ .Values.redis.auth.password }}@{{ include "data-engine.redis.fullname" . }}-master:6379"
             - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "data-engine.redis.secretName" . }}
-                  key: redis-password
+              value: {{ .Values.redis.auth.password | quote }}
+            {{- else }}
+            - name: REDIS_URL
+              value: "redis://{{ include "data-engine.redis.fullname" . }}-master:6379"
+            {{- end }}
             {{- else if .Values.externalRedis.enabled }}
             - name: REDIS_URL
               valueFrom:
