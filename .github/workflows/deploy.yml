@@ -58,11 +58,29 @@ jobs:
         shell: powershell
         run: |
           Write-Host "Building DataEngine Docker image..." -ForegroundColor Yellow
-          docker build -f DataEngine/Dockerfile -t $env:REGISTRY/$env:IMAGE_NAME:latest -t $env:REGISTRY/$env:IMAGE_NAME:${{ github.sha }} .
+          
+          # Construct proper image tags
+          $latestTag = "$env:REGISTRY/$env:IMAGE_NAME:latest"
+          $shaTag = "$env:REGISTRY/$env:IMAGE_NAME:${{ github.sha }}"
+          
+          Write-Host "Building with tags: $latestTag and $shaTag" -ForegroundColor Gray
+          docker build -f DataEngine/Dockerfile -t $latestTag -t $shaTag .
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Docker build failed with exit code $LASTEXITCODE" -ForegroundColor Red
+            exit $LASTEXITCODE
+          }
           
           Write-Host "Pushing DataEngine image to registry..." -ForegroundColor Yellow
-          docker push $env:REGISTRY/$env:IMAGE_NAME:latest
-          docker push $env:REGISTRY/$env:IMAGE_NAME:${{ github.sha }}
+          docker push $latestTag
+          docker push $shaTag
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ Successfully built and pushed DataEngine images" -ForegroundColor Green
+          } else {
+            Write-Host "❌ Push failed with exit code $LASTEXITCODE" -ForegroundColor Red
+            exit $LASTEXITCODE
+          }
 
       - name: Setup Helm
         shell: powershell
