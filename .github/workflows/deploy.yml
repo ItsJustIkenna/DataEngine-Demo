@@ -74,7 +74,7 @@ jobs:
           "[package]`nname = `"ultra-logger`"`nversion = `"0.1.0`"`nedition = `"2021`"`n" | Out-File -FilePath "LoggingEngine\ultra-logger\Cargo.toml" -Encoding UTF8
           "pub fn init() {}`npub fn info(_: &str) {}`npub fn error(_: &str) {}" | Out-File -FilePath "LoggingEngine\ultra-logger\src\lib.rs" -Encoding UTF8
           
-          Write-Host "✅ Stub directories created" -ForegroundColor Green
+          Write-Host "SUCCESS: Stub directories created" -ForegroundColor Green
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -99,11 +99,11 @@ jobs:
           $shouldBuild = $false
           
           if ($env:SKIP_BUILD -eq 'true') {
-            Write-Host "🚫 Skipping build - using existing image: $latestTag" -ForegroundColor Cyan
+            Write-Host "SKIP: Using existing image: $latestTag" -ForegroundColor Cyan
             $shouldBuild = $false
           }
           elseif ($env:FORCE_BUILD -eq 'true') {
-            Write-Host "🔨 Force build requested" -ForegroundColor Yellow
+            Write-Host "FORCE BUILD: Rebuilding image as requested" -ForegroundColor Yellow
             $shouldBuild = $true
           }
           else {
@@ -112,11 +112,11 @@ jobs:
             docker manifest inspect $latestTag > $null 2>&1
             
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Image already exists in registry: $latestTag" -ForegroundColor Green
+              Write-Host "SUCCESS: Image already exists in registry: $latestTag" -ForegroundColor Green
               Write-Host "Skipping build. Use 'force_build: true' to rebuild." -ForegroundColor Cyan
               $shouldBuild = $false
             } else {
-              Write-Host "❌ Image not found in registry, building new image..." -ForegroundColor Yellow
+              Write-Host "NOT FOUND: Image not found in registry, building new image..." -ForegroundColor Yellow
               $shouldBuild = $true
             }
           }
@@ -137,13 +137,13 @@ jobs:
             docker push $shaTag
             
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Successfully built and pushed DataEngine images" -ForegroundColor Green
+              Write-Host "SUCCESS: Built and pushed DataEngine images" -ForegroundColor Green
             } else {
-              Write-Host "❌ Failed to push images" -ForegroundColor Red
+              Write-Host "ERROR: Failed to push images" -ForegroundColor Red
               exit 1
             }
           } else {
-            Write-Host "✅ Using existing image: $latestTag" -ForegroundColor Green
+            Write-Host "SUCCESS: Using existing image: $latestTag" -ForegroundColor Green
           }
 
       - name: Add Bitnami Helm Repository
@@ -152,7 +152,7 @@ jobs:
           Write-Host "Adding Bitnami Helm repository..." -ForegroundColor Yellow
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
-          Write-Host "✅ Helm repositories updated" -ForegroundColor Green
+          Write-Host "SUCCESS: Helm repositories updated" -ForegroundColor Green
 
       - name: Deploy to Kubernetes with Helm
         shell: powershell
@@ -193,7 +193,7 @@ jobs:
             Write-Host "Using override file: $overrideFile" -ForegroundColor Cyan
             $helmArgs += @("-f", $overrideFile)
           } elseif ($overrideFile -and $overrideFile -ne "none") {
-            Write-Host "⚠️  Override file not found: $overrideFile" -ForegroundColor Yellow
+            Write-Host "WARNING: Override file not found: $overrideFile" -ForegroundColor Yellow
             Write-Host "Continuing with default values..." -ForegroundColor Gray
           }
           
@@ -202,9 +202,9 @@ jobs:
           & helm @helmArgs
           
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ DataEngine deployed successfully" -ForegroundColor Green
+            Write-Host "SUCCESS: DataEngine deployed successfully" -ForegroundColor Green
           } else {
-            Write-Host "❌ Deployment failed" -ForegroundColor Red
+            Write-Host "ERROR: Deployment failed" -ForegroundColor Red
             exit 1
           }
 
@@ -224,4 +224,4 @@ jobs:
           kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME
           kubectl get services -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME
           
-          Write-Host "✅ Deployment verification complete" -ForegroundColor Green
+          Write-Host "SUCCESS: Deployment verification complete" -ForegroundColor Green
