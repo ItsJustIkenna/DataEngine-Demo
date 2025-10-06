@@ -1,4 +1,4 @@
-name: Deploy DataEngine Microservice
+name: Deploy DataEngine Micr          Write-Host "[SETUP] Setting up Kubernetes context..." -ForegroundColor Yellowservice
 
 on:
   push:
@@ -46,7 +46,7 @@ jobs:
               $result = kubectl get nodes --request-timeout=10s 2>&1
               if ($LASTEXITCODE -eq 0 -and $result -notmatch "error:|EOF") {
                 $k8sReady = $true
-                Write-Host "✅ Kubernetes cluster is ready!" -ForegroundColor Green
+                Write-Host "[OK] Kubernetes cluster is ready!" -ForegroundColor Green
                 break
               }
             } catch { }
@@ -63,19 +63,19 @@ jobs:
           }
           
           # Install/Verify Helm
-          Write-Host "🔧 Checking Helm installation..." -ForegroundColor Yellow
+          Write-Host "[SETUP] Checking Helm installation..." -ForegroundColor Yellow
           if (!(Get-Command helm -ErrorAction SilentlyContinue)) {
             Write-Host "Installing Helm..." -ForegroundColor Yellow
             winget install Helm.Helm --silent --accept-package-agreements --accept-source-agreements
           }
           
           helm version --short
-          Write-Host "✅ Kubernetes and Helm are ready!" -ForegroundColor Green
+          Write-Host "[OK] Kubernetes and Helm are ready!" -ForegroundColor Green
 
       - name: Create Helm Chart Structure
         shell: powershell
         run: |
-          Write-Host "📦 Creating Helm chart structure..." -ForegroundColor Yellow
+          Write-Host "[CREATE] Creating Helm chart structure..." -ForegroundColor Yellow
           
           # Create chart directory
           if (Test-Path "dataengine-chart") {
@@ -185,12 +185,12 @@ jobs:
           
           $valuesYaml | Out-File -FilePath "dataengine-chart/values.yaml" -Encoding UTF8
           
-          Write-Host "✅ Helm chart structure created!" -ForegroundColor Green
+          Write-Host "[OK] Helm chart structure created!" -ForegroundColor Green
 
       - name: Create Helm Templates
         shell: powershell
         run: |
-          Write-Host "📝 Creating Helm templates..." -ForegroundColor Yellow
+          Write-Host "[CREATE] Creating Helm templates..." -ForegroundColor Yellow
           
           # Create DataEngine deployment template
           $dataEngineDeployment = @"
@@ -380,12 +380,12 @@ jobs:
           
           $helpers | Out-File -FilePath "dataengine-chart/templates/_helpers.tpl" -Encoding UTF8
           
-          Write-Host "✅ Helm templates created!" -ForegroundColor Green
+          Write-Host "[OK] Helm templates created!" -ForegroundColor Green
 
       - name: Deploy with Helm Chart
         shell: powershell
         run: |
-          Write-Host "🚀 Deploying DataEngine with Helm chart..." -ForegroundColor Green
+          Write-Host "[DEPLOY] Deploying DataEngine with Helm chart..." -ForegroundColor Green
           
           # Create namespace
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
@@ -411,7 +411,7 @@ jobs:
           cd ..
           
           # Deploy the complete stack with Helm
-          Write-Host "📊 Deploying complete DataEngine stack..." -ForegroundColor Yellow
+          Write-Host "[DEPLOY] Deploying complete DataEngine stack..." -ForegroundColor Yellow
           helm upgrade --install dataengine-stack ./dataengine-chart `
             --namespace $env:NAMESPACE `
             --set postgresql.auth.postgresPassword="${{ secrets.DATABASE_PASSWORD }}" `
@@ -420,14 +420,14 @@ jobs:
             --set dataengine.env.KRAKEN_SECRET_KEY="${{ secrets.KRAKEN_SECRET_KEY }}" `
             --wait --timeout=900s
           
-          Write-Host "✅ Helm deployment completed successfully!" -ForegroundColor Green
+          Write-Host "[OK] Helm deployment completed successfully!" -ForegroundColor Green
 
 
 
       - name: Verify Deployment
         shell: powershell
         run: |
-          Write-Host "🔍 Verifying Helm deployment..." -ForegroundColor Yellow
+          Write-Host "[VERIFY] Verifying Helm deployment..." -ForegroundColor Yellow
           
           # Check Helm release status
           Write-Host "Checking Helm release status..." -ForegroundColor Gray
@@ -440,7 +440,7 @@ jobs:
           kubectl wait --for=condition=ready pod -l app=data-engine --namespace $env:NAMESPACE --timeout=300s
           
           # Show comprehensive deployment status
-          Write-Host "`n📊 Complete Deployment Status:" -ForegroundColor Cyan
+          Write-Host "`n[STATUS] Complete Deployment Status:" -ForegroundColor Cyan
           Write-Host "Pods:" -ForegroundColor White
           kubectl get pods -n $env:NAMESPACE -o wide
           
@@ -451,7 +451,7 @@ jobs:
           kubectl get pvc -n $env:NAMESPACE
           
           # Get DataEngine service details
-          Write-Host "`n🌐 Service Access Information:" -ForegroundColor Cyan
+          Write-Host "`n[ACCESS] Service Access Information:" -ForegroundColor Cyan
           $serviceName = "dataengine-stack-app"
           
           try {
@@ -480,7 +480,7 @@ jobs:
           }
           
           # Health check with retry logic
-          Write-Host "`n🏥 Performing health checks..." -ForegroundColor Yellow
+          Write-Host "`n[HEALTH] Performing health checks..." -ForegroundColor Yellow
           $maxRetries = 3
           $retryCount = 0
           $healthCheckPassed = $false
@@ -491,7 +491,7 @@ jobs:
             
             try {
               $health = Invoke-RestMethod -Uri "http://localhost:8080/health" -TimeoutSec 20
-              Write-Host "`n✅ DataEngine is healthy!" -ForegroundColor Green
+              Write-Host "`n[OK] DataEngine is healthy!" -ForegroundColor Green
               Write-Host "Response: $($health | ConvertTo-Json -Compress)" -ForegroundColor Gray
               $healthCheckPassed = $true
             } catch {
@@ -511,13 +511,13 @@ jobs:
           }
           
           # Final deployment summary
-          Write-Host "`n🎉 Helm + Kubernetes deployment completed!" -ForegroundColor Green
-          Write-Host "📋 Deployment Summary:" -ForegroundColor Cyan
+          Write-Host "`n[SUCCESS] Helm + Kubernetes deployment completed!" -ForegroundColor Green
+          Write-Host "[SUMMARY] Deployment Summary:" -ForegroundColor Cyan
           Write-Host "  • Helm Release: dataengine-stack" -ForegroundColor White
           Write-Host "  • Namespace: $env:NAMESPACE" -ForegroundColor White
           Write-Host "  • DataEngine: http://localhost:8080" -ForegroundColor White
           Write-Host "  • LoggingEngine: http://localhost:8081" -ForegroundColor White
           
           # Show resource usage
-          Write-Host "`n📈 Resource Usage:" -ForegroundColor Cyan
+          Write-Host "`n[METRICS] Resource Usage:" -ForegroundColor Cyan
           kubectl top pods -n $env:NAMESPACE --no-headers 2>$null || Write-Host "Metrics not available (metrics-server may not be installed)" -ForegroundColor Gray
