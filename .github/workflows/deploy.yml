@@ -107,17 +107,28 @@ jobs:
             $shouldBuild = $true
           }
           else {
-            # Check if image exists in registry
+            # Check if image exists by trying to pull it (simple and reliable)
             Write-Host "Checking if image exists: $latestTag" -ForegroundColor Gray
-            docker manifest inspect $latestTag > $null 2>&1
             
+            # First check if image exists locally
+            docker inspect $latestTag > $null 2>&1
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "SUCCESS: Image already exists in registry: $latestTag" -ForegroundColor Green
+              Write-Host "SUCCESS: Image found locally: $latestTag" -ForegroundColor Green
               Write-Host "Skipping build. Use 'force_build: true' to rebuild." -ForegroundColor Cyan
               $shouldBuild = $false
             } else {
-              Write-Host "NOT FOUND: Image not found in registry, building new image..." -ForegroundColor Yellow
-              $shouldBuild = $true
+              # Try to pull the image to see if it exists in registry
+              Write-Host "Image not found locally, checking registry..." -ForegroundColor Gray
+              docker pull $latestTag > $null 2>&1
+              
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "SUCCESS: Image pulled from registry: $latestTag" -ForegroundColor Green
+                Write-Host "Skipping build. Use 'force_build: true' to rebuild." -ForegroundColor Cyan
+                $shouldBuild = $false
+              } else {
+                Write-Host "NOT FOUND: Image not found in registry, building new image..." -ForegroundColor Yellow
+                $shouldBuild = $true
+              }
             }
           }
           
