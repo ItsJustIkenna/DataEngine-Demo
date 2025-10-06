@@ -63,18 +63,16 @@ jobs:
 
       - name: Checkout LoggingEngine
         uses: actions/checkout@v4
-        continue-on-error: true
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
-          token: ${{ secrets.GHCR_TOKEN }}
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: LoggingEngine
 
       - name: Checkout MessageBrokerEngine
         uses: actions/checkout@v4
-        continue-on-error: true
         with:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          token: ${{ secrets.GHCR_TOKEN }}
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: MessageBrokerEngine
 
       - name: Add Bitnami Helm Repository
