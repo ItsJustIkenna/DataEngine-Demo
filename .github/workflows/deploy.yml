@@ -349,6 +349,29 @@ jobs:
             Write-Host "No dependencies or error listing" -ForegroundColor Gray
           }
           
+          # DEBUG: List all templates
+          Write-Host "`nDEBUG: Listing templates directory..." -ForegroundColor Magenta
+          if (Test-Path "$chartPath/templates") {
+            Get-ChildItem "$chartPath/templates" | Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host
+          }
+          
+          # DEBUG: Check if custom StatefulSet templates exist
+          Write-Host "`nDEBUG: Checking for custom database templates..." -ForegroundColor Magenta
+          if (Test-Path "$chartPath/templates/postgresql-deployment.yaml") {
+            Write-Host "FOUND: postgresql-deployment.yaml" -ForegroundColor Green
+            Write-Host "First 5 lines:" -ForegroundColor Gray
+            Get-Content "$chartPath/templates/postgresql-deployment.yaml" -First 5 | Write-Host
+          } else {
+            Write-Host "MISSING: postgresql-deployment.yaml" -ForegroundColor Red
+          }
+          if (Test-Path "$chartPath/templates/redis-deployment.yaml") {
+            Write-Host "FOUND: redis-deployment.yaml" -ForegroundColor Green  
+            Write-Host "First 5 lines:" -ForegroundColor Gray
+            Get-Content "$chartPath/templates/redis-deployment.yaml" -First 5 | Write-Host
+          } else {
+            Write-Host "MISSING: redis-deployment.yaml" -ForegroundColor Red
+          }
+          
           # DEBUG: Check if charts directory gets created DURING helm command
           Write-Host "`nDEBUG: Chart directory state BEFORE helm command:" -ForegroundColor Magenta
           if (Test-Path "$chartPath/charts") {
