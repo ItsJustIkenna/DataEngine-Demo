@@ -316,6 +316,7 @@ jobs:
             $env:CHART_PATH
             "--namespace", $env:NAMESPACE
             "--create-namespace"
+            "--dependency-update=false"
             "--timeout", "5m"
             "--set", "image.repository=${imageRepository}"
             "--set", "image.tag=latest"
