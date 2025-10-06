@@ -2,7 +2,7 @@
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
     inputs:
       chart_path:
@@ -49,13 +49,13 @@ jobs:
         with:
           path: DataEngine
 
-      - name: Checkout databaseschema (public)
+      - name: Checkout databaseschema
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
 
-      - name: Checkout redisutils (public)
+      - name: Checkout redisutils
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
@@ -94,6 +94,22 @@ jobs:
           
           # Create namespace if it doesn't exist
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Check for stuck Helm operations and clean them up
+          Write-Host "Checking for stuck Helm operations..." -ForegroundColor Yellow
+          $helmStatus = helm status $env:RELEASE_NAME --namespace $env:NAMESPACE 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            $statusOutput = $helmStatus | Out-String
+            if ($statusOutput -match "STATUS:\s*(pending-install|pending-upgrade|pending-rollback)") {
+              Write-Host "WARNING: Found stuck Helm operation. Rolling back..." -ForegroundColor Yellow
+              helm rollback $env:RELEASE_NAME --namespace $env:NAMESPACE --wait 2>&1 | Out-Null
+              if ($LASTEXITCODE -ne 0) {
+                Write-Host "Rollback failed, attempting to delete release..." -ForegroundColor Yellow
+                helm delete $env:RELEASE_NAME --namespace $env:NAMESPACE 2>&1 | Out-Null
+                Start-Sleep -Seconds 5
+              }
+            }
+          }
           
           # Build Helm command
           $imageRepository = "$env:REGISTRY/$env:IMAGE_NAME"
