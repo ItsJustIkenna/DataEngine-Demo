@@ -268,7 +268,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'dataengine123' }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD || '' }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           Write-Host "Deploying DataEngine to Kubernetes..." -ForegroundColor Yellow
           Write-Host "Chart Path: $env:CHART_PATH" -ForegroundColor Cyan
@@ -280,13 +280,27 @@ jobs:
           
           # Create image pull secret for GHCR
           Write-Host "Creating image pull secret for GitHub Container Registry..." -ForegroundColor Yellow
+          
+          # Delete existing secret first to avoid stale credentials
+          kubectl delete secret ghcr-secret --namespace $env:NAMESPACE --ignore-not-found=true 2>&1 | Out-Null
+          
           kubectl create secret docker-registry ghcr-secret `
             --docker-server=ghcr.io `
             --docker-username=${{ github.actor }} `
             --docker-password=$env:GHCR_TOKEN `
             --docker-email=${{ github.actor }}@users.noreply.github.com `
-            --namespace $env:NAMESPACE `
-            --dry-run=client -o yaml | kubectl apply -f -
+            --namespace $env:NAMESPACE
+          
+          # Verify the secret was created
+          Write-Host "Verifying image pull secret..." -ForegroundColor Yellow
+          kubectl get secret ghcr-secret -n $env:NAMESPACE -o yaml | Select-String -Pattern "\.dockerconfigjson"
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Image pull secret created successfully" -ForegroundColor Green
+          } else {
+            Write-Host "ERROR: Failed to create image pull secret" -ForegroundColor Red
+            exit 1
+          }
           
           # Note: We don't create secrets manually anymore - Helm will manage them
           # This avoids the "invalid ownership metadata" error
@@ -359,18 +373,23 @@ jobs:
           Write-Host "`nDEBUG: Checking for custom database templates..." -ForegroundColor Magenta
           if (Test-Path "$chartPath/templates/postgresql-deployment.yaml") {
             Write-Host "FOUND: postgresql-deployment.yaml" -ForegroundColor Green
-            Write-Host "First 5 lines:" -ForegroundColor Gray
-            Get-Content "$chartPath/templates/postgresql-deployment.yaml" -First 5 | Write-Host
+            Write-Host "First 10 lines:" -ForegroundColor Gray
+            Get-Content "$chartPath/templates/postgresql-deployment.yaml" -First 10 | Write-Host
           } else {
             Write-Host "MISSING: postgresql-deployment.yaml" -ForegroundColor Red
           }
           if (Test-Path "$chartPath/templates/redis-deployment.yaml") {
             Write-Host "FOUND: redis-deployment.yaml" -ForegroundColor Green  
-            Write-Host "First 5 lines:" -ForegroundColor Gray
-            Get-Content "$chartPath/templates/redis-deployment.yaml" -First 5 | Write-Host
+            Write-Host "First 10 lines:" -ForegroundColor Gray
+            Get-Content "$chartPath/templates/redis-deployment.yaml" -First 10 | Write-Host
           } else {
             Write-Host "MISSING: redis-deployment.yaml" -ForegroundColor Red
           }
+          
+          # DEBUG: Show current values for customPostgresql and customRedis
+          Write-Host "`nDEBUG: Checking values that will be passed to Helm..." -ForegroundColor Magenta
+          Write-Host "customPostgresql.enabled will be set to: true" -ForegroundColor Cyan
+          Write-Host "customRedis.enabled will be set to: true" -ForegroundColor Cyan
           
           # DEBUG: Check if charts directory gets created DURING helm command
           Write-Host "`nDEBUG: Chart directory state BEFORE helm command:" -ForegroundColor Magenta
@@ -442,6 +461,22 @@ jobs:
           
           if ($LASTEXITCODE -eq 0) {
             Write-Host "SUCCESS: Helm chart deployed" -ForegroundColor Green
+            
+            # DEBUG: Show what Helm actually generated
+            Write-Host "`nDEBUG: Showing Helm manifest to verify StatefulSets..." -ForegroundColor Magenta
+            Write-Host "Counting StatefulSets in manifest:" -ForegroundColor Yellow
+            $manifest = helm get manifest $env:RELEASE_NAME -n $env:NAMESPACE
+            $statefulSetCount = ($manifest | Select-String -Pattern "kind:\s*StatefulSet" -AllMatches).Matches.Count
+            Write-Host "Found $statefulSetCount StatefulSet(s) in manifest" -ForegroundColor Cyan
+            
+            if ($statefulSetCount -eq 0) {
+              Write-Host "WARNING: NO StatefulSets found in Helm manifest!" -ForegroundColor Red
+              Write-Host "This means the templates did not render. Checking values..." -ForegroundColor Yellow
+              helm get values $env:RELEASE_NAME -n $env:NAMESPACE
+            } else {
+              Write-Host "StatefulSets found in manifest:" -ForegroundColor Green
+              $manifest | Select-String -Pattern "kind:\s*StatefulSet" -Context 3 | Write-Host
+            }
             
             # Wait and check pod status
             Write-Host "`nWaiting for pods to be ready..." -ForegroundColor Yellow
