@@ -1,4 +1,4 @@
-{{- if .Values.redis.enabled }}
+{{- if .Values.customRedis.enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -45,13 +45,13 @@ spec:
       {{- end }}
       containers:
         - name: redis
-          image: "{{ .Values.redis.image.registry }}/{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          image: "{{ .Values.customRedis.image.registry }}/{{ .Values.customRedis.image.repository }}:{{ .Values.customRedis.image.tag }}"
           imagePullPolicy: Always
           command:
             - redis-server
-          {{- if .Values.redis.auth.enabled }}
+          {{- if .Values.customRedis.auth.enabled }}
             - --requirepass
-            - {{ .Values.redis.auth.password | quote }}
+            - {{ .Values.customRedis.auth.password | quote }}
           {{- end }}
           ports:
             - name: redis
@@ -60,7 +60,7 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
-          {{- with .Values.redis.master.resources }}
+          {{- with .Values.customRedis.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -71,5 +71,5 @@ spec:
         accessModes: [ "ReadWriteOnce" ]
         resources:
           requests:
-            storage: {{ .Values.redis.master.persistence.size }}
+            storage: {{ .Values.customRedis.persistence.size }}
 {{- end }}

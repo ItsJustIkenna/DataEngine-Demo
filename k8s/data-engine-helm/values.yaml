@@ -452,14 +452,14 @@ externalRedis:
   # Connection string format: redis://:password@host:port
 
 # =============================================================================
-# Database Dependencies - Custom Deployments (NOT Bitnami charts!)
+# Custom Database Deployments (NOT Bitnami subcharts!)
 # =============================================================================
 
-# IMPORTANT: These sections control our CUSTOM StatefulSet deployments
-# They do NOT trigger Bitnami chart dependencies
+# IMPORTANT: We use "customPostgresql" and "customRedis" to avoid conflicts
+# with Helm's built-in support for Bitnami postgresql/redis charts
 
-# Custom PostgreSQL configuration
-postgresql:
+# Custom PostgreSQL StatefulSet deployment
+customPostgresql:
   enabled: false  # Set to true to deploy custom PostgreSQL StatefulSet
   image:
     registry: ghcr.io
@@ -470,20 +470,19 @@ postgresql:
     username: "dataengine"
     password: "dataengine123"
     database: "dataengine"
-  primary:
-    persistence:
-      enabled: true
-      size: 10Gi
-    resources:
-      limits:
-        cpu: "1000m"
-        memory: "2Gi"
-      requests:
-        cpu: "500m"
-        memory: "1Gi"
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
 
-# Custom Redis configuration
-redis:
+# Custom Redis StatefulSet deployment
+customRedis:
   enabled: false  # Set to true to deploy custom Redis StatefulSet
   image:
     registry: ghcr.io
@@ -493,17 +492,16 @@ redis:
   auth:
     enabled: false
     password: ""
-  master:
-    persistence:
-      enabled: true
-      size: 5Gi
-    resources:
-      limits:
-        cpu: "500m"
-        memory: "1Gi"
-      requests:
-        cpu: "250m"
-        memory: "512Mi"
+  persistence:
+    enabled: true
+    size: 5Gi
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
 
 # =============================================================================
 # Monitoring & Observability
