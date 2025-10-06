@@ -263,6 +263,26 @@ jobs:
           # Build Helm command
           $imageRepository = "$env:REGISTRY/$env:IMAGE_NAME"
           
+          # DEBUG: Show what Chart.yaml actually contains
+          Write-Host "`nDEBUG: Checking Chart.yaml contents..." -ForegroundColor Magenta
+          $chartPath = "DataEngine/$env:CHART_PATH"
+          if (Test-Path "$chartPath/Chart.yaml") {
+            Write-Host "Chart.yaml contents:" -ForegroundColor Gray
+            Get-Content "$chartPath/Chart.yaml" | Write-Host
+          } else {
+            Write-Host "ERROR: Chart.yaml not found at $chartPath/Chart.yaml" -ForegroundColor Red
+          }
+          
+          # DEBUG: Check for any remaining dependencies
+          if (Test-Path "$chartPath/Chart.lock") {
+            Write-Host "`nWARNING: Chart.lock still exists!" -ForegroundColor Red
+            Get-Content "$chartPath/Chart.lock" | Write-Host
+          }
+          if (Test-Path "$chartPath/charts") {
+            Write-Host "`nWARNING: charts/ directory still exists!" -ForegroundColor Red
+            Get-ChildItem "$chartPath/charts" -Recurse | Select-Object FullName | Write-Host
+          }
+          
           $helmArgs = @(
             "upgrade", "--install", $env:RELEASE_NAME
             $env:CHART_PATH
@@ -296,14 +316,16 @@ jobs:
           )
           
           # Add override file if specified and not 'none'
-          $overrideFile = $env:CHART_OVERRIDE_PATH
-          if ($overrideFile -and $overrideFile -ne "none" -and (Test-Path $overrideFile)) {
-            Write-Host "Using override file: $overrideFile" -ForegroundColor Cyan
-            $helmArgs += @("-f", $overrideFile)
-          } elseif ($overrideFile -and $overrideFile -ne "none") {
-            Write-Host "WARNING: Override file not found: $overrideFile" -ForegroundColor Yellow
-            Write-Host "Continuing with default values..." -ForegroundColor Gray
-          }
+          # TEMPORARILY DISABLED: Override file conflicts with custom deployments
+          # $overrideFile = $env:CHART_OVERRIDE_PATH
+          # if ($overrideFile -and $overrideFile -ne "none" -and (Test-Path $overrideFile)) {
+          #   Write-Host "Using override file: $overrideFile" -ForegroundColor Cyan
+          #   $helmArgs += @("-f", $overrideFile)
+          # } elseif ($overrideFile -and $overrideFile -ne "none") {
+          #   Write-Host "WARNING: Override file not found: $overrideFile" -ForegroundColor Yellow
+          #   Write-Host "Continuing with default values..." -ForegroundColor Gray
+          # }
+          Write-Host "Using inline --set values instead of override file" -ForegroundColor Cyan
           
           # Execute Helm deployment
           Write-Host "Executing: helm $($helmArgs -join ' ')" -ForegroundColor Gray
