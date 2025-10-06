@@ -49,27 +49,29 @@ jobs:
         with:
           path: DataEngine
 
-      - name: Checkout databaseschema
+      - name: Checkout databaseschema (public)
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
 
-      - name: Checkout redisutils
+      - name: Checkout redisutils (public)
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
           path: redisutils
 
-      - name: Checkout LoggingEngine
+      - name: Checkout LoggingEngine (optional - requires PERSONAL_ACCESS_TOKEN)
         uses: actions/checkout@v4
+        continue-on-error: true
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: LoggingEngine
 
-      - name: Checkout MessageBrokerEngine
+      - name: Checkout MessageBrokerEngine (optional - requires PERSONAL_ACCESS_TOKEN)
         uses: actions/checkout@v4
+        continue-on-error: true
         with:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
@@ -77,6 +79,9 @@ jobs:
 
       - name: Deploy DataEngine with Helm
         shell: powershell
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'dataengine123' }}
+          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD || '' }}
         run: |
           
           Write-Host "Deploying DataEngine to Kubernetes..." -ForegroundColor Yellow
@@ -125,7 +130,7 @@ jobs:
             "--set", "postgresql.image.repository=baosystems/postgis"
             "--set", "postgresql.image.tag=15-3.3"
             "--set", "postgresql.auth.username=dataengine"
-            "--set", "postgresql.auth.password=dataengine123"
+            "--set", "postgresql.auth.password=$env:POSTGRES_PASSWORD"
             "--set", "postgresql.auth.database=dataengine"
             "--set", "monitoring.prometheus.enabled=false"
             "--set", "monitoring.grafana.enabled=false"
