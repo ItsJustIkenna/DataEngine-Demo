@@ -106,6 +106,24 @@ jobs:
           # Create namespace if it doesn't exist
           kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
           
+          # Create PostgreSQL secret that Bitnami chart expects
+          Write-Host "Creating PostgreSQL secret..." -ForegroundColor Yellow
+          kubectl create secret generic "$env:RELEASE_NAME-postgresql" `
+            --from-literal=password=$env:POSTGRES_PASSWORD `
+            --from-literal=postgres-password=$env:POSTGRES_PASSWORD `
+            --namespace $env:NAMESPACE `
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create Redis secret that Bitnami chart expects
+          if ($env:REDIS_PASSWORD) {
+            Write-Host "Creating Redis secret..." -ForegroundColor Yellow
+            kubectl create secret generic "$env:RELEASE_NAME-redis" `
+              --from-literal=password=$env:REDIS_PASSWORD `
+              --from-literal=redis-password=$env:REDIS_PASSWORD `
+              --namespace $env:NAMESPACE `
+              --dry-run=client -o yaml | kubectl apply -f -
+          }
+          
           # Check for stuck Helm operations and clean them up
           Write-Host "Checking for stuck Helm operations..." -ForegroundColor Yellow
           $helmStatus = helm status $env:RELEASE_NAME --namespace $env:NAMESPACE 2>&1
