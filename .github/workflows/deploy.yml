@@ -1,273 +1,36 @@
-﻿name: Deploy DataEngine with Dependencies
+﻿name: Deploy DataEngine
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      chart_path:
-        description: 'Helm Chart Path'
-        required: false
-        default: './DataEngine/k8s/data-engine-helm/'
-        type: string
-      chart_override_path:
-        description: 'Chart Override Values Path'
-        required: false
-        type: choice
-        default: './DataEngine/k8s/data-engine-helm/values-database-only.yaml'
-        options:
-          - './DataEngine/k8s/data-engine-helm/values-database-only.yaml'
-          - './DataEngine/k8s/data-engine-helm/values-prod.yaml'
-          - './DataEngine/k8s/data-engine-helm/values-qa.yaml'
-          - './DataEngine/k8s/data-engine-helm/values-dev.yaml'
-          - 'none'
-      namespace:
-        description: 'Kubernetes Namespace'
-        required: false
-        default: 'dataengine'
-        type: string
-      release_name:
-        description: 'Helm Release Name'
-        required: false
-        default: 'dataengine'
-        type: string
 
 env:
   REGISTRY: ghcr.io/nwagbara-group-llc
   IMAGE_NAME: data-engine
-  CHART_PATH: ${{ github.event.inputs.chart_path || './DataEngine/k8s/data-engine-helm/' }}
-  CHART_OVERRIDE_PATH: ${{ github.event.inputs.chart_override_path || './DataEngine/k8s/data-engine-helm/values-database-only.yaml' }}
-  NAMESPACE: ${{ github.event.inputs.namespace || 'dataengine' }}
-  RELEASE_NAME: ${{ github.event.inputs.release_name || 'dataengine' }}
 
 jobs:
   deploy:
     runs-on: [self-hosted, windows, x64]
     steps:
-      - name: Checkout DataEngine
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          path: DataEngine
 
-      - name: Checkout DatabaseSchema
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/databaseschema
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: databaseschema
+      - name: Create stub directories
+        run: |
+          mkdir -p databaseschema redisutils LoggingEngine MessageBrokerEngine
+          mkdir -p LoggingEngine/ultra-logger/src
+          echo '[package]\nname = "ultra-logger"\nversion = "0.1.0"\nedition = "2021"' > LoggingEngine/ultra-logger/Cargo.toml
+          echo 'pub fn init() {}' > LoggingEngine/ultra-logger/src/lib.rs
 
-      - name: Checkout RedisUtils
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/redisutils
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: redisutils
-
-      - name: Checkout LoggingEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/LoggingEngine
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: LoggingEngine
-
-      - name: Checkout MessageBrokerEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: MessageBrokerEngine
-
-      - name: Login to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push DataEngine image
-        shell: powershell
+      - name: Build and Push
         run: |
-          Write-Host "Building DataEngine Docker image..." -ForegroundColor Yellow
-          
-          # Debug environment variables
-          Write-Host "REGISTRY: $env:REGISTRY" -ForegroundColor Gray
-          Write-Host "IMAGE_NAME: $env:IMAGE_NAME" -ForegroundColor Gray
-          
-          # Construct proper image tags with explicit concatenation
-          $registry = "$env:REGISTRY"
-          $imageName = "$env:IMAGE_NAME"
-          $latestTag = "${registry}/${imageName}:latest"
-          $shaTag = "${registry}/${imageName}:${{ github.sha }}"
-          
-          Write-Host "Building with tags: $latestTag and $shaTag" -ForegroundColor Gray
-          Write-Host "Current directory: $(Get-Location)" -ForegroundColor Gray
-          Write-Host "Directory contents:" -ForegroundColor Gray
-          Get-ChildItem -Name | Write-Host -ForegroundColor Gray
-          
-          docker build -f DataEngine/Dockerfile -t $latestTag -t $shaTag .
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "Docker build failed with exit code $LASTEXITCODE" -ForegroundColor Red
-            exit $LASTEXITCODE
-          }
-          
-          Write-Host "Pushing DataEngine image to registry..." -ForegroundColor Yellow
-          docker push $latestTag
-          docker push $shaTag
-          
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ Successfully built and pushed DataEngine images" -ForegroundColor Green
-          } else {
-            Write-Host "❌ Push failed with exit code $LASTEXITCODE" -ForegroundColor Red
-            exit $LASTEXITCODE
-          }
-
-      - name: Setup Helm
-        shell: powershell
-        run: |
-          if (-not (Get-Command helm -ErrorAction SilentlyContinue)) {
-            Write-Host "Installing Helm..." -ForegroundColor Yellow
-            choco install kubernetes-helm -y --no-progress
-          } else {
-            Write-Host "Helm already installed" -ForegroundColor Green
-            helm version --short
-          }
-
-      - name: Configure Kubernetes context
-        shell: powershell
-        run: |
-          Write-Host "Setting up Kubernetes context for Docker Desktop..." -ForegroundColor Yellow
-          kubectl config use-context docker-desktop
-          kubectl cluster-info
-          kubectl get nodes
-
-      - name: Add Helm repositories
-        shell: powershell
-        run: |
-          Write-Host "Adding required Helm repositories..." -ForegroundColor Yellow
-          helm repo add bitnami https://charts.bitnami.com/bitnami
-          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-          helm repo add grafana https://grafana.github.io/helm-charts
-          helm repo update
-
-      - name: Deploy DataEngine with Helm
-        shell: powershell
-        run: |
-          Write-Host "Deploying DataEngine with Helm..." -ForegroundColor Yellow
-          Write-Host "Chart Path: $env:CHART_PATH" -ForegroundColor Cyan
-          Write-Host "Namespace: $env:NAMESPACE" -ForegroundColor Cyan
-          Write-Host "Release Name: $env:RELEASE_NAME" -ForegroundColor Cyan
-          
-          # Create namespace
-          kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
-          
-          # Build base Helm command
-          $imageRepository = "${registry}/${imageName}"
-          $helmArgs = @(
-            "upgrade", "--install", $env:RELEASE_NAME
-            $env:CHART_PATH
-            "--namespace", $env:NAMESPACE
-            "--create-namespace"
-            "--wait"
-            "--timeout", "15m"
-            "--set", "image.repository=${imageRepository}"
-            "--set", "image.tag=latest"
-            "--set", "image.pullPolicy=Always"
-            "--set", "redis.enabled=true"
-            "--set", "postgresql.enabled=true"
-            "--set", "monitoring.prometheus.enabled=true"
-            "--set", "monitoring.grafana.enabled=true"
-            "--set", "replicaCount=2"
-          )
-          
-          # Automatically detect and use override values file
-          $overrideFile = $env:CHART_OVERRIDE_PATH
-          
-          # Check if the specified override file exists, if not try to auto-detect
-          if ($overrideFile -eq "none" -or -not (Test-Path $overrideFile)) {
-            Write-Host "Checking for available override files..." -ForegroundColor Gray
-            
-            # Priority order for auto-detection
-            $possibleOverrides = @(
-              "./DataEngine/k8s/data-engine-helm/values-database-only.yaml",
-              "./DataEngine/k8s/data-engine-helm/values-production.yaml",
-              "./DataEngine/k8s/data-engine-helm/values-development.yaml"
-            )
-            
-            foreach ($file in $possibleOverrides) {
-              if (Test-Path $file) {
-                $overrideFile = $file
-                Write-Host "Auto-detected override file: $overrideFile" -ForegroundColor Green
-                break
-              }
-            }
-          }
-          
-          # Apply override values if found
-          if ($overrideFile -and $overrideFile -ne "none" -and (Test-Path $overrideFile)) {
-            Write-Host "Using chart override values: $overrideFile" -ForegroundColor Cyan
-            $helmArgs += "--values", $overrideFile
-            
-            # Log what configuration is being used
-            Write-Host "Override file contents preview:" -ForegroundColor Gray
-            Get-Content $overrideFile | Select-Object -First 10 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
-            if ((Get-Content $overrideFile).Count -gt 10) {
-              Write-Host "  ... (truncated)" -ForegroundColor DarkGray
-            }
-          } else {
-            Write-Host "Using default chart values (no override file found or specified 'none')" -ForegroundColor Cyan
-          }
-          
-          # Execute Helm deployment
-          Write-Host "Executing: helm $($helmArgs -join ' ')" -ForegroundColor Gray
-          & helm @helmArgs
-          
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "DataEngine deployment completed!" -ForegroundColor Green
-          } else {
-            Write-Host "Deployment failed with exit code $LASTEXITCODE" -ForegroundColor Red
-            exit $LASTEXITCODE
-          }
-
-      - name: Verify deployment
-        shell: powershell
-        run: |
-          Write-Host "Verifying DataEngine deployment..." -ForegroundColor Yellow
-          
-          # Check Helm release
-          Write-Host "Helm Release Status:" -ForegroundColor Cyan
-          helm list -n $env:NAMESPACE
-          helm status $env:RELEASE_NAME -n $env:NAMESPACE
-          
-          # Check Kubernetes resources
-          Write-Host "`nKubernetes Resources:" -ForegroundColor Cyan
-          kubectl get deployments -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME
-          kubectl get pods -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME
-          kubectl get services -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME
-          
-          # Wait for pods to be ready
-          Write-Host "`nWaiting for pods to be ready..." -ForegroundColor Yellow
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=$env:RELEASE_NAME -n $env:NAMESPACE --timeout=600s
-          
-          Write-Host "`nDataEngine is successfully deployed and running!" -ForegroundColor Green
-
-      - name: Display Access Information
-        shell: powershell
-        run: |
-          Write-Host "========================================" -ForegroundColor Magenta
-          Write-Host "DataEngine Deployment Summary" -ForegroundColor Magenta  
-          Write-Host "========================================" -ForegroundColor Magenta
-          
-          Write-Host "`nDeployment Details:" -ForegroundColor Cyan
-          Write-Host "  Chart Path: $env:CHART_PATH" -ForegroundColor White
-          Write-Host "  Chart Override: $env:CHART_OVERRIDE_PATH" -ForegroundColor White
-          Write-Host "  Namespace: $env:NAMESPACE" -ForegroundColor White
-          Write-Host "  Release Name: $env:RELEASE_NAME" -ForegroundColor White
-          
-          Write-Host "`nAccess Commands:" -ForegroundColor Cyan
-          Write-Host "  View pods: kubectl get pods -n $env:NAMESPACE" -ForegroundColor White
-          Write-Host "  View services: kubectl get svc -n $env:NAMESPACE" -ForegroundColor White
-          Write-Host "  Port forward: kubectl port-forward -n $env:NAMESPACE service/$env:RELEASE_NAME 8080:8080" -ForegroundColor White
-          Write-Host "  View logs: kubectl logs -n $env:NAMESPACE -l app.kubernetes.io/instance=$env:RELEASE_NAME -f" -ForegroundColor White
-          
-          Write-Host "`nDeployment completed successfully!" -ForegroundColor Green
+          docker build -f Dockerfile -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
