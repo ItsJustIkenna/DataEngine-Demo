@@ -1,0 +1,61 @@
+---
+# Database Migrations Job - Runs Diesel migrations
+apiVersion: v1
+kind: Secret
+metadata:
+  name: database-credentials
+  namespace: dataengine
+type: Opaque
+stringData:
+  password: "dataengine123"  # Change in production!
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-migrations
+  namespace: dataengine
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:15-alpine
+        command:
+        - sh
+        - -c
+        - |
+          until pg_isready -h postgresql -p 5432 -U dataengine; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+      containers:
+      - name: migrations
+        image: ghcr.io/nwagbara-group-llc/databaseschema:latest
+        command:
+        - sh
+        - -c
+        - |
+          # Install diesel CLI
+          apt-get update && apt-get install -y diesel-cli || cargo install diesel_cli --no-default-features --features postgres
+          
+          # Run migrations
+          cd /app/databaseschema
+          diesel migration run
+        env:
+        - name: DATABASE_URL
+          value: "postgres://dataengine:$(DB_PASSWORD)@postgresql:5432/dataengine"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+      imagePullSecrets:
+      - name: ghcr-secret

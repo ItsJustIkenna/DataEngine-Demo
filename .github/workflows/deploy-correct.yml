@@ -1,0 +1,101 @@
+name: Deploy DataEngine (CORRECT & SIMPLE)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NAMESPACE: dataengine
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows, x64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup
+        shell: powershell
+        env:
+          GHCR_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          DB_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'dataengine123' }}
+        run: |
+          # Create namespace
+          kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create image pull secret
+          kubectl delete secret ghcr-secret -n $env:NAMESPACE --ignore-not-found=true
+          kubectl create secret docker-registry ghcr-secret `
+            --docker-server=ghcr.io `
+            --docker-username=${{ github.actor }} `
+            --docker-password=$env:GHCR_TOKEN `
+            --namespace $env:NAMESPACE
+          
+          # Create database credentials secret
+          kubectl delete secret database-credentials -n $env:NAMESPACE --ignore-not-found=true
+          kubectl create secret generic database-credentials `
+            --from-literal=password=$env:DB_PASSWORD `
+            --namespace $env:NAMESPACE
+
+      - name: Deploy PostgreSQL
+        shell: powershell
+        run: |
+          Write-Host "Deploying PostgreSQL..." -ForegroundColor Yellow
+          kubectl apply -f k8s/simple/postgresql.yaml
+          
+          Write-Host "Waiting for PostgreSQL to be ready..." -ForegroundColor Yellow
+          kubectl wait --for=condition=ready pod -l app=postgresql -n $env:NAMESPACE --timeout=300s
+
+      - name: Deploy Redis
+        shell: powershell
+        run: |
+          Write-Host "Deploying Redis..." -ForegroundColor Yellow
+          kubectl apply -f k8s/simple/redis.yaml
+          
+          Write-Host "Waiting for Redis to be ready..." -ForegroundColor Yellow
+          kubectl wait --for=condition=ready pod -l app=redis -n $env:NAMESPACE --timeout=300s
+
+      - name: Run Database Migrations
+        shell: powershell
+        run: |
+          Write-Host "Running database migrations..." -ForegroundColor Yellow
+          
+          # Delete old migration job if exists
+          kubectl delete job database-migrations -n $env:NAMESPACE --ignore-not-found=true
+          
+          # Run migrations
+          kubectl apply -f k8s/simple/migrations.yaml
+          
+          # Wait for migrations to complete
+          kubectl wait --for=condition=complete job/database-migrations -n $env:NAMESPACE --timeout=300s
+
+      - name: Deploy DataEngine Application
+        shell: powershell
+        run: |
+          Write-Host "Deploying DataEngine application..." -ForegroundColor Yellow
+          
+          # Use Helm ONLY for the application, not databases
+          cd k8s/data-engine-helm
+          
+          helm upgrade --install dataengine . `
+            --namespace $env:NAMESPACE `
+            --set image.repository=ghcr.io/nwagbara-group-llc/data-engine `
+            --set image.tag=latest `
+            --set image.pullSecrets[0].name=ghcr-secret `
+            --set customPostgresql.enabled=false `
+            --set customRedis.enabled=false `
+            --set migration.enabled=false `
+            --set postgresql.host=postgresql `
+            --set redis.host=redis `
+            --wait `
+            --timeout 10m
+
+      - name: Verify Deployment
+        shell: powershell
+        run: |
+          Write-Host "Deployment Status:" -ForegroundColor Cyan
+          kubectl get all -n $env:NAMESPACE
+          
+          Write-Host "`nPod Logs (last 20 lines):" -ForegroundColor Cyan
+          kubectl logs -n $env:NAMESPACE -l app.kubernetes.io/name=data-engine --tail=20 --prefix=true

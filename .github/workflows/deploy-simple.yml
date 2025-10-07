@@ -1,0 +1,63 @@
+name: Deploy DataEngine (No Helm for Databases)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  NAMESPACE: dataengine
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, windows, x64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Namespace & Secrets
+        shell: powershell
+        env:
+          GHCR_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          kubectl create namespace $env:NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+          
+          kubectl delete secret ghcr-secret -n $env:NAMESPACE --ignore-not-found=true
+          kubectl create secret docker-registry ghcr-secret `
+            --docker-server=ghcr.io `
+            --docker-username=${{ github.actor }} `
+            --docker-password=$env:GHCR_TOKEN `
+            --namespace $env:NAMESPACE
+
+      - name: Deploy Databases (Plain YAML)
+        shell: powershell
+        run: |
+          Write-Host "Deploying PostgreSQL..." -ForegroundColor Yellow
+          kubectl apply -f k8s/plain-yaml/postgresql.yaml
+          
+          Write-Host "Deploying Redis..." -ForegroundColor Yellow
+          kubectl apply -f k8s/plain-yaml/redis.yaml
+          
+          Write-Host "Waiting for databases to be ready..." -ForegroundColor Yellow
+          kubectl wait --for=condition=ready pod -l app=postgresql -n $env:NAMESPACE --timeout=300s
+          kubectl wait --for=condition=ready pod -l app=redis -n $env:NAMESPACE --timeout=300s
+
+      - name: Deploy DataEngine App (Helm)
+        shell: powershell
+        run: |
+          cd k8s/data-engine-helm
+          
+          helm upgrade --install dataengine . `
+            --namespace $env:NAMESPACE `
+            --set customPostgresql.enabled=false `
+            --set customRedis.enabled=false `
+            --set postgresql.host=postgresql `
+            --set redis.host=redis `
+            --set image.pullSecrets[0].name=ghcr-secret `
+            --wait `
+            --timeout 10m
+
+      - name: Verify
+        shell: powershell
+        run: |
+          kubectl get all -n $env:NAMESPACE
