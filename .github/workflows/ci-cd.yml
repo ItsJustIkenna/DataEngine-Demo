@@ -23,7 +23,7 @@ jobs:
     
     steps:
       # ============================================================================
-      # PHASE 1: BUILD - Create and push Docker image
+      # PHASE 1: PREPARE - Checkout and verify existing image
       # ============================================================================
       
       - name: Checkout DataEngine
@@ -32,36 +32,6 @@ jobs:
           path: DataEngine
           clean: true
 
-      - name: Checkout databaseschema
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/databaseschema
-          path: databaseschema
-          fetch-depth: 0
-
-      - name: Checkout redisutils
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/redisutils
-          path: redisutils
-          fetch-depth: 0
-
-      - name: Checkout LoggingEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/LoggingEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: LoggingEngine
-          fetch-depth: 0
-
-      - name: Checkout MessageBrokerEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: MessageBrokerEngine
-          fetch-depth: 0
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -69,70 +39,26 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Debug - Verify Workspace Structure
+      - name: Verify Existing Image
         shell: powershell
         run: |
-          Write-Host "Current working directory:" -ForegroundColor Cyan
-          Get-Location
+          Write-Host "Verifying existing image from GHCR..." -ForegroundColor Cyan
           
-          Write-Host "`nWorkspace root contents:" -ForegroundColor Cyan
-          Get-ChildItem -Name
-          
-          Write-Host "`ndatabaseschema contents:" -ForegroundColor Cyan
-          if (Test-Path "databaseschema") {
-            Get-ChildItem -Path databaseschema -Recurse -Name | Select-String "backtest_result"
-          } else {
-            Write-Host "ERROR: databaseschema directory not found!" -ForegroundColor Red
-          }
-          
-          Write-Host "`nDataEngine Dockerfile exists:" -ForegroundColor Cyan
-          Test-Path "DataEngine/Dockerfile"
-
-      - name: Build Docker Image
-        shell: powershell
-        run: |
-          $shortSha = "${{ github.sha }}".Substring(0, 7)
-          
-          Write-Host "Building DataEngine Docker image..." -ForegroundColor Cyan
-          Write-Host "Build context: GitHub Actions workspace root" -ForegroundColor Gray
-          Write-Host "Current directory: $(Get-Location)" -ForegroundColor Gray
-          
-          # Verify critical paths before building
-          Write-Host "`nVerifying build requirements:" -ForegroundColor Yellow
-          Write-Host "  - DataEngine/Dockerfile: $(Test-Path 'DataEngine/Dockerfile')" -ForegroundColor Gray
-          Write-Host "  - databaseschema/: $(Test-Path 'databaseschema')" -ForegroundColor Gray
-          Write-Host "  - databaseschema/src/models/backtest_result.rs: $(Test-Path 'databaseschema/src/models/backtest_result.rs')" -ForegroundColor Gray
-          
-          # Build from workspace root
-          # Dockerfile needs access to: databaseschema, redisutils, LoggingEngine, MessageBrokerEngine
-          Write-Host "`nStarting Docker build..." -ForegroundColor Cyan
-          docker build `
-            --progress=plain `
-            -f DataEngine/Dockerfile `
-            -t ${env:IMAGE_NAME}:latest `
-            -t ${env:IMAGE_NAME}:sha-$shortSha `
-            .
+          # Pull the latest image to verify it exists
+          docker pull ${env:IMAGE_NAME}:latest
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "`nERROR: Docker build failed" -ForegroundColor Red
-            Write-Host "Showing last 50 lines of build output..." -ForegroundColor Yellow
+            Write-Host "ERROR: Failed to pull image from GHCR" -ForegroundColor Red
+            Write-Host "Image: ${env:IMAGE_NAME}:latest" -ForegroundColor Yellow
             exit 1
           }
           
-          Write-Host "`nSUCCESS: Build successful" -ForegroundColor Green
-
-      - name: Push Image to GHCR
-        shell: powershell
-        run: |
-          $shortSha = "${{ github.sha }}".Substring(0, 7)
-          
-          Write-Host "Pushing images to GHCR..." -ForegroundColor Cyan
-          docker push ${env:IMAGE_NAME}:latest
-          docker push ${env:IMAGE_NAME}:sha-$shortSha
-          
-          Write-Host "SUCCESS: Images pushed" -ForegroundColor Green
+          Write-Host "SUCCESS: Using existing image from GHCR" -ForegroundColor Green
           Write-Host "   - ${env:IMAGE_NAME}:latest" -ForegroundColor White
-          Write-Host "   - ${env:IMAGE_NAME}:sha-$shortSha" -ForegroundColor White
+          
+          # Show image details
+          Write-Host "`nImage details:" -ForegroundColor Cyan
+          docker images ${env:IMAGE_NAME}:latest
 
       # ============================================================================
       # PHASE 2: PREPARE - Set up Kubernetes environment
