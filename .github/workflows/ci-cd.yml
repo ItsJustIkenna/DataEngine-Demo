@@ -1,14 +1,12 @@
-name: CI/CD - Build and Deploy DataEngine
+name: DataEngine CI/CD
 
-# Trigger: Automatic on every push to main branch
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
       clean_deploy:
-        description: 'Delete all resources and redeploy from scratch'
-        required: false
+        description: 'Clean deploy (delete all resources first)'
         type: boolean
         default: false
 
@@ -18,268 +16,104 @@ env:
 
 jobs:
   build-and-deploy:
-    name: Build Image and Deploy to Kubernetes
     runs-on: [self-hosted, windows, x64]
     
     steps:
-      # ============================================================================
-      # PHASE 1: BUILD - Create and push Docker image
-      # ============================================================================
-      
-      - name: Checkout DataEngine
+      # === CHECKOUT ===
+      - name: Checkout repositories
         uses: actions/checkout@v4
         with:
           path: DataEngine
-          clean: true
 
-      - name: Checkout databaseschema
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
 
-      - name: Checkout redisutils
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
           path: redisutils
 
-      - name: Checkout LoggingEngine
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: LoggingEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
-      - name: Checkout MessageBrokerEngine
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: MessageBrokerEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
+      # === BUILD ===
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
 
-      - name: Log in to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
-            registry: ghcr.io
-            username: ${{ github.actor }}
-            password: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=sha,prefix=sha-,format=short
-
-      - name: Verify backtest files in workspace
-        shell: powershell
-        run: |
-          Write-Host "Checking databaseschema files in workspace..." -ForegroundColor Cyan
-          Write-Host "Current directory: $(Get-Location)" -ForegroundColor Gray
-          
-          Write-Host "`nFiles in databaseschema/src/ops/:" -ForegroundColor Yellow
-          Get-ChildItem -Path databaseschema/src/ops/ -Name
-          
-          Write-Host "`nChecking backtest_result_ops.rs:" -ForegroundColor Yellow
-          if (Test-Path "databaseschema/src/ops/backtest_result_ops.rs") {
-            Write-Host "  EXISTS - Size: $((Get-Item databaseschema/src/ops/backtest_result_ops.rs).Length) bytes" -ForegroundColor Green
-          } else {
-            Write-Host "  MISSING!" -ForegroundColor Red
-          }
-          
-          Write-Host "`nChecking backtest_result.rs:" -ForegroundColor Yellow
-          if (Test-Path "databaseschema/src/models/backtest_result.rs") {
-            Write-Host "  EXISTS - Size: $((Get-Item databaseschema/src/models/backtest_result.rs).Length) bytes" -ForegroundColor Green
-          } else {
-            Write-Host "  MISSING!" -ForegroundColor Red
-          }
-
-      - name: Create safe .dockerignore
-        shell: powershell
-        run: |
-          Write-Host "Creating .dockerignore without **/*test*.rs pattern..." -ForegroundColor Cyan
-          "target/", "**/target/", ".vscode/", ".idea/", ".git/", "*.log", "*.tmp", "**/tests/", "**/*_test.rs", "**/*_tests.rs", "**/examples/", "**/benches/", "**/k8s/" | Out-File -FilePath .dockerignore -Encoding ASCII
-          Write-Host "Created .dockerignore (will NOT exclude backtest_result.rs)" -ForegroundColor Green
-
-
-      - name: Build and Push with Buildx (Cached)
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: DataEngine/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Skip cache-from on first build (cache doesn't exist yet)
-          # cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
-          platforms: linux/amd64
-          provenance: false
 
-      # ============================================================================
-      # PHASE 2: PREPARE - Set up Kubernetes environment
-      # ============================================================================
-
-      - name: Clean Deploy (Optional)
+      # === DEPLOY ===
+      - name: Clean deploy (optional)
         if: github.event.inputs.clean_deploy == 'true'
-        shell: powershell
         run: |
-          Write-Host "CLEAN DEPLOY: Deleting all resources..." -ForegroundColor Yellow
-          kubectl delete namespace ${env:NAMESPACE} --ignore-not-found=true
-          
-          Write-Host "Waiting for namespace deletion..." -ForegroundColor Yellow
-          $timeout = 180
-          $elapsed = 0
-          while ((kubectl get namespace ${env:NAMESPACE} 2>$null) -and ($elapsed -lt $timeout)) {
-            Start-Sleep -Seconds 5
-            $elapsed += 5
-            Write-Host "   Waiting... ($elapsed seconds)" -ForegroundColor Gray
-          }
-          
-          Write-Host "SUCCESS: Clean slate ready" -ForegroundColor Green
+          kubectl delete namespace ${{ env.NAMESPACE }} --ignore-not-found
+          Start-Sleep -Seconds 30
 
-      - name: Create Namespace
-        shell: powershell
+      - name: Create namespace
         run: |
-          kubectl create namespace ${env:NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-          Write-Host "SUCCESS: Namespace ready - ${env:NAMESPACE}" -ForegroundColor Green
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create Secrets
-        shell: powershell
+      - name: Create secrets
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
         run: |
-          Write-Host "Creating secrets..." -ForegroundColor Cyan
-          
-          # Database credentials
-          kubectl create secret generic database-credentials `
-            --from-literal=password=${env:POSTGRES_PASSWORD} `
-            --namespace ${env:NAMESPACE} `
-            --dry-run=client -o yaml | kubectl apply -f -
-          
-          # Redis credentials
-          kubectl create secret generic redis-credentials `
-            --from-literal=password=${env:REDIS_PASSWORD} `
-            --namespace ${env:NAMESPACE} `
-            --dry-run=client -o yaml | kubectl apply -f -
-          
-          # GHCR image pull secret
-          kubectl create secret docker-registry ghcr-secret `
-            --docker-server=ghcr.io `
-            --docker-username=${{ github.actor }} `
-            --docker-password=${{ secrets.PERSONAL_ACCESS_TOKEN }} `
-            --namespace ${env:NAMESPACE} `
-            --dry-run=client -o yaml | kubectl apply -f -
-          
-          Write-Host "SUCCESS: Secrets created" -ForegroundColor Green
-
-      # ============================================================================
-      # PHASE 3: INFRASTRUCTURE - Deploy PostgreSQL and Redis
-      # ============================================================================
+          kubectl create secret generic database-credentials --from-literal=password=$env:POSTGRES_PASSWORD -n ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic redis-credentials --from-literal=password=$env:REDIS_PASSWORD -n ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry ghcr-secret --docker-server=ghcr.io --docker-username=${{ github.actor }} --docker-password=${{ secrets.PERSONAL_ACCESS_TOKEN }} -n ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy PostgreSQL
-        shell: powershell
         run: |
-          Write-Host "Deploying PostgreSQL..." -ForegroundColor Cyan
           kubectl apply -f DataEngine/k8s/simple/postgresql.yaml
-          
-          Write-Host "Waiting for PostgreSQL to be ready..." -ForegroundColor Yellow
-          kubectl wait --for=condition=ready pod -l app=postgresql -n ${env:NAMESPACE} --timeout=300s
-          
-          Write-Host "SUCCESS: PostgreSQL is ready" -ForegroundColor Green
+          kubectl wait --for=condition=ready pod -l app=postgresql -n ${{ env.NAMESPACE }} --timeout=300s
 
       - name: Deploy Redis
-        shell: powershell
         run: |
-          Write-Host "Deploying Redis..." -ForegroundColor Cyan
           kubectl apply -f DataEngine/k8s/simple/redis.yaml
-          
-          Write-Host "Waiting for Redis to be ready..." -ForegroundColor Yellow
-          kubectl wait --for=condition=ready pod -l app=redis -n ${env:NAMESPACE} --timeout=300s
-          
-          Write-Host "SUCCESS: Redis is ready" -ForegroundColor Green
+          kubectl wait --for=condition=ready pod -l app=redis -n ${{ env.NAMESPACE }} --timeout=300s
 
-      # ============================================================================
-      # PHASE 4: DATABASE - Run migrations
-      # ============================================================================
-
-      - name: Run Database Migrations
-        shell: powershell
+      - name: Run migrations
         run: |
-          Write-Host "Running database migrations..." -ForegroundColor Cyan
-          
-          # Delete old migration job if it exists
-          kubectl delete job database-migrations -n ${env:NAMESPACE} --ignore-not-found=true
+          kubectl delete job database-migrations -n ${{ env.NAMESPACE }} --ignore-not-found
           Start-Sleep -Seconds 2
-          
-          # Apply new migration job
           kubectl apply -f DataEngine/k8s/simple/migrations.yaml
-          
-          Write-Host "Waiting for migrations to complete..." -ForegroundColor Yellow
-          kubectl wait --for=condition=complete job/database-migrations -n ${env:NAMESPACE} --timeout=300s
-          
-          # Show migration logs
-          Write-Host "`nMigration logs:" -ForegroundColor Cyan
-          kubectl logs job/database-migrations -n ${env:NAMESPACE}
-          
-          Write-Host "`nSUCCESS: Migrations completed" -ForegroundColor Green
-
-      # ============================================================================
-      # PHASE 5: APPLICATION - Deploy DataEngine
-      # ============================================================================
+          kubectl wait --for=condition=complete job/database-migrations -n ${{ env.NAMESPACE }} --timeout=300s
 
       - name: Deploy DataEngine
-        shell: powershell
         run: |
-          Write-Host "Deploying DataEngine..." -ForegroundColor Cyan
           kubectl apply -f DataEngine/k8s/simple/dataengine.yaml
-          
-          Write-Host "Waiting for DataEngine pods to be ready..." -ForegroundColor Yellow
-          kubectl wait --for=condition=ready pod -l app=dataengine -n ${env:NAMESPACE} --timeout=300s
-          
-          Write-Host "SUCCESS: DataEngine deployed" -ForegroundColor Green
+          kubectl wait --for=condition=ready pod -l app=dataengine -n ${{ env.NAMESPACE }} --timeout=300s
 
-      # ============================================================================
-      # PHASE 6: VERIFY - Check deployment status
-      # ============================================================================
-
-      - name: Verify Deployment
-        shell: powershell
-        run: |
-          Write-Host "`n" -NoNewline
-          Write-Host "========================================" -ForegroundColor Cyan
-          Write-Host "   DataEngine Deployment Status" -ForegroundColor Cyan
-          Write-Host "========================================" -ForegroundColor Cyan
-          
-          Write-Host "`nPods:" -ForegroundColor Yellow
-          kubectl get pods -n ${env:NAMESPACE} -o wide
-          
-          Write-Host "`nServices:" -ForegroundColor Yellow
-          kubectl get services -n ${env:NAMESPACE}
-          
-          Write-Host "`nStatefulSets:" -ForegroundColor Yellow
-          kubectl get statefulsets -n ${env:NAMESPACE}
-          
-          Write-Host "`nDeployments:" -ForegroundColor Yellow
-          kubectl get deployments -n ${env:NAMESPACE}
-          
-          Write-Host "`nSUCCESS: Deployment Complete!" -ForegroundColor Green
-          Write-Host "   Access DataEngine: kubectl port-forward -n ${env:NAMESPACE} svc/dataengine 8080:8080" -ForegroundColor Cyan
-          Write-Host "   View logs: kubectl logs -f deployment/dataengine -n ${env:NAMESPACE}" -ForegroundColor Cyan
-
-      - name: Show Recent Logs
+      - name: Show status
         if: success()
-        shell: powershell
         run: |
-          Write-Host "`nRecent DataEngine logs:" -ForegroundColor Cyan
-          kubectl logs -n ${env:NAMESPACE} deployment/dataengine --tail=50
+          kubectl get pods -n ${{ env.NAMESPACE }}
+          kubectl get services -n ${{ env.NAMESPACE }}
