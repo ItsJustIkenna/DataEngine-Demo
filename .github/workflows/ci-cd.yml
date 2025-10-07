@@ -64,47 +64,41 @@ jobs:
       # === DEPLOY ===
       - name: Clean deploy (optional)
         if: github.event.inputs.clean_deploy == 'true'
-        run: |
-          kubectl delete namespace ${{ env.NAMESPACE }} --ignore-not-found
-          Start-Sleep -Seconds 30
+        run: helm uninstall dataengine -n ${{ env.NAMESPACE }} --ignore-not-found
 
-      - name: Create namespace
-        run: |
-          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Create secrets
+      - name: Deploy with Helm
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
-          kubectl create secret generic database-credentials --from-literal=password=$env:POSTGRES_PASSWORD -n ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create secret generic redis-credentials --from-literal=password=$env:REDIS_PASSWORD -n ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create secret docker-registry ghcr-secret --docker-server=ghcr.io --docker-username=${{ github.actor }} --docker-password=${{ secrets.PERSONAL_ACCESS_TOKEN }} -n ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          helm upgrade --install dataengine DataEngine/k8s/data-engine-helm `
+            --namespace ${{ env.NAMESPACE }} `
+            --create-namespace `
+            --set image.repository=${{ env.IMAGE_NAME }} `
+            --set image.tag=${{ github.sha }} `
+            --set image.pullSecrets[0].name=ghcr-secret `
+            --set customPostgresql.enabled=true `
+            --set customPostgresql.auth.password=$env:POSTGRES_PASSWORD `
+            --set customRedis.enabled=true `
+            --set customRedis.auth.password=$env:REDIS_PASSWORD `
+            --set migration.enabled=true `
+            --set-string imagePullSecrets[0].name=ghcr-secret `
+            --wait `
+            --timeout 10m
 
-      - name: Deploy PostgreSQL
+      - name: Create image pull secret
         run: |
-          kubectl apply -f DataEngine/k8s/simple/postgresql.yaml
-          kubectl wait --for=condition=ready pod -l app=postgresql -n ${{ env.NAMESPACE }} --timeout=300s
+          kubectl create secret docker-registry ghcr-secret `
+            --docker-server=ghcr.io `
+            --docker-username=${{ github.actor }} `
+            --docker-password=${{ secrets.GHCR_TOKEN }} `
+            -n ${{ env.NAMESPACE }} `
+            --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy Redis
-        run: |
-          kubectl apply -f DataEngine/k8s/simple/redis.yaml
-          kubectl wait --for=condition=ready pod -l app=redis -n ${{ env.NAMESPACE }} --timeout=300s
-
-      - name: Run migrations
-        run: |
-          kubectl delete job database-migrations -n ${{ env.NAMESPACE }} --ignore-not-found
-          Start-Sleep -Seconds 2
-          kubectl apply -f DataEngine/k8s/simple/migrations.yaml
-          kubectl wait --for=condition=complete job/database-migrations -n ${{ env.NAMESPACE }} --timeout=300s
-
-      - name: Deploy DataEngine
-        run: |
-          kubectl apply -f DataEngine/k8s/simple/dataengine.yaml
-          kubectl wait --for=condition=ready pod -l app=dataengine -n ${{ env.NAMESPACE }} --timeout=300s
-
-      - name: Show status
+      - name: Show deployment status
         if: success()
         run: |
+          helm status dataengine -n ${{ env.NAMESPACE }}
           kubectl get pods -n ${{ env.NAMESPACE }}
           kubectl get services -n ${{ env.NAMESPACE }}
