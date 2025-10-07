@@ -13,8 +13,8 @@ on:
         default: false
 
 env:
-  IMAGE_NAME: ghcr.io/nwagbara-group-llc/data-engine
-  NAMESPACE: data-engine
+  IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
+  NAMESPACE: dataengine
 
 jobs:
   build-and-deploy:
@@ -23,7 +23,7 @@ jobs:
     
     steps:
       # ============================================================================
-      # PHASE 1: PREPARE - Checkout and verify existing image
+      # PHASE 1: BUILD - Create and push Docker image
       # ============================================================================
       
       - name: Checkout DataEngine
@@ -32,6 +32,38 @@ jobs:
           path: DataEngine
           clean: true
 
+      - name: Checkout databaseschema
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/databaseschema
+          path: databaseschema
+
+      - name: Checkout redisutils
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/redisutils
+          path: redisutils
+
+      - name: Checkout LoggingEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/LoggingEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: LoggingEngine
+
+      - name: Checkout MessageBrokerEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/MessageBrokerEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: MessageBrokerEngine
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -39,26 +71,27 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify Existing Image
-        shell: powershell
-        run: |
-          Write-Host "Verifying existing image from GHCR..." -ForegroundColor Cyan
-          
-          # Pull the latest image to verify it exists
-          docker pull ${env:IMAGE_NAME}:latest
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Failed to pull image from GHCR" -ForegroundColor Red
-            Write-Host "Image: ${env:IMAGE_NAME}:latest" -ForegroundColor Yellow
-            exit 1
-          }
-          
-          Write-Host "SUCCESS: Using existing image from GHCR" -ForegroundColor Green
-          Write-Host "   - ${env:IMAGE_NAME}:latest" -ForegroundColor White
-          
-          # Show image details
-          Write-Host "`nImage details:" -ForegroundColor Cyan
-          docker images ${env:IMAGE_NAME}:latest
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and Push with Buildx (Cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: DataEngine/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
+          platforms: linux/amd64
+          provenance: false
 
       # ============================================================================
       # PHASE 2: PREPARE - Set up Kubernetes environment
