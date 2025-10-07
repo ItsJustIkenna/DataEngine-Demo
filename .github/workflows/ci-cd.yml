@@ -103,6 +103,13 @@ jobs:
             Write-Host "  MISSING!" -ForegroundColor Red
           }
 
+      - name: Create safe .dockerignore
+        shell: powershell
+        run: |
+          Write-Host "Creating .dockerignore without **/*test*.rs pattern..." -ForegroundColor Cyan
+          "target/", "**/target/", ".vscode/", ".idea/", ".git/", "*.log", "*.tmp", "**/tests/", "**/*_test.rs", "**/*_tests.rs", "**/examples/", "**/benches/", "**/k8s/" | Out-File -FilePath .dockerignore -Encoding ASCII
+          Write-Host "Created .dockerignore (will NOT exclude backtest_result.rs)" -ForegroundColor Green
+
 
       - name: Build and Push with Buildx (Cached)
         uses: docker/build-push-action@v5
