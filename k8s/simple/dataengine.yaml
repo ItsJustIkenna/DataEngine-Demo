@@ -1,0 +1,102 @@
+---
+# DataEngine Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: dataengine
+  namespace: dataengine
+  labels:
+    app: dataengine
+spec:
+  selector:
+    app: dataengine
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  type: ClusterIP
+---
+# DataEngine Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dataengine
+  namespace: dataengine
+  labels:
+    app: dataengine
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: dataengine
+  template:
+    metadata:
+      labels:
+        app: dataengine
+    spec:
+      imagePullSecrets:
+      - name: ghcr-secret
+      containers:
+      - name: dataengine
+        image: ghcr.io/nwagbara-group-llc/dataengine:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://dataengine:$(POSTGRES_PASSWORD)@postgresql:5432/dataengine?sslmode=disable"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: password
+        - name: RUST_LOG
+          value: "info"
+        - name: RUST_BACKTRACE
+          value: "1"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      restartPolicy: Always
