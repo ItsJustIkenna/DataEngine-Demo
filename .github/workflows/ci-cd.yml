@@ -13,8 +13,8 @@ on:
         default: false
 
 env:
-  IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
-  NAMESPACE: dataengine
+  IMAGE_NAME: ghcr.io/nwagbara-group-llc/data-engine
+  NAMESPACE: data-engine
 
 jobs:
   build-and-deploy:
