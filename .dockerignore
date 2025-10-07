@@ -95,8 +95,7 @@ Thumbs.db
 # Test files
 **/tests/**
 **/*_test.rs
-**/*_tests.rs
-# Note: Do NOT use **/*test*.rs as it excludes files like backtest_result.rs
+**/*test*.rs
 
 # Docker and deployment files
 **/Dockerfile*

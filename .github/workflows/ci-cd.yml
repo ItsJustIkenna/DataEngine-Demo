@@ -37,33 +37,12 @@ jobs:
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
-          ref: main
-
-      - name: Debug - Verify databaseschema checkout
-        shell: powershell
-        run: |
-          Write-Host "Files in databaseschema/src/ops/:" -ForegroundColor Cyan
-          Get-ChildItem -Path databaseschema/src/ops/ -Name
-          
-          Write-Host "`nChecking backtest files:" -ForegroundColor Cyan
-          if (Test-Path "databaseschema/src/ops/backtest_result_ops.rs") {
-            Write-Host "  backtest_result_ops.rs EXISTS" -ForegroundColor Green
-          } else {
-            Write-Host "  backtest_result_ops.rs MISSING!" -ForegroundColor Red
-          }
-          
-          if (Test-Path "databaseschema/src/models/backtest_result.rs") {
-            Write-Host "  backtest_result.rs EXISTS" -ForegroundColor Green
-          } else {
-            Write-Host "  backtest_result.rs MISSING!" -ForegroundColor Red
-          }
 
       - name: Checkout redisutils
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
           path: redisutils
-          ref: main
 
       - name: Checkout LoggingEngine
         uses: actions/checkout@v4
@@ -71,7 +50,6 @@ jobs:
           repository: Nwagbara-Group-LLC/LoggingEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: LoggingEngine
-          ref: main
 
       - name: Checkout MessageBrokerEngine
         uses: actions/checkout@v4
@@ -79,7 +57,6 @@ jobs:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: MessageBrokerEngine
-          ref: main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -103,15 +80,12 @@ jobs:
             type=raw,value=latest
             type=sha,prefix=sha-,format=short
 
-      - name: Verify Directory Structure
-        shell: powershell
-        run: |
-          Write-Host "Listing databaseschema/src/ops/:" -ForegroundColor Cyan
-          Get-ChildItem -Path databaseschema/src/ops/ -Recurse | Format-Table Name, Length, LastWriteTime
-          
-          Write-Host "`nListing databaseschema/src/models/:" -ForegroundColor Cyan
-          Get-ChildItem -Path databaseschema/src/models/ -Recurse | Format-Table Name, Length, LastWriteTime
+      - name: Check for backtest_result_ops.rs
+        run: ls -l /app/databaseschema/src/ops/backtest_result_ops.rs
+      - name: Check for backtest_result.rs
+        run: ls -l /app/databaseschema/src/models/backtest_result.rs
 
+        
       - name: Build and Push with Buildx (Cached)
         uses: docker/build-push-action@v5
         with:
