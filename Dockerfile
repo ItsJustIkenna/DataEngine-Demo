@@ -64,16 +64,19 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM deps AS build
 ARG APP_NAME
 
-# Copy actual DataEngine source code (this will invalidate cache only when source changes)
 COPY DataEngine/config/ ./config/
 COPY DataEngine/hostbuilder/ ./hostbuilder/
 COPY DataEngine/program/ ./program/
 COPY DataEngine/performance/ ./performance/
 
-# Ultra-aggressive optimization flags for production
+COPY databaseschema/ ./databaseschema/
+COPY redisutils/ ./redisutils/
+COPY LoggingEngine/ ./LoggingEngine/
+COPY MessageBrokerEngine/publisher/ ./MessageBrokerEngine/publisher/
+COPY MessageBrokerEngine/protocol/ ./MessageBrokerEngine/protocol/
+
 ENV RUSTFLAGS="-C opt-level=3 -C codegen-units=1 -C panic=abort -C target-cpu=native -C link-arg=-s"
 
-# Build the workspace with real source (dependencies are cached, only app code compiles)
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/DataEngine/target \
     cargo build --release --locked && \
