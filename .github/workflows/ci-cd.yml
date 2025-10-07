@@ -80,6 +80,9 @@ jobs:
             type=raw,value=latest
             type=sha,prefix=sha-,format=short
 
+      - run: ls -lR databaseschema/src/ops/
+      - run: ls -lR databaseschema/src/models/
+
       - name: Build and Push with Buildx (Cached)
         uses: docker/build-push-action@v5
         with:
