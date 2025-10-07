@@ -94,22 +94,32 @@ jobs:
           $shortSha = "${{ github.sha }}".Substring(0, 7)
           
           Write-Host "Building DataEngine Docker image..." -ForegroundColor Cyan
-          Write-Host "Build context: TradingPlatform root (required for dependencies)" -ForegroundColor Gray
+          Write-Host "Build context: GitHub Actions workspace root" -ForegroundColor Gray
+          Write-Host "Current directory: $(Get-Location)" -ForegroundColor Gray
           
-          # Build from repository root (not DataEngine folder)
+          # Verify critical paths before building
+          Write-Host "`nVerifying build requirements:" -ForegroundColor Yellow
+          Write-Host "  - DataEngine/Dockerfile: $(Test-Path 'DataEngine/Dockerfile')" -ForegroundColor Gray
+          Write-Host "  - databaseschema/: $(Test-Path 'databaseschema')" -ForegroundColor Gray
+          Write-Host "  - databaseschema/src/models/backtest_result.rs: $(Test-Path 'databaseschema/src/models/backtest_result.rs')" -ForegroundColor Gray
+          
+          # Build from workspace root
           # Dockerfile needs access to: databaseschema, redisutils, LoggingEngine, MessageBrokerEngine
+          Write-Host "`nStarting Docker build..." -ForegroundColor Cyan
           docker build `
+            --progress=plain `
             -f DataEngine/Dockerfile `
             -t ${env:IMAGE_NAME}:latest `
             -t ${env:IMAGE_NAME}:sha-$shortSha `
             .
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Docker build failed" -ForegroundColor Red
+            Write-Host "`nERROR: Docker build failed" -ForegroundColor Red
+            Write-Host "Showing last 50 lines of build output..." -ForegroundColor Yellow
             exit 1
           }
           
-          Write-Host "SUCCESS: Build successful" -ForegroundColor Green
+          Write-Host "`nSUCCESS: Build successful" -ForegroundColor Green
 
       - name: Push Image to GHCR
         shell: powershell
