@@ -1,16 +1,17 @@
 name: CI/CD - Build and Deploy DataEngine
 
-# Trigger: Automatic on push, optional manual trigger with clean deploy option
+# Trigger: Automatic on every push to main branch
 on:
   push:
     branches: [main]
-    paths:
-      - 'DataEngine/**'
-      - 'databaseschema/**'
-      - 'redisutils/**'
-      - 'LoggingEngine/**'
-      - 'MessageBrokerEngine/publisher/**'
-      - 'MessageBrokerEngine/protocol/**'
+  workflow_dispatch:
+    inputs:
+      clean_deploy:
+        description: 'Delete all resources and redeploy from scratch'
+        required: false
+        type: boolean
+        default: false
+
 env:
   IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
   NAMESPACE: dataengine
