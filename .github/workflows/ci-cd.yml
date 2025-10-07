@@ -80,12 +80,30 @@ jobs:
             type=raw,value=latest
             type=sha,prefix=sha-,format=short
 
-      - name: Check for backtest_result_ops.rs
-        run: ls -l /app/databaseschema/src/ops/backtest_result_ops.rs
-      - name: Check for backtest_result.rs
-        run: ls -l /app/databaseschema/src/models/backtest_result.rs
+      - name: Verify backtest files in workspace
+        shell: powershell
+        run: |
+          Write-Host "Checking databaseschema files in workspace..." -ForegroundColor Cyan
+          Write-Host "Current directory: $(Get-Location)" -ForegroundColor Gray
+          
+          Write-Host "`nFiles in databaseschema/src/ops/:" -ForegroundColor Yellow
+          Get-ChildItem -Path databaseschema/src/ops/ -Name
+          
+          Write-Host "`nChecking backtest_result_ops.rs:" -ForegroundColor Yellow
+          if (Test-Path "databaseschema/src/ops/backtest_result_ops.rs") {
+            Write-Host "  EXISTS - Size: $((Get-Item databaseschema/src/ops/backtest_result_ops.rs).Length) bytes" -ForegroundColor Green
+          } else {
+            Write-Host "  MISSING!" -ForegroundColor Red
+          }
+          
+          Write-Host "`nChecking backtest_result.rs:" -ForegroundColor Yellow
+          if (Test-Path "databaseschema/src/models/backtest_result.rs") {
+            Write-Host "  EXISTS - Size: $((Get-Item databaseschema/src/models/backtest_result.rs).Length) bytes" -ForegroundColor Green
+          } else {
+            Write-Host "  MISSING!" -ForegroundColor Red
+          }
 
-        
+
       - name: Build and Push with Buildx (Cached)
         uses: docker/build-push-action@v5
         with:
