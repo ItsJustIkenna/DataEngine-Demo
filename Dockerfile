@@ -42,6 +42,14 @@ COPY LoggingEngine/ ./LoggingEngine/
 COPY MessageBrokerEngine/publisher/ ./MessageBrokerEngine/publisher/
 COPY MessageBrokerEngine/protocol/ ./MessageBrokerEngine/protocol/
 
+# DEBUG: Verify files were copied
+RUN echo "=== Checking databaseschema files ===" && \
+    ls -la /app/databaseschema/src/ops/ && \
+    ls -la /app/databaseschema/src/models/ && \
+    echo "=== Checking if backtest files exist ===" && \
+    test -f /app/databaseschema/src/ops/backtest_result_ops.rs && echo "backtest_result_ops.rs EXISTS" || echo "backtest_result_ops.rs MISSING" && \
+    test -f /app/databaseschema/src/models/backtest_result.rs && echo "backtest_result.rs EXISTS" || echo "backtest_result.rs MISSING"
+
 # Change to DataEngine directory for build
 WORKDIR /app/DataEngine
 
