@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "data-engine.fullname" . }}-redis-master
+  name: {{ include "data-engine.redis.fullname" . }}-master
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "data-engine.labels" . | nindent 4 }}
@@ -21,13 +21,13 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "data-engine.fullname" . }}-redis
+  name: {{ include "data-engine.redis.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "data-engine.labels" . | nindent 4 }}
     app.kubernetes.io/component: redis
 spec:
-  serviceName: {{ include "data-engine.fullname" . }}-redis-master
+  serviceName: {{ include "data-engine.redis.fullname" . }}-master
   replicas: 1
   selector:
     matchLabels:

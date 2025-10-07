@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "data-engine.fullname" . }}-postgresql-primary
+  name: {{ include "data-engine.postgresql.fullname" . }}-primary
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "data-engine.labels" . | nindent 4 }}
@@ -21,13 +21,13 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "data-engine.fullname" . }}-postgresql
+  name: {{ include "data-engine.postgresql.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "data-engine.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgresql
 spec:
-  serviceName: {{ include "data-engine.fullname" . }}-postgresql-primary
+  serviceName: {{ include "data-engine.postgresql.fullname" . }}-primary
   replicas: 1
   selector:
     matchLabels:

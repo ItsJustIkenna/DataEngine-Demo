@@ -16,7 +16,7 @@ data:
   
   # Database Configuration (non-sensitive)
   {{- if .Values.customPostgresql.enabled }}
-  POSTGRES_HOST: {{ include "data-engine.postgresql.fullname" . | quote }}
+  POSTGRES_HOST: {{ include "data-engine.postgresql.host" . | quote }}
   POSTGRES_PORT: "5432"
   POSTGRES_DB: {{ .Values.customPostgresql.auth.database | quote }}
   {{- else if .Values.externalDatabase.enabled }}
@@ -27,7 +27,7 @@ data:
   
   # Redis Configuration (non-sensitive)
   {{- if .Values.customRedis.enabled }}
-  REDIS_HOST: {{ include "data-engine.redis.fullname" . }}-master
+  REDIS_HOST: {{ include "data-engine.redis.host" . | quote }}
   REDIS_PORT: "6379"
   {{- else if .Values.externalRedis.enabled }}
   REDIS_HOST: {{ .Values.externalRedis.host | quote }}

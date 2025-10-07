@@ -128,6 +128,17 @@ Redis Secret name
 {{- end }}
 
 {{/*
+Redis host
+*/}}
+{{- define "data-engine.redis.host" -}}
+{{- if .Values.customRedis.enabled }}
+{{- printf "%s-master" (include "data-engine.redis.fullname" .) }}
+{{- else }}
+{{- .Values.externalRedis.host }}
+{{- end }}
+{{- end }}
+
+{{/*
 Return true if cert-manager issued certificate is enabled
 */}}
 {{- define "data-engine.ingress.certManagerRequest" -}}

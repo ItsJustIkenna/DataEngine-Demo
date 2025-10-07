@@ -66,6 +66,16 @@ jobs:
         if: github.event.inputs.clean_deploy == 'true'
         run: helm uninstall dataengine -n ${{ env.NAMESPACE }} --ignore-not-found
 
+      - name: Create image pull secret
+        run: |
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret docker-registry ghcr-secret `
+            --docker-server=ghcr.io `
+            --docker-username=${{ github.actor }} `
+            --docker-password=${{ secrets.GHCR_TOKEN }} `
+            -n ${{ env.NAMESPACE }} `
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy with Helm
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -83,29 +93,17 @@ jobs:
             --set customRedis.enabled=true `
             --set customRedis.auth.password=$env:REDIS_PASSWORD `
             --set migration.enabled=true `
-            --set-string imagePullSecrets[0].name=ghcr-secret `
             --wait `
             --timeout 20m
 
-      - name: Show deployment status on failure
-        if: failure()
-        run: |
-          helm status dataengine -n ${{ env.NAMESPACE }}
-          kubectl get pods -n ${{ env.NAMESPACE }}
-          kubectl describe pods -n ${{ env.NAMESPACE }}
-
-      - name: Create image pull secret
-        run: |
-          kubectl create secret docker-registry ghcr-secret `
-            --docker-server=ghcr.io `
-            --docker-username=${{ github.actor }} `
-            --docker-password=${{ secrets.GHCR_TOKEN }} `
-            -n ${{ env.NAMESPACE }} `
-            --dry-run=client -o yaml | kubectl apply -f -
-
       - name: Show deployment status
-        if: success()
+        if: always()
         run: |
-          helm status dataengine -n ${{ env.NAMESPACE }}
-          kubectl get pods -n ${{ env.NAMESPACE }}
-          kubectl get services -n ${{ env.NAMESPACE }}
+          Write-Host "=== Helm Status ==="
+          helm status dataengine -n ${{ env.NAMESPACE }} 2>&1 || echo "Helm release not found"
+          Write-Host "`n=== Pods ==="
+          kubectl get pods -n ${{ env.NAMESPACE }} 2>&1 || echo "No pods found"
+          Write-Host "`n=== Services ==="
+          kubectl get services -n ${{ env.NAMESPACE }} 2>&1 || echo "No services found"
+          Write-Host "`n=== Events (last 20) ==="
+          kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' 2>&1 | Select-Object -Last 20
