@@ -25,10 +25,37 @@ jobs:
       # PHASE 1: BUILD - Create and push Docker image
       # ============================================================================
       
-      - name: Checkout Code
+      - name: Checkout DataEngine
         uses: actions/checkout@v4
         with:
+          path: DataEngine
           clean: true
+
+      - name: Checkout databaseschema
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/databaseschema
+          path: databaseschema
+
+      - name: Checkout redisutils
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/redisutils
+          path: redisutils
+
+      - name: Checkout LoggingEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/LoggingEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: LoggingEngine
+
+      - name: Checkout MessageBrokerEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/MessageBrokerEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: MessageBrokerEngine
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
