@@ -67,7 +67,7 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          # cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache  # Uncomment after first successful build
           cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
 
       # === DEPLOY ===
