@@ -36,13 +36,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: databaseschema
+          fetch-depth: 0
 
       - name: Checkout redisutils
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: redisutils
+          fetch-depth: 0
 
       - name: Checkout LoggingEngine
         uses: actions/checkout@v4
