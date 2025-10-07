@@ -55,11 +55,30 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Check if image exists
+        id: check_image
+        run: |
+          if (docker pull ${{ env.IMAGE_NAME }}:${{ github.sha }}) {
+            echo "image_exists=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Image already exists, skipping build"
+          } else {
+            echo "image_exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Image not found, will build"
+          }
+        continue-on-error: true
+
       - name: Build and push
+        if: steps.check_image.outputs.image_exists != 'true'
         run: |
           docker build -t ${{ env.IMAGE_NAME }}:latest -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -f DataEngine/Dockerfile .
           docker push ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Tag as latest (if image exists)
+        if: steps.check_image.outputs.image_exists == 'true'
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.IMAGE_NAME }}:latest
 
       # === DEPLOY ===
       - name: Clean deploy (optional)
@@ -85,7 +104,14 @@ jobs:
             --set migration.enabled=true `
             --set-string imagePullSecrets[0].name=ghcr-secret `
             --wait `
-            --timeout 10m
+            --timeout 20m
+
+      - name: Show deployment status on failure
+        if: failure()
+        run: |
+          helm status dataengine -n ${{ env.NAMESPACE }}
+          kubectl get pods -n ${{ env.NAMESPACE }}
+          kubectl describe pods -n ${{ env.NAMESPACE }}
 
       - name: Create image pull secret
         run: |
