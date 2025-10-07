@@ -50,7 +50,7 @@ jobs:
         run: |
           $shortSha = "${{ github.sha }}".Substring(0, 7)
           
-          Write-Host "🔨 Building DataEngine Docker image..." -ForegroundColor Cyan
+          Write-Host "Building DataEngine Docker image..." -ForegroundColor Cyan
           docker build `
             -f DataEngine/Dockerfile `
             -t ${env:IMAGE_NAME}:latest `
@@ -58,22 +58,22 @@ jobs:
             .
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ Docker build failed" -ForegroundColor Red
+            Write-Host "ERROR: Docker build failed" -ForegroundColor Red
             exit 1
           }
           
-          Write-Host "✅ Build successful" -ForegroundColor Green
+          Write-Host "SUCCESS: Build successful" -ForegroundColor Green
 
       - name: Push Image to GHCR
         shell: powershell
         run: |
           $shortSha = "${{ github.sha }}".Substring(0, 7)
           
-          Write-Host "📤 Pushing images to GHCR..." -ForegroundColor Cyan
+          Write-Host "Pushing images to GHCR..." -ForegroundColor Cyan
           docker push ${env:IMAGE_NAME}:latest
           docker push ${env:IMAGE_NAME}:sha-$shortSha
           
-          Write-Host "✅ Pushed:" -ForegroundColor Green
+          Write-Host "SUCCESS: Images pushed" -ForegroundColor Green
           Write-Host "   - ${env:IMAGE_NAME}:latest" -ForegroundColor White
           Write-Host "   - ${env:IMAGE_NAME}:sha-$shortSha" -ForegroundColor White
 
@@ -85,10 +85,10 @@ jobs:
         if: github.event.inputs.clean_deploy == 'true'
         shell: powershell
         run: |
-          Write-Host "🧹 Clean deploy requested - deleting all resources..." -ForegroundColor Yellow
+          Write-Host "CLEAN DEPLOY: Deleting all resources..." -ForegroundColor Yellow
           kubectl delete namespace ${env:NAMESPACE} --ignore-not-found=true
           
-          Write-Host "⏳ Waiting for namespace deletion..." -ForegroundColor Yellow
+          Write-Host "Waiting for namespace deletion..." -ForegroundColor Yellow
           $timeout = 180
           $elapsed = 0
           while ((kubectl get namespace ${env:NAMESPACE} 2>$null) -and ($elapsed -lt $timeout)) {
@@ -97,13 +97,13 @@ jobs:
             Write-Host "   Waiting... ($elapsed seconds)" -ForegroundColor Gray
           }
           
-          Write-Host "✅ Clean slate ready" -ForegroundColor Green
+          Write-Host "SUCCESS: Clean slate ready" -ForegroundColor Green
 
       - name: Create Namespace
         shell: powershell
         run: |
           kubectl create namespace ${env:NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-          Write-Host "✅ Namespace ready: ${env:NAMESPACE}" -ForegroundColor Green
+          Write-Host "SUCCESS: Namespace ready - ${env:NAMESPACE}" -ForegroundColor Green
 
       - name: Create Secrets
         shell: powershell
@@ -111,7 +111,7 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD || 'dataengine123' }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD || 'redis123' }}
         run: |
-          Write-Host "🔐 Creating secrets..." -ForegroundColor Cyan
+          Write-Host "Creating secrets..." -ForegroundColor Cyan
           
           # Database credentials
           kubectl create secret generic database-credentials `
@@ -133,7 +133,7 @@ jobs:
             --namespace ${env:NAMESPACE} `
             --dry-run=client -o yaml | kubectl apply -f -
           
-          Write-Host "✅ Secrets created" -ForegroundColor Green
+          Write-Host "SUCCESS: Secrets created" -ForegroundColor Green
 
       # ============================================================================
       # PHASE 3: INFRASTRUCTURE - Deploy PostgreSQL and Redis
@@ -142,24 +142,24 @@ jobs:
       - name: Deploy PostgreSQL
         shell: powershell
         run: |
-          Write-Host "🐘 Deploying PostgreSQL..." -ForegroundColor Cyan
+          Write-Host "Deploying PostgreSQL..." -ForegroundColor Cyan
           kubectl apply -f DataEngine/k8s/simple/postgresql.yaml
           
-          Write-Host "⏳ Waiting for PostgreSQL to be ready..." -ForegroundColor Yellow
+          Write-Host "Waiting for PostgreSQL to be ready..." -ForegroundColor Yellow
           kubectl wait --for=condition=ready pod -l app=postgresql -n ${env:NAMESPACE} --timeout=300s
           
-          Write-Host "✅ PostgreSQL is ready" -ForegroundColor Green
+          Write-Host "SUCCESS: PostgreSQL is ready" -ForegroundColor Green
 
       - name: Deploy Redis
         shell: powershell
         run: |
-          Write-Host "🔴 Deploying Redis..." -ForegroundColor Cyan
+          Write-Host "Deploying Redis..." -ForegroundColor Cyan
           kubectl apply -f DataEngine/k8s/simple/redis.yaml
           
-          Write-Host "⏳ Waiting for Redis to be ready..." -ForegroundColor Yellow
+          Write-Host "Waiting for Redis to be ready..." -ForegroundColor Yellow
           kubectl wait --for=condition=ready pod -l app=redis -n ${env:NAMESPACE} --timeout=300s
           
-          Write-Host "✅ Redis is ready" -ForegroundColor Green
+          Write-Host "SUCCESS: Redis is ready" -ForegroundColor Green
 
       # ============================================================================
       # PHASE 4: DATABASE - Run migrations
@@ -168,7 +168,7 @@ jobs:
       - name: Run Database Migrations
         shell: powershell
         run: |
-          Write-Host "🗄️ Running database migrations..." -ForegroundColor Cyan
+          Write-Host "Running database migrations..." -ForegroundColor Cyan
           
           # Delete old migration job if it exists
           kubectl delete job database-migrations -n ${env:NAMESPACE} --ignore-not-found=true
@@ -177,14 +177,14 @@ jobs:
           # Apply new migration job
           kubectl apply -f DataEngine/k8s/simple/migrations.yaml
           
-          Write-Host "⏳ Waiting for migrations to complete..." -ForegroundColor Yellow
+          Write-Host "Waiting for migrations to complete..." -ForegroundColor Yellow
           kubectl wait --for=condition=complete job/database-migrations -n ${env:NAMESPACE} --timeout=300s
           
           # Show migration logs
-          Write-Host "`n📋 Migration logs:" -ForegroundColor Cyan
+          Write-Host "`nMigration logs:" -ForegroundColor Cyan
           kubectl logs job/database-migrations -n ${env:NAMESPACE}
           
-          Write-Host "`n✅ Migrations completed successfully" -ForegroundColor Green
+          Write-Host "`nSUCCESS: Migrations completed" -ForegroundColor Green
 
       # ============================================================================
       # PHASE 5: APPLICATION - Deploy DataEngine
@@ -193,13 +193,13 @@ jobs:
       - name: Deploy DataEngine
         shell: powershell
         run: |
-          Write-Host "🚀 Deploying DataEngine..." -ForegroundColor Cyan
+          Write-Host "Deploying DataEngine..." -ForegroundColor Cyan
           kubectl apply -f DataEngine/k8s/simple/dataengine.yaml
           
-          Write-Host "⏳ Waiting for DataEngine pods to be ready..." -ForegroundColor Yellow
+          Write-Host "Waiting for DataEngine pods to be ready..." -ForegroundColor Yellow
           kubectl wait --for=condition=ready pod -l app=dataengine -n ${env:NAMESPACE} --timeout=300s
           
-          Write-Host "✅ DataEngine deployed successfully" -ForegroundColor Green
+          Write-Host "SUCCESS: DataEngine deployed" -ForegroundColor Green
 
       # ============================================================================
       # PHASE 6: VERIFY - Check deployment status
@@ -213,19 +213,19 @@ jobs:
           Write-Host "   DataEngine Deployment Status" -ForegroundColor Cyan
           Write-Host "========================================" -ForegroundColor Cyan
           
-          Write-Host "`n📦 Pods:" -ForegroundColor Yellow
+          Write-Host "`nPods:" -ForegroundColor Yellow
           kubectl get pods -n ${env:NAMESPACE} -o wide
           
-          Write-Host "`n🌐 Services:" -ForegroundColor Yellow
+          Write-Host "`nServices:" -ForegroundColor Yellow
           kubectl get services -n ${env:NAMESPACE}
           
-          Write-Host "`n💾 StatefulSets:" -ForegroundColor Yellow
+          Write-Host "`nStatefulSets:" -ForegroundColor Yellow
           kubectl get statefulsets -n ${env:NAMESPACE}
           
-          Write-Host "`n🚀 Deployments:" -ForegroundColor Yellow
+          Write-Host "`nDeployments:" -ForegroundColor Yellow
           kubectl get deployments -n ${env:NAMESPACE}
           
-          Write-Host "`n✅ Deployment Complete!" -ForegroundColor Green
+          Write-Host "`nSUCCESS: Deployment Complete!" -ForegroundColor Green
           Write-Host "   Access DataEngine: kubectl port-forward -n ${env:NAMESPACE} svc/dataengine 8080:8080" -ForegroundColor Cyan
           Write-Host "   View logs: kubectl logs -f deployment/dataengine -n ${env:NAMESPACE}" -ForegroundColor Cyan
 
@@ -233,5 +233,5 @@ jobs:
         if: success()
         shell: powershell
         run: |
-          Write-Host "`n📋 Recent DataEngine logs:" -ForegroundColor Cyan
+          Write-Host "`nRecent DataEngine logs:" -ForegroundColor Cyan
           kubectl logs -n ${env:NAMESPACE} deployment/dataengine --tail=50
