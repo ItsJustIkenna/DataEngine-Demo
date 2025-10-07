@@ -11,14 +11,6 @@ on:
       - 'LoggingEngine/**'
       - 'MessageBrokerEngine/publisher/**'
       - 'MessageBrokerEngine/protocol/**'
-  workflow_dispatch:
-    inputs:
-      clean_deploy:
-        description: 'Delete all resources and redeploy from scratch'
-        required: false
-        type: boolean
-        default: false
-
 env:
   IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
   NAMESPACE: dataengine
@@ -51,6 +43,10 @@ jobs:
           $shortSha = "${{ github.sha }}".Substring(0, 7)
           
           Write-Host "Building DataEngine Docker image..." -ForegroundColor Cyan
+          Write-Host "Build context: TradingPlatform root (required for dependencies)" -ForegroundColor Gray
+          
+          # Build from repository root (not DataEngine folder)
+          # Dockerfile needs access to: databaseschema, redisutils, LoggingEngine, MessageBrokerEngine
           docker build `
             -f DataEngine/Dockerfile `
             -t ${env:IMAGE_NAME}:latest `
