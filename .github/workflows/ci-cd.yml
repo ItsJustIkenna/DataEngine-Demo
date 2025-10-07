@@ -39,6 +39,25 @@ jobs:
           path: databaseschema
           ref: main
 
+      - name: Debug - Verify databaseschema checkout
+        shell: powershell
+        run: |
+          Write-Host "Files in databaseschema/src/ops/:" -ForegroundColor Cyan
+          Get-ChildItem -Path databaseschema/src/ops/ -Name
+          
+          Write-Host "`nChecking backtest files:" -ForegroundColor Cyan
+          if (Test-Path "databaseschema/src/ops/backtest_result_ops.rs") {
+            Write-Host "  backtest_result_ops.rs EXISTS" -ForegroundColor Green
+          } else {
+            Write-Host "  backtest_result_ops.rs MISSING!" -ForegroundColor Red
+          }
+          
+          if (Test-Path "databaseschema/src/models/backtest_result.rs") {
+            Write-Host "  backtest_result.rs EXISTS" -ForegroundColor Green
+          } else {
+            Write-Host "  backtest_result.rs MISSING!" -ForegroundColor Red
+          }
+
       - name: Checkout redisutils
         uses: actions/checkout@v4
         with:
