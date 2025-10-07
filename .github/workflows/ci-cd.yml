@@ -80,8 +80,14 @@ jobs:
             type=raw,value=latest
             type=sha,prefix=sha-,format=short
 
-      - run: ls -lR databaseschema/src/ops/
-      - run: ls -lR databaseschema/src/models/
+      - name: Verify Directory Structure
+        shell: powershell
+        run: |
+          Write-Host "Listing databaseschema/src/ops/:" -ForegroundColor Cyan
+          Get-ChildItem -Path databaseschema/src/ops/ -Recurse | Format-Table Name, Length, LastWriteTime
+          
+          Write-Host "`nListing databaseschema/src/models/:" -ForegroundColor Cyan
+          Get-ChildItem -Path databaseschema/src/models/ -Recurse | Format-Table Name, Length, LastWriteTime
 
       - name: Build and Push with Buildx (Cached)
         uses: docker/build-push-action@v5
