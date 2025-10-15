@@ -3,16 +3,28 @@ name: DataEngine CI/CD
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       clean_deploy:
         description: 'Clean deploy (delete all resources first)'
         type: boolean
         default: false
+      skip_tests:
+        description: 'Skip tests'
+        type: boolean
+        default: false
+
+# Prevent concurrent deployments
+concurrency:
+  group: dataengine-deployment
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
   NAMESPACE: dataengine
+  HELM_TIMEOUT: 20m
 
 jobs:
   build-and-deploy:
@@ -29,11 +41,13 @@ jobs:
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
           path: redisutils
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - uses: actions/checkout@v4
         with:
@@ -53,53 +67,86 @@ jobs:
         with:
             registry: ghcr.io
             username: ${{ github.actor }}
-            password: ${{ secrets.GHCR_TOKEN }}
+            password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if image exists
         id: check_image
         run: |
-          if (docker pull ${{ env.IMAGE_NAME }}:${{ github.sha }} 2>$null) {
+          $ErrorActionPreference = 'SilentlyContinue'
+          Write-Host "Checking if image exists: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          docker pull ${{ env.IMAGE_NAME }}:${{ github.sha }} 2>&1 | Out-Null
+          if ($LASTEXITCODE -eq 0) {
             echo "image_exists=true" >> $env:GITHUB_OUTPUT
-            Write-Host "Image already exists for commit ${{ github.sha }}, skipping build"
+            Write-Host "✓ Image already exists, skipping build"
           } else {
             echo "image_exists=false" >> $env:GITHUB_OUTPUT
-            Write-Host "Image not found, will build"
+            Write-Host "✗ Image not found, will build"
           }
-        continue-on-error: true
+          exit 0
 
-      - name: Build and push
+      - name: Build and push Docker image
         if: steps.check_image.outputs.image_exists != 'true'
         run: |
+          Write-Host "Building Docker image..."
+          $startTime = Get-Date
+          
           docker build -t ${{ env.IMAGE_NAME }}:latest -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -f DataEngine/Dockerfile .
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Docker build failed"
+            exit 1
+          }
+          
+          Write-Host "Pushing images to registry..."
           docker push ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          
+          $duration = (Get-Date) - $startTime
+          Write-Host "✓ Build completed in $($duration.TotalMinutes.ToString('F2')) minutes"
 
-      - name: Tag as latest (if image exists)
+      - name: Tag existing image as latest
         if: steps.check_image.outputs.image_exists == 'true'
         run: |
           docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:latest
+          Write-Host "✓ Tagged existing image as latest"
 
       # === DEPLOY ===
-      - name: Clean deploy (optional)
-        if: github.event.inputs.clean_deploy == 'true'
-        run: helm uninstall dataengine -n ${{ env.NAMESPACE }} --ignore-not-found
-
-      - name: Create image pull secret
+      - name: Skip deployment on PR
+        if: github.event_name == 'pull_request'
         run: |
-          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create secret docker-registry ghcr-secret `
-            --docker-server=ghcr.io `
-            --docker-username=${{ github.actor }} `
-            --docker-password=${{ secrets.GHCR_TOKEN }} `
-            -n ${{ env.NAMESPACE }} `
-            --dry-run=client -o yaml | kubectl apply -f -
+          Write-Host "Skipping deployment for pull request"
+          Write-Host "Build completed successfully - image pushed to registry"
+          exit 0
 
-      - name: Create database secrets
+      - name: Clean deploy (optional)
+        if: github.event.inputs.clean_deploy == 'true' && github.event_name != 'pull_request'
+        run: |
+          Write-Host "Performing clean deployment..."
+          helm uninstall dataengine -n ${{ env.NAMESPACE }} --ignore-not-found --wait --timeout=5m
+          kubectl delete pvc --all -n ${{ env.NAMESPACE }} --ignore-not-found
+          Write-Host "✓ Clean deploy completed"
+
+      - name: Create namespace and secrets
+        if: github.event_name != 'pull_request'
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
         run: |
+          Write-Host "Creating namespace and secrets..."
+          
+          # Create namespace
+          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create image pull secret
+          kubectl create secret docker-registry ghcr-secret `
+            --docker-server=ghcr.io `
+            --docker-username=${{ github.actor }} `
+            --docker-password=${{ secrets.GITHUB_TOKEN }} `
+            -n ${{ env.NAMESPACE }} `
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create database secrets
           kubectl create secret generic postgresql-credentials `
             --from-literal=password=$env:POSTGRES_PASSWORD `
             -n ${{ env.NAMESPACE }} `
@@ -109,11 +156,37 @@ jobs:
             --from-literal=password=$env:REDIS_PASSWORD `
             -n ${{ env.NAMESPACE }} `
             --dry-run=client -o yaml | kubectl apply -f -
+          
+          Write-Host "✓ Namespace and secrets created/updated"
 
       - name: Delete old migration job
-        run: kubectl delete job -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration --ignore-not-found
+        if: github.event_name != 'pull_request'
+        run: |
+          kubectl delete job -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration --ignore-not-found
+          Write-Host "✓ Old migration jobs cleaned up"
+
+      - name: Clean up stuck Helm release
+        if: github.event_name != 'pull_request'
+        run: |
+          Write-Host "Checking for stuck Helm releases..."
+          $release = helm list -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json | Where-Object { $_.name -eq "dataengine" -and $_.status -match "pending" }
+          if ($release) {
+            Write-Host "⚠ Found stuck release in status: $($release.status)"
+            Write-Host "Attempting rollback..."
+            helm rollback dataengine -n ${{ env.NAMESPACE }} --wait --timeout=2m 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "Rollback failed, uninstalling release..."
+              helm uninstall dataengine -n ${{ env.NAMESPACE }} --wait --timeout=2m
+              Write-Host "✓ Stuck release uninstalled"
+            } else {
+              Write-Host "✓ Stuck release rolled back"
+            }
+          } else {
+            Write-Host "✓ No stuck releases found"
+          }
 
       - name: Deploy with Helm
+        if: github.event_name != 'pull_request'
         id: helm_deploy
         env:
           POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
@@ -123,6 +196,9 @@ jobs:
           REDIS_HOST: ${{ secrets.REDIS_HOST }}
           REDIS_PORT: ${{ secrets.REDIS_PORT }}
         run: |
+          Write-Host "Deploying DataEngine via Helm..."
+          $deployStart = Get-Date
+          
           helm upgrade --install dataengine DataEngine/k8s/data-engine-helm `
             --namespace ${{ env.NAMESPACE }} `
             --create-namespace `
@@ -144,38 +220,181 @@ jobs:
             --set migration.enabled=true `
             --atomic `
             --wait `
-            --timeout 20m
+            --timeout ${{ env.HELM_TIMEOUT }}
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Helm deployment failed"
+            exit 1
+          }
+          
+          $deployDuration = (Get-Date) - $deployStart
+          Write-Host "✓ Deployment completed in $($deployDuration.TotalMinutes.ToString('F2')) minutes"
 
       - name: Verify deployment
-        if: success()
+        if: success() && github.event_name != 'pull_request'
         run: |
+          Write-Host "Verifying deployment health..."
+          
+          # Wait for pods to be ready
           Write-Host "Waiting for pods to be ready..."
           kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine -n ${{ env.NAMESPACE }} --timeout=300s
           
-          Write-Host "`nChecking application health..."
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Pods failed to become ready"
+            exit 1
+          }
+          
+          # Health check with retries
+          Write-Host "`nChecking application health (with retries)..."
           $podName = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[0].metadata.name}'
-          kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health || Write-Host "Warning: Health check endpoint not responding"
+          
+          $maxRetries = 5
+          $retryCount = 0
+          $success = $false
+          
+          while ($retryCount -lt $maxRetries -and -not $success) {
+            $retryCount++
+            Write-Host "Health check attempt $retryCount of $maxRetries..."
+            
+            kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health 2>&1 | Out-Null
+            
+            if ($LASTEXITCODE -eq 0) {
+              $success = $true
+              Write-Host "✓ Health check passed"
+            } else {
+              if ($retryCount -lt $maxRetries) {
+                Write-Host "Health check failed, retrying in 10 seconds..."
+                Start-Sleep -Seconds 10
+              }
+            }
+          }
+          
+          if (-not $success) {
+            Write-Host "⚠ Warning: Health check endpoint not responding after $maxRetries attempts"
+          }
+          
+          Write-Host "`n✓ Deployment verification completed"
 
       - name: Rollback on failure
         if: failure() && steps.helm_deploy.outcome == 'failure'
         run: |
-          Write-Host "Deployment failed, rolling back..."
-          helm rollback dataengine -n ${{ env.NAMESPACE }} --wait
-          Write-Host "Rollback completed"
+          Write-Host "⚠ Deployment failed, attempting recovery..."
+          
+          # Check if there's a previous version to rollback to
+          $history = helm history dataengine -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json
+          
+          if ($history -and $history.Count -gt 1) {
+            Write-Host "Found previous version (revision $($history[-2].revision)), rolling back..."
+            helm rollback dataengine -n ${{ env.NAMESPACE }} --wait --timeout=5m
+            
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "✓ Successfully rolled back to previous version"
+            } else {
+              Write-Error "Rollback failed, deployment is in unstable state"
+              exit 1
+            }
+          } else {
+            Write-Host "No previous version to rollback to, uninstalling failed release..."
+            helm uninstall dataengine -n ${{ env.NAMESPACE }} --wait --timeout=5m
+            
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "✓ Failed release uninstalled cleanly"
+            } else {
+              Write-Error "Uninstall failed, manual intervention may be required"
+              exit 1
+            }
+          }
 
       - name: Show deployment status
+        if: always() && github.event_name != 'pull_request'
+        run: |
+          Write-Host "`n=========================================="
+          Write-Host "DEPLOYMENT STATUS REPORT"
+          Write-Host "==========================================`n"
+          
+          Write-Host "=== Helm Release Status ==="
+          helm status dataengine -n ${{ env.NAMESPACE }} 2>&1
+          if ($LASTEXITCODE -ne 0) { 
+            Write-Host "⚠ Helm release not found" 
+          }
+          
+          Write-Host "`n=== Kubernetes Resources ==="
+          Write-Host "`nPods:"
+          kubectl get pods -n ${{ env.NAMESPACE }} -o wide 2>&1
+          if ($LASTEXITCODE -ne 0) { Write-Host "No pods found" }
+          
+          Write-Host "`nServices:"
+          kubectl get services -n ${{ env.NAMESPACE }} 2>&1
+          if ($LASTEXITCODE -ne 0) { Write-Host "No services found" }
+          
+          Write-Host "`nJobs:"
+          kubectl get jobs -n ${{ env.NAMESPACE }} 2>&1
+          if ($LASTEXITCODE -ne 0) { Write-Host "No jobs found" }
+          
+          Write-Host "`n=== Recent Events (Last 20) ==="
+          $events = kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            $events | Select-Object -Last 20
+          } else {
+            Write-Host "No events found"
+          }
+          
+          # Show logs on failure
+          if ("${{ steps.helm_deploy.outcome }}" -eq "failure") {
+            Write-Host "`n=== Application Logs (Last 100 lines) ==="
+            $pods = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[*].metadata.name}' 2>&1
+            if ($LASTEXITCODE -eq 0 -and $pods) {
+              foreach ($pod in $pods.Split(' ')) {
+                Write-Host "`n--- Pod: $pod ---"
+                kubectl logs -n ${{ env.NAMESPACE }} $pod --tail=100 2>&1
+              }
+            } else {
+              Write-Host "No application pods found"
+            }
+            
+            Write-Host "`n=== Migration Job Logs ==="
+            $jobPods = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[*].metadata.name}' 2>&1
+            if ($LASTEXITCODE -eq 0 -and $jobPods) {
+              foreach ($jobPod in $jobPods.Split(' ')) {
+                Write-Host "`n--- Job Pod: $jobPod ---"
+                kubectl logs -n ${{ env.NAMESPACE }} $jobPod --tail=50 2>&1
+              }
+            } else {
+              Write-Host "No migration job pods found"
+            }
+          }
+          
+          Write-Host "`n=========================================="
+          Write-Host "END OF DEPLOYMENT STATUS REPORT"
+          Write-Host "=========================================="
+
+      - name: Deployment Summary
         if: always()
         run: |
-          Write-Host "=== Helm Status ==="
-          helm status dataengine -n ${{ env.NAMESPACE }} 2>&1 || Write-Host "Helm release not found"
-          Write-Host "`n=== Pods ==="
-          kubectl get pods -n ${{ env.NAMESPACE }} -o wide 2>&1 || Write-Host "No pods found"
-          Write-Host "`n=== Services ==="
-          kubectl get services -n ${{ env.NAMESPACE }} 2>&1 || Write-Host "No services found"
-          Write-Host "`n=== Recent Events ==="
-          kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' 2>&1 | Select-Object -Last 20
+          Write-Host "`n=========================================="
+          Write-Host "WORKFLOW SUMMARY"
+          Write-Host "==========================================" 
+          Write-Host "Repository: ${{ github.repository }}"
+          Write-Host "Branch: ${{ github.ref_name }}"
+          Write-Host "Commit: ${{ github.sha }}"
+          Write-Host "Actor: ${{ github.actor }}"
+          Write-Host "Event: ${{ github.event_name }}"
           
-          if ("${{ steps.helm_deploy.outcome }}" -eq "failure") {
-            Write-Host "`n=== Failed Pod Logs ==="
-            kubectl logs -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine --tail=50 2>&1 || Write-Host "No logs available"
+          if ("${{ github.event_name }}" -eq "pull_request") {
+            Write-Host "`n✓ BUILD ONLY - Pull Request"
+            Write-Host "Image built and pushed to registry"
+            Write-Host "Deployment skipped for PR builds"
+          } elseif ("${{ steps.helm_deploy.outcome }}" -eq "success") {
+            Write-Host "`n✓ DEPLOYMENT SUCCESSFUL"
+            Write-Host "Namespace: ${{ env.NAMESPACE }}"
+            Write-Host "Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+            Write-Host "Helm Release: dataengine"
+          } elseif ("${{ steps.helm_deploy.outcome }}" -eq "failure") {
+            Write-Host "`n✗ DEPLOYMENT FAILED"
+            Write-Host "Check logs above for details"
+            Write-Host "Rollback status: See 'Rollback on failure' step"
+          } else {
+            Write-Host "`n⚠ DEPLOYMENT SKIPPED OR INCOMPLETE"
           }
+          
+          Write-Host "=========================================="
