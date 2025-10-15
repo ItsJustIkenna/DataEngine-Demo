@@ -47,11 +47,23 @@ spec:
         - name: redis
           image: "{{ .Values.customRedis.image.registry }}/{{ .Values.customRedis.image.repository }}:{{ .Values.customRedis.image.tag }}"
           imagePullPolicy: Always
+          {{- if .Values.customRedis.auth.enabled }}
+          env:
+            - name: REDIS_PASSWORD
+              {{- if .Values.customRedis.auth.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.customRedis.auth.existingSecret }}
+                  key: password
+              {{- else }}
+              value: {{ .Values.customRedis.auth.password | quote }}
+              {{- end }}
+          {{- end }}
           command:
             - redis-server
           {{- if .Values.customRedis.auth.enabled }}
             - --requirepass
-            - {{ .Values.customRedis.auth.password | quote }}
+            - $(REDIS_PASSWORD)
           {{- end }}
           ports:
             - name: redis

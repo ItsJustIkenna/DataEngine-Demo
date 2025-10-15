@@ -51,7 +51,14 @@ spec:
             - name: POSTGRES_USER
               value: {{ .Values.customPostgresql.auth.username | quote }}
             - name: POSTGRES_PASSWORD
+              {{- if .Values.customPostgresql.auth.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.customPostgresql.auth.existingSecret }}
+                  key: password
+              {{- else }}
               value: {{ .Values.customPostgresql.auth.password | quote }}
+              {{- end }}
             - name: POSTGRES_DB
               value: {{ .Values.customPostgresql.auth.database | quote }}
             - name: PGDATA

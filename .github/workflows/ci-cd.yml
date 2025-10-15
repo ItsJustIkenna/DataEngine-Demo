@@ -11,8 +11,8 @@ on:
         default: false
 
 env:
-  IMAGE_NAME: ghcr.io/nwagbara-group-llc/data-engine
-  NAMESPACE: data-engine
+  IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
+  NAMESPACE: dataengine
 
 jobs:
   build-and-deploy:
@@ -55,11 +55,30 @@ jobs:
             username: ${{ github.actor }}
             password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Check if image exists
+        id: check_image
+        run: |
+          if (docker pull ${{ env.IMAGE_NAME }}:${{ github.sha }} 2>$null) {
+            echo "image_exists=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Image already exists for commit ${{ github.sha }}, skipping build"
+          } else {
+            echo "image_exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "Image not found, will build"
+          }
+        continue-on-error: true
+
       - name: Build and push
+        if: steps.check_image.outputs.image_exists != 'true'
         run: |
           docker build -t ${{ env.IMAGE_NAME }}:latest -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -f DataEngine/Dockerfile .
           docker push ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Tag as latest (if image exists)
+        if: steps.check_image.outputs.image_exists == 'true'
+        run: |
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.IMAGE_NAME }}:latest
 
       # === DEPLOY ===
       - name: Clean deploy (optional)
@@ -76,11 +95,26 @@ jobs:
             -n ${{ env.NAMESPACE }} `
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy with Helm
+      - name: Create database secrets
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          kubectl create secret generic postgresql-credentials `
+            --from-literal=password=$env:POSTGRES_PASSWORD `
+            -n ${{ env.NAMESPACE }} `
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          kubectl create secret generic redis-credentials `
+            --from-literal=password=$env:REDIS_PASSWORD `
+            -n ${{ env.NAMESPACE }} `
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Delete old migration job
+        run: kubectl delete job -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration --ignore-not-found
+
+      - name: Deploy with Helm
+        id: helm_deploy
         run: |
           helm upgrade --install dataengine DataEngine/k8s/data-engine-helm `
             --namespace ${{ env.NAMESPACE }} `
@@ -89,21 +123,44 @@ jobs:
             --set image.tag=${{ github.sha }} `
             --set image.pullSecrets[0].name=ghcr-secret `
             --set customPostgresql.enabled=true `
-            --set customPostgresql.auth.password=$env:POSTGRES_PASSWORD `
+            --set customPostgresql.auth.existingSecret=postgresql-credentials `
             --set customRedis.enabled=true `
-            --set customRedis.auth.password=$env:REDIS_PASSWORD `
+            --set customRedis.auth.existingSecret=redis-credentials `
             --set migration.enabled=true `
+            --atomic `
             --wait `
             --timeout 20m
+
+      - name: Verify deployment
+        if: success()
+        run: |
+          Write-Host "Waiting for pods to be ready..."
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine -n ${{ env.NAMESPACE }} --timeout=300s
+          
+          Write-Host "`nChecking application health..."
+          $podName = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[0].metadata.name}'
+          kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health || Write-Host "Warning: Health check endpoint not responding"
+
+      - name: Rollback on failure
+        if: failure() && steps.helm_deploy.outcome == 'failure'
+        run: |
+          Write-Host "Deployment failed, rolling back..."
+          helm rollback dataengine -n ${{ env.NAMESPACE }} --wait
+          Write-Host "Rollback completed"
 
       - name: Show deployment status
         if: always()
         run: |
           Write-Host "=== Helm Status ==="
-          helm status dataengine -n ${{ env.NAMESPACE }} 2>&1 || echo "Helm release not found"
+          helm status dataengine -n ${{ env.NAMESPACE }} 2>&1 || Write-Host "Helm release not found"
           Write-Host "`n=== Pods ==="
-          kubectl get pods -n ${{ env.NAMESPACE }} 2>&1 || echo "No pods found"
+          kubectl get pods -n ${{ env.NAMESPACE }} -o wide 2>&1 || Write-Host "No pods found"
           Write-Host "`n=== Services ==="
-          kubectl get services -n ${{ env.NAMESPACE }} 2>&1 || echo "No services found"
-          Write-Host "`n=== Events (last 20) ==="
+          kubectl get services -n ${{ env.NAMESPACE }} 2>&1 || Write-Host "No services found"
+          Write-Host "`n=== Recent Events ==="
           kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' 2>&1 | Select-Object -Last 20
+          
+          if ("${{ steps.helm_deploy.outcome }}" -eq "failure") {
+            Write-Host "`n=== Failed Pod Logs ==="
+            kubectl logs -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine --tail=50 2>&1 || Write-Host "No logs available"
+          }

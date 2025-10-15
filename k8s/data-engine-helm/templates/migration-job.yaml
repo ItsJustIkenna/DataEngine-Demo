@@ -37,7 +37,14 @@ spec:
               echo "PostgreSQL is ready!"
           env:
             - name: PGPASSWORD
+              {{- if .Values.customPostgresql.auth.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.customPostgresql.auth.existingSecret }}
+                  key: password
+              {{- else }}
               value: {{ .Values.customPostgresql.auth.password | quote }}
+              {{- end }}
       containers:
         - name: migration
           image: "{{ .Values.migration.image.repository }}:{{ .Values.migration.image.tag | default .Chart.AppVersion }}"
@@ -52,7 +59,14 @@ spec:
             - name: POSTGRES_USERNAME
               value: {{ .Values.customPostgresql.auth.username }}
             - name: POSTGRES_PASSWORD
+              {{- if .Values.customPostgresql.auth.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.customPostgresql.auth.existingSecret }}
+                  key: password
+              {{- else }}
               value: {{ .Values.customPostgresql.auth.password | quote }}
+              {{- end }}
             - name: DATABASE_URL
               value: "postgres://$(POSTGRES_USERNAME):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
             {{- with .Values.migration.env }}
