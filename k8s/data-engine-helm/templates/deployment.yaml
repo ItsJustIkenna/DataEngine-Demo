@@ -157,10 +157,17 @@ spec:
             - name: DATABASE_URL
               value: "postgresql://{{ .Values.externalDatabase.username }}:$(DATABASE_PASSWORD)@{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}"
             - name: DATABASE_PASSWORD
+              {{- if .Values.externalDatabase.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: password
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ include "data-engine.fullname" . }}-database
                   key: password
+              {{- end }}
             {{- end }}
             {{- end }}
             
@@ -177,15 +184,19 @@ spec:
             {{- end }}
             {{- else if .Values.externalRedis.enabled }}
             - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@{{ .Values.externalRedis.host }}:{{ .Values.externalRedis.port }}"
+            - name: REDIS_PASSWORD
+              {{- if .Values.externalRedis.existingSecret }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}-redis
-                  key: url
-            - name: REDIS_PASSWORD
+                  name: {{ .Values.externalRedis.existingSecret }}
+                  key: password
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ include "data-engine.fullname" . }}-redis
                   key: password
+              {{- end }}
             {{- end }}
             
             # API Keys - Support both values file and command line --set
