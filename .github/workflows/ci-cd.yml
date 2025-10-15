@@ -115,6 +115,13 @@ jobs:
 
       - name: Deploy with Helm
         id: helm_deploy
+        env:
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          REDIS_HOST: ${{ secrets.REDIS_HOST }}
+          REDIS_PORT: ${{ secrets.REDIS_PORT }}
         run: |
           helm upgrade --install dataengine DataEngine/k8s/data-engine-helm `
             --namespace ${{ env.NAMESPACE }} `
@@ -122,10 +129,18 @@ jobs:
             --set image.repository=${{ env.IMAGE_NAME }} `
             --set image.tag=${{ github.sha }} `
             --set image.pullSecrets[0].name=ghcr-secret `
-            --set customPostgresql.enabled=true `
-            --set customPostgresql.auth.existingSecret=postgresql-credentials `
-            --set customRedis.enabled=true `
-            --set customRedis.auth.existingSecret=redis-credentials `
+            --set customPostgresql.enabled=false `
+            --set externalDatabase.enabled=true `
+            --set externalDatabase.host=$env:POSTGRES_HOST `
+            --set externalDatabase.port=$env:POSTGRES_PORT `
+            --set externalDatabase.database=$env:POSTGRES_DB `
+            --set externalDatabase.username=$env:POSTGRES_USER `
+            --set externalDatabase.existingSecret=postgresql-credentials `
+            --set customRedis.enabled=false `
+            --set externalRedis.enabled=true `
+            --set externalRedis.host=$env:REDIS_HOST `
+            --set externalRedis.port=$env:REDIS_PORT `
+            --set externalRedis.existingSecret=redis-credentials `
             --set migration.enabled=true `
             --atomic `
             --wait `

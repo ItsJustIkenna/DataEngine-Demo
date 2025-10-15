@@ -69,13 +69,21 @@ spec:
             - name: redis
               containerPort: 6379
               protocol: TCP
+          {{- if .Values.customRedis.persistence.enabled }}
           volumeMounts:
             - name: data
               mountPath: /data
+          {{- end }}
           {{- with .Values.customRedis.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- if not .Values.customRedis.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.customRedis.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -84,4 +92,5 @@ spec:
         resources:
           requests:
             storage: {{ .Values.customRedis.persistence.size }}
+  {{- end }}
 {{- end }}

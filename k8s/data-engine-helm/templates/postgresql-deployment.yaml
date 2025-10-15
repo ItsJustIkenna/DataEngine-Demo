@@ -67,13 +67,21 @@ spec:
             - name: postgresql
               containerPort: 5432
               protocol: TCP
+          {{- if .Values.customPostgresql.persistence.enabled }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+          {{- end }}
           {{- with .Values.customPostgresql.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- if not .Values.customPostgresql.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.customPostgresql.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
         name: data
@@ -82,4 +90,5 @@ spec:
         resources:
           requests:
             storage: {{ .Values.customPostgresql.persistence.size }}
+  {{- end }}
 {{- end }}
