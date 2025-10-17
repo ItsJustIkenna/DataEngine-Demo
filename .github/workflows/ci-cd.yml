@@ -127,18 +127,55 @@ jobs:
           kubectl delete pvc --all -n ${{ env.NAMESPACE }} --ignore-not-found
           Write-Host "✓ Clean deploy completed"
 
-      - name: Create namespace and secrets
+      # === AZURE KEY VAULT AUTHENTICATION ===
+      - name: Azure Login
         if: github.event_name != 'pull_request'
-        env:
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Fetch secrets from Azure Key Vault
+        if: github.event_name != 'pull_request'
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            Write-Host "Fetching secrets from Azure Key Vault: ${{ secrets.AZURE_KEYVAULT_NAME }}"
+            
+            # Fetch all secrets and set as environment variables
+            $env:POSTGRES_HOST = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-HOST" --query value -o tsv
+            $env:POSTGRES_PORT = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-PORT" --query value -o tsv
+            $env:POSTGRES_USER = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-USER" --query value -o tsv
+            $env:POSTGRES_PASSWORD = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-PASSWORD" --query value -o tsv
+            $env:POSTGRES_DB = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-DB" --query value -o tsv
+            
+            $env:REDIS_HOST = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-HOST" --query value -o tsv
+            $env:REDIS_PORT = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-PORT" --query value -o tsv
+            $env:REDIS_PASSWORD = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-PASSWORD" --query value -o tsv
+            
+            $env:KRAKEN_API_KEY = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "KRAKEN-API-KEY" --query value -o tsv
+            $env:KRAKEN_SECRET_KEY = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "KRAKEN-SECRET-KEY" --query value -o tsv
+            
+            # Export to GitHub environment for subsequent steps
+            echo "POSTGRES_HOST=$env:POSTGRES_HOST" >> $env:GITHUB_ENV
+            echo "POSTGRES_PORT=$env:POSTGRES_PORT" >> $env:GITHUB_ENV
+            echo "POSTGRES_USER=$env:POSTGRES_USER" >> $env:GITHUB_ENV
+            echo "POSTGRES_PASSWORD=$env:POSTGRES_PASSWORD" >> $env:GITHUB_ENV
+            echo "POSTGRES_DB=$env:POSTGRES_DB" >> $env:GITHUB_ENV
+            echo "REDIS_HOST=$env:REDIS_HOST" >> $env:GITHUB_ENV
+            echo "REDIS_PORT=$env:REDIS_PORT" >> $env:GITHUB_ENV
+            echo "REDIS_PASSWORD=$env:REDIS_PASSWORD" >> $env:GITHUB_ENV
+            echo "KRAKEN_API_KEY=$env:KRAKEN_API_KEY" >> $env:GITHUB_ENV
+            echo "KRAKEN_SECRET_KEY=$env:KRAKEN_SECRET_KEY" >> $env:GITHUB_ENV
+            
+            Write-Host "✓ Successfully fetched all secrets from Key Vault"
+
+      - name: Create namespace and image pull secret
+        if: github.event_name != 'pull_request'
         run: |
-          Write-Host "Creating namespace and secrets..."
-          
-          # Create namespace
+          Write-Host "Creating namespace..."
           kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
           
-          # Create image pull secret
+          Write-Host "Creating image pull secret..."
           kubectl create secret docker-registry ghcr-secret `
             --docker-server=ghcr.io `
             --docker-username=${{ github.actor }} `
@@ -146,18 +183,7 @@ jobs:
             -n ${{ env.NAMESPACE }} `
             --dry-run=client -o yaml | kubectl apply -f -
           
-          # Create database secrets
-          kubectl create secret generic postgresql-credentials `
-            --from-literal=password=$env:POSTGRES_PASSWORD `
-            -n ${{ env.NAMESPACE }} `
-            --dry-run=client -o yaml | kubectl apply -f -
-          
-          kubectl create secret generic redis-credentials `
-            --from-literal=password=$env:REDIS_PASSWORD `
-            -n ${{ env.NAMESPACE }} `
-            --dry-run=client -o yaml | kubectl apply -f -
-          
-          Write-Host "✓ Namespace and secrets created/updated"
+          Write-Host "✓ Namespace and image pull secret ready"
 
       - name: Delete old migration job
         if: github.event_name != 'pull_request'
@@ -188,13 +214,6 @@ jobs:
       - name: Deploy with Helm
         if: github.event_name != 'pull_request'
         id: helm_deploy
-        env:
-          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
-          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          REDIS_HOST: ${{ secrets.REDIS_HOST }}
-          REDIS_PORT: ${{ secrets.REDIS_PORT }}
         run: |
           Write-Host "Deploying DataEngine via Helm..."
           $deployStart = Get-Date
@@ -206,17 +225,25 @@ jobs:
             --set image.tag=${{ github.sha }} `
             --set image.pullSecrets[0].name=ghcr-secret `
             --set customPostgresql.enabled=false `
+            --set customRedis.enabled=false `
             --set externalDatabase.enabled=true `
             --set externalDatabase.host=$env:POSTGRES_HOST `
             --set externalDatabase.port=$env:POSTGRES_PORT `
             --set externalDatabase.database=$env:POSTGRES_DB `
             --set externalDatabase.username=$env:POSTGRES_USER `
             --set externalDatabase.existingSecret=postgresql-credentials `
-            --set customRedis.enabled=false `
             --set externalRedis.enabled=true `
             --set externalRedis.host=$env:REDIS_HOST `
             --set externalRedis.port=$env:REDIS_PORT `
             --set externalRedis.existingSecret=redis-credentials `
+            --set secrets.database.enabled=true `
+            --set secrets.database.username=$env:POSTGRES_USER `
+            --set secrets.database.password=$env:POSTGRES_PASSWORD `
+            --set secrets.redis.enabled=true `
+            --set secrets.redis.password=$env:REDIS_PASSWORD `
+            --set secrets.api_keys.enabled=true `
+            --set secrets.api_keys.kraken_api_key=$env:KRAKEN_API_KEY `
+            --set secrets.api_keys.kraken_secret_key=$env:KRAKEN_SECRET_KEY `
             --set migration.enabled=true `
             --atomic `
             --wait `

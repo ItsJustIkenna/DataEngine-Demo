@@ -440,7 +440,7 @@ externalDatabase:
   port: 5432
   username: ""   # Injected via secrets.database.username
   database: "dataengine"
-  existingSecret: ""  # Name of existing secret with 'password' key
+  existingSecret: "postgresql-credentials"  # Name of existing secret with 'password' key
   # Password is provided via secrets.database.password
   # Connection string format: postgresql://username:password@host:port/database
 
@@ -449,7 +449,7 @@ externalRedis:
   enabled: true  # Enable external Redis
   host: ""       # Injected via secrets.redis.url parsing
   port: 6379
-  existingSecret: ""  # Name of existing secret with 'password' key
+  existingSecret: "redis-credentials"  # Name of existing secret with 'password' key
   # Password is provided via secrets.redis.password
   # Connection string format: redis://:password@host:port
 
