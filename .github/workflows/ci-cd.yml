@@ -94,16 +94,16 @@ jobs:
       - name: 🔍 Validate Helm Chart
         id: helm-check
         run: |
-          Write-Host "🔍 Validating Helm chart..."
+          Write-Host "Validating Helm chart..."
           
           helm lint ${{ env.HELM_CHART_PATH }} --strict --quiet
           
           if ($LASTEXITCODE -eq 0) {
             echo "valid=true" >> $env:GITHUB_OUTPUT
-            Write-Host "✅ Helm chart validation passed"
+            Write-Host "[OK] Helm chart validation passed"
           } else {
             echo "valid=false" >> $env:GITHUB_OUTPUT
-            Write-Error "❌ Helm chart validation failed"
+            Write-Error "[FAIL] Helm chart validation failed"
             exit 1
           }
 
@@ -111,7 +111,7 @@ jobs:
         id: test-check
         if: github.event.inputs.skip_tests != 'true'
         run: |
-          Write-Host "🧪 Running Rust tests..."
+          Write-Host "Running Rust tests..."
           cd DataEngine
           
           # Parallel test execution with optimized flags
@@ -119,10 +119,10 @@ jobs:
           
           if ($LASTEXITCODE -eq 0) {
             echo "passed=true" >> $env:GITHUB_OUTPUT
-            Write-Host "✅ All tests passed"
+            Write-Host "[OK] All tests passed"
           } else {
             echo "passed=false" >> $env:GITHUB_OUTPUT
-            Write-Error "❌ Tests failed"
+            Write-Error "[FAIL] Tests failed"
             exit 1
           }
 
@@ -149,24 +149,24 @@ jobs:
       - name: 🔍 Check Image Cache
         id: image-check
         run: |
-          Write-Host "🔍 Checking if image exists..."
+          Write-Host "Checking if image exists..."
           
           $imageTag = "${{ env.IMAGE_NAME }}:${{ github.sha }}"
           docker manifest inspect $imageTag > $null 2>&1
           
           if ($LASTEXITCODE -eq 0) {
             echo "exists=true" >> $env:GITHUB_OUTPUT
-            Write-Host "✅ Image cache hit: $imageTag"
+            Write-Host "[OK] Image cache hit: $imageTag"
           } else {
             echo "exists=false" >> $env:GITHUB_OUTPUT
-            Write-Host "🔄 Image cache miss, will build: $imageTag"
+            Write-Host "[INFO] Image cache miss, will build: $imageTag"
           }
 
       - name: 🏗️ Build & Push Image
         id: build-push
         if: steps.image-check.outputs.exists != 'true'
         run: |
-          Write-Host "🏗️ Building Docker image..."
+          Write-Host "Building Docker image..."
           $startTime = Get-Date
           
           # Optimized Docker build with BuildKit
@@ -181,31 +181,28 @@ jobs:
             .
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ Docker build failed"
+            Write-Error "[FAIL] Docker build failed"
             exit 1
           }
           
-          # Parallel push
-          $pushJobs = @()
-          $pushJobs += Start-Job { docker push ${{ env.IMAGE_NAME }}:latest }
-          $pushJobs += Start-Job { docker push ${{ env.IMAGE_NAME }}:${{ github.sha }} }
-          
-          $pushJobs | Wait-Job | Receive-Job
-          $pushJobs | Remove-Job
+          # Push images
+          Write-Host "Pushing images to registry..."
+          docker push ${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
           
           # Get image digest for security
           $digest = docker inspect ${{ env.IMAGE_NAME }}:${{ github.sha }} --format='{{.RepoDigests.[0]}}'
           echo "digest=$digest" >> $env:GITHUB_OUTPUT
           
           $duration = (Get-Date) - $startTime
-          Write-Host "✅ Build completed in $($duration.TotalMinutes.ToString('F1'))m"
+          Write-Host "[OK] Build completed in $($duration.TotalMinutes.ToString('F1'))m"
 
       - name: 🏷️ Tag Existing Image
         if: steps.image-check.outputs.exists == 'true'
         run: |
           docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:latest
-          Write-Host "✅ Tagged existing image as latest"
+          Write-Host "[OK] Tagged existing image as latest"
 
   security:
     name: 🔒 Security Scan  
@@ -215,11 +212,11 @@ jobs:
     steps:
       - name: 🔒 Trivy Security Scan
         run: |
-          Write-Host "🔒 Running security scan..."
+          Write-Host "Running security scan..."
           
           # Install/update Trivy if needed
           if (-not (Get-Command trivy -ErrorAction SilentlyContinue)) {
-            Write-Host "📦 Installing Trivy..."
+            Write-Host "Installing Trivy..."
             $trivyVersion = "0.55.0"
             $url = "https://github.com/aquasecurity/trivy/releases/download/v$trivyVersion/trivy_${trivyVersion}_Windows-64bit.zip"
             Invoke-WebRequest -Uri $url -OutFile trivy.zip -UseBasicParsing
@@ -239,10 +236,10 @@ jobs:
           
           # Upload results to GitHub Security
           if (Test-Path trivy-results.sarif) {
-            Write-Host "📊 Security scan completed - results uploaded"
+            Write-Host "[INFO] Security scan completed - results available"
           }
           
-          Write-Host "✅ Security scan completed"
+          Write-Host "[OK] Security scan completed"
 
   # ===== DEPLOYMENT (Production) =====  
   deploy:
@@ -270,7 +267,7 @@ jobs:
             --tenant $creds.tenantId `
             --output none
           
-          Write-Host "✅ Authenticated with Azure"
+          Write-Host "[OK] Authenticated with Azure"
           
           # Batch secret fetching (optimized but sequential for reliability)
           $secretNames = @(
@@ -279,7 +276,7 @@ jobs:
             "KRAKEN-API-KEY", "KRAKEN-SECRET-KEY"
           )
           
-          Write-Host "🔑 Fetching $($secretNames.Count) secrets from Key Vault..."
+          Write-Host "[INFO] Fetching $($secretNames.Count) secrets from Key Vault..."
           
           foreach ($secretName in $secretNames) {
             $envName = $secretName -replace "-", "_"
@@ -287,14 +284,14 @@ jobs:
             
             if ($value -and $value -ne "null") {
               echo "$envName=$value" >> $env:GITHUB_ENV
-              Write-Host "✅ Fetched $envName"
+              Write-Host "[OK] Fetched $envName"
             } else {
-              Write-Error "❌ Failed to fetch secret: $secretName"
+              Write-Error "[FAIL] Failed to fetch secret: $secretName"
               exit 1
             }
           }
           
-          Write-Host "✅ All $($secretNames.Count) secrets fetched in parallel"
+          Write-Host "[OK] All $($secretNames.Count) secrets fetched successfully"
 
       - name: 🧹 Pre-deployment Cleanup
         if: github.event.inputs.clean_deploy == 'true'
