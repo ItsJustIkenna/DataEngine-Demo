@@ -29,7 +29,7 @@ permissions:
 env:
   IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
   NAMESPACE: dataengine
-  HELM_TIMEOUT: 10m
+  HELM_TIMEOUT: 15m
   HEALTH_CHECK_RETRIES: 5
   HEALTH_CHECK_INTERVAL: 10
 
@@ -347,13 +347,31 @@ jobs:
             Write-Host "[OK] No stuck releases found"
           }
 
+      - name: Monitor deployment progress (background)
+        if: github.event_name != 'pull_request'
+        run: |
+          Start-Job -ScriptBlock {
+            $namespace = "${{ env.NAMESPACE }}"
+            Start-Sleep -Seconds 5
+            
+            for ($i = 0; $i -lt 90; $i++) {
+              Write-Host "`n=== Deployment Progress (${i}0s) ==="
+              kubectl get pods -n $namespace -o wide 2>$null
+              kubectl get jobs -n $namespace 2>$null
+              Start-Sleep -Seconds 10
+            }
+          } | Out-Null
+
       - name: Deploy with Helm
         if: github.event_name != 'pull_request'
         id: helm_deploy
         run: |
           Write-Host "Deploying DataEngine via Helm..."
+          Write-Host "[INFO] Timeout: ${{ env.HELM_TIMEOUT }}"
+          Write-Host "[INFO] Atomic rollback: DISABLED (for better debugging)"
           $deployStart = Get-Date
           
+          # Deploy without --atomic for better error visibility
           helm upgrade --install dataengine DataEngine/k8s/data-engine-helm `
             --namespace ${{ env.NAMESPACE }} `
             --create-namespace `
@@ -363,29 +381,41 @@ jobs:
             --set customPostgresql.enabled=false `
             --set customRedis.enabled=false `
             --set externalDatabase.enabled=true `
-            --set externalDatabase.host=$env:POSTGRES_HOST `
-            --set externalDatabase.port=$env:POSTGRES_PORT `
-            --set externalDatabase.database=$env:POSTGRES_DB `
-            --set externalDatabase.username=$env:POSTGRES_USER `
+            --set externalDatabase.host=${{ env.POSTGRES_HOST }} `
+            --set externalDatabase.port=${{ env.POSTGRES_PORT }} `
+            --set externalDatabase.database=${{ env.POSTGRES_DB }} `
+            --set externalDatabase.username=${{ env.POSTGRES_USER }} `
             --set externalDatabase.existingSecret=postgresql-credentials `
             --set externalRedis.enabled=true `
-            --set externalRedis.host=$env:REDIS_HOST `
-            --set externalRedis.port=$env:REDIS_PORT `
+            --set externalRedis.host=${{ env.REDIS_HOST }} `
+            --set externalRedis.port=${{ env.REDIS_PORT }} `
             --set externalRedis.existingSecret=redis-credentials `
             --set secrets.database.enabled=true `
-            --set secrets.database.username=$env:POSTGRES_USER `
-            --set secrets.database.password=$env:POSTGRES_PASSWORD `
+            --set secrets.database.username=${{ env.POSTGRES_USER }} `
+            --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
             --set secrets.redis.enabled=true `
-            --set secrets.redis.password=$env:REDIS_PASSWORD `
+            --set secrets.redis.password=${{ env.REDIS_PASSWORD }} `
             --set secrets.api_keys.enabled=true `
-            --set secrets.api_keys.kraken_api_key=$env:KRAKEN_API_KEY `
-            --set secrets.api_keys.kraken_secret_key=$env:KRAKEN_SECRET_KEY `
+            --set secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }} `
+            --set secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }} `
             --set migration.enabled=true `
-            --atomic `
             --wait `
-            --timeout ${{ env.HELM_TIMEOUT }}
+            --timeout ${{ env.HELM_TIMEOUT }} `
+            --debug
           
           if ($LASTEXITCODE -ne 0) {
+            Write-Host "`n[FAIL] Helm deployment failed - checking status..."
+            
+            # Show current state
+            Write-Host "`nCurrent pods:"
+            kubectl get pods -n ${{ env.NAMESPACE }} -o wide
+            
+            Write-Host "`nCurrent jobs:"
+            kubectl get jobs -n ${{ env.NAMESPACE }}
+            
+            Write-Host "`nRecent events:"
+            kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' | Select-Object -Last 30
+            
             Write-Error "Helm deployment failed"
             exit 1
           }
