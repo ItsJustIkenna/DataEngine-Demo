@@ -8,7 +8,7 @@
 
 use anyhow::{anyhow, Result};
 use fastrand;
-use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+use std::sync::{Arc, atomic::{AtomicU64, AtomicU32, Ordering}};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use crate::{infrastructure::logging_facade::MAIN_LOGGER, log_warn, log_error, log_debug, log_info};
@@ -429,11 +429,13 @@ mod tests {
         let retry_config = RetryConfig::new_fast();
         let executor = ResilientExecutor::new(cb, retry_config);
         
-        let mut call_count = 0;
-        let result = executor.execute(|| {
-            call_count += 1;
+        let call_count = Arc::new(AtomicU32::new(0));
+        let count_clone = Arc::clone(&call_count);
+        
+        let result = executor.execute(move || {
+            let count = count_clone.fetch_add(1, Ordering::SeqCst) + 1;
             Box::pin(async move {
-                if call_count < 3 {
+                if count < 3 {
                     Err("failing")
                 } else {
                     Ok("success")
@@ -442,7 +444,6 @@ mod tests {
         }).await;
         
         assert!(result.is_ok());
-        assert_eq!(call_count, 3);
+        assert_eq!(call_count.load(Ordering::SeqCst), 3);
     }
 }
-

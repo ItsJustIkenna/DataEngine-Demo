@@ -557,8 +557,8 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
-    #[test]
-    fn test_optimized_lru_cache() {
+    #[tokio::test]
+    async fn test_optimized_lru_cache() {
         let cache = OptimizedLRUCache::new(3);
         
         // Test basic operations
@@ -616,16 +616,20 @@ mod tests {
         let service = CacheMaintenanceService::new(Duration::from_millis(100));
         service.start().await;
         
+        // Let it run for a bit
         tokio::time::sleep(Duration::from_millis(250)).await;
         
         service.stop();
         
-        // Basic test - just ensure it doesn't panic
+        // Give it time to process the stop signal
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        
+        // Test passes if we got here without panicking
         assert!(true);
     }
 }
 
-/// Simple cache manager for data pipeline compatibility
+/// Simple cache manager for general-purpose caching
 pub struct CacheManager {
     cache: DashMap<String, serde_json::Value>,
 }
