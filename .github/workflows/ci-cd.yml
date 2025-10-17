@@ -63,31 +63,33 @@ jobs:
           path: DataEngine
           fetch-depth: 0  # Full history for better caching
 
-      - name: 🔧 Setup Dependencies  
-        id: deps
-        run: |
-          # Parallel dependency checkout
-          $jobs = @()
-          
-          $repos = @(
-            @{repo="Nwagbara-Group-LLC/databaseschema"; path="databaseschema"}
-            @{repo="Nwagbara-Group-LLC/redisutils"; path="redisutils"}  
-            @{repo="Nwagbara-Group-LLC/LoggingEngine"; path="LoggingEngine"}
-            @{repo="Nwagbara-Group-LLC/MessageBrokerEngine"; path="MessageBrokerEngine"}
-          )
-          
-          foreach ($item in $repos) {
-            $jobs += Start-Job -ScriptBlock {
-              param($repo, $path, $token)
-              git clone "https://x-access-token:$token@github.com/$repo.git" $path
-            } -ArgumentList $item.repo, $item.path, "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
-          }
-          
-          # Wait for all parallel checkouts
-          $jobs | Wait-Job | Receive-Job
-          $jobs | Remove-Job
-          
-          Write-Host "✅ Dependencies checked out in parallel"
+      - name: � Checkout databaseschema
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/databaseschema
+          path: databaseschema
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: 📦 Checkout redisutils
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/redisutils
+          path: redisutils
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: 📦 Checkout LoggingEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/LoggingEngine
+          path: LoggingEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: 📦 Checkout MessageBrokerEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/MessageBrokerEngine
+          path: MessageBrokerEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: 🔍 Validate Helm Chart
         id: helm-check
@@ -270,33 +272,26 @@ jobs:
           
           Write-Host "✅ Authenticated with Azure"
           
-          # Parallel secret fetching
+          # Batch secret fetching (optimized but sequential for reliability)
           $secretNames = @(
             "POSTGRES-HOST", "POSTGRES-PORT", "POSTGRES-USER", "POSTGRES-PASSWORD", "POSTGRES-DB",
             "REDIS-HOST", "REDIS-PORT", "REDIS-PASSWORD", 
             "KRAKEN-API-KEY", "KRAKEN-SECRET-KEY"
           )
           
-          $secrets = @{}
-          $jobs = @()
+          Write-Host "🔑 Fetching $($secretNames.Count) secrets from Key Vault..."
           
-          foreach ($name in $secretNames) {
-            $jobs += Start-Job -ScriptBlock {
-              param($vaultName, $secretName)
-              $value = az keyvault secret show --vault-name $vaultName --name $secretName --query value -o tsv 2>$null
-              return @{Name=$secretName; Value=$value}
-            } -ArgumentList "${{ secrets.AZURE_KEYVAULT_NAME }}", $name
-          }
-          
-          # Collect results
-          $results = $jobs | Wait-Job | Receive-Job
-          $jobs | Remove-Job
-          
-          # Set environment variables
-          foreach ($result in $results) {
-            $envName = $result.Name -replace "-", "_"
-            echo "$envName=$($result.Value)" >> $env:GITHUB_ENV
-            Write-Host "✅ Fetched $envName"
+          foreach ($secretName in $secretNames) {
+            $envName = $secretName -replace "-", "_"
+            $value = az keyvault secret show --vault-name "${{ secrets.AZURE_KEYVAULT_NAME }}" --name $secretName --query value -o tsv
+            
+            if ($value -and $value -ne "null") {
+              echo "$envName=$value" >> $env:GITHUB_ENV
+              Write-Host "✅ Fetched $envName"
+            } else {
+              Write-Error "❌ Failed to fetch secret: $secretName"
+              exit 1
+            }
           }
           
           Write-Host "✅ All $($secretNames.Count) secrets fetched in parallel"
