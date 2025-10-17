@@ -226,18 +226,30 @@ jobs:
         if: github.event_name != 'pull_request'
         run: |
           Write-Host "Checking for stuck Helm releases..."
-          $release = helm list -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json | Where-Object { $_.name -eq "dataengine" -and $_.status -match "pending" }
-          if ($release) {
-            Write-Host "[WARN] Found stuck release in status: $($release.status)"
-            Write-Host "Attempting rollback..."
-            helm rollback dataengine -n ${{ env.NAMESPACE }} --wait --timeout=2m 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "Rollback failed, uninstalling release..."
-              helm uninstall dataengine -n ${{ env.NAMESPACE }} --wait --timeout=2m
-              Write-Host "[OK] Stuck release uninstalled"
-            } else {
-              Write-Host "[OK] Stuck release rolled back"
+          
+          # Check for any pending-* status releases
+          $releases = helm list -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json
+          $stuckRelease = $releases | Where-Object { $_.name -eq "dataengine" -and $_.status -match "pending" }
+          
+          if ($stuckRelease) {
+            Write-Host "[WARN] Found stuck release in status: $($stuckRelease.status)"
+            
+            # Get all Helm secrets for this release to check for locks
+            $helmSecrets = kubectl get secrets -n ${{ env.NAMESPACE }} -l owner=helm,name=dataengine -o json | ConvertFrom-Json
+            $pendingSecrets = $helmSecrets.items | Where-Object { $_.metadata.labels.status -match "pending" }
+            
+            if ($pendingSecrets) {
+              Write-Host "[WARN] Found $($pendingSecrets.Count) pending Helm secrets, deleting them to clear lock..."
+              $pendingSecrets | ForEach-Object {
+                kubectl delete secret $_.metadata.name -n ${{ env.NAMESPACE }}
+                Write-Host "  Deleted secret: $($_.metadata.name)"
+              }
             }
+            
+            # Now try to clean up the release
+            Write-Host "Attempting to uninstall stuck release..."
+            helm uninstall dataengine -n ${{ env.NAMESPACE }} --wait --timeout=2m --ignore-not-found
+            Write-Host "[OK] Stuck release cleaned up"
           } else {
             Write-Host "[OK] No stuck releases found"
           }
