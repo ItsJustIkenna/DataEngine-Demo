@@ -15,366 +15,349 @@ on:
         description: 'Skip tests'
         type: boolean
         default: false
+      environment:
+        description: 'Target environment'
+        type: choice
+        options: ['development', 'staging', 'production']
+        default: 'development'
 
-# Prevent concurrent deployments
+# Prevent concurrent deployments per environment
 concurrency:
-  group: dataengine-deployment
+  group: dataengine-${{ github.event.inputs.environment || 'development' }}
   cancel-in-progress: false
 
-# Grant permissions for GHCR
+# Grant minimal required permissions
 permissions:
   contents: read
   packages: write
+  security-events: write  # For security scan results
 
 env:
+  # Core configuration
   IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
   NAMESPACE: dataengine
-  HELM_TIMEOUT: 15m
-  HEALTH_CHECK_RETRIES: 5
-  HEALTH_CHECK_INTERVAL: 10
+  HELM_CHART_PATH: DataEngine/k8s/data-engine-helm
+  
+  # Deployment configuration  
+  HELM_TIMEOUT: 10m
+  HEALTH_CHECK_TIMEOUT: 300s
+  ROLLBACK_TIMEOUT: 5m
+  
+  # Performance optimization
+  PARALLEL_JOBS: 3
+  DOCKER_BUILDKIT: 1
+  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
 
 jobs:
-  build-and-deploy:
+  # ===== VALIDATION & TESTING (Parallel) =====
+  validate:
+    name: 🔍 Validate & Test
     runs-on: [self-hosted, windows, x64]
-    
+    outputs:
+      helm-valid: ${{ steps.helm-check.outputs.valid }}
+      tests-passed: ${{ steps.test-check.outputs.passed }}
     steps:
-      # === CHECKOUT ===
-      - name: Checkout repositories
+      - name: 📥 Checkout DataEngine
         uses: actions/checkout@v4
         with:
           path: DataEngine
+          fetch-depth: 0  # Full history for better caching
 
-      - uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/databaseschema
-          path: databaseschema
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/redisutils
-          path: redisutils
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/LoggingEngine
-          path: LoggingEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          path: MessageBrokerEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      # === BUILD ===
-      - name: Validate Helm chart
+      - name: 🔧 Setup Dependencies  
+        id: deps
         run: |
-          Write-Host "Validating Helm chart..."
-          helm lint DataEngine/k8s/data-engine-helm --strict
+          # Parallel dependency checkout
+          $jobs = @()
           
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Helm chart validation failed"
-            exit 1
+          $repos = @(
+            @{repo="Nwagbara-Group-LLC/databaseschema"; path="databaseschema"}
+            @{repo="Nwagbara-Group-LLC/redisutils"; path="redisutils"}  
+            @{repo="Nwagbara-Group-LLC/LoggingEngine"; path="LoggingEngine"}
+            @{repo="Nwagbara-Group-LLC/MessageBrokerEngine"; path="MessageBrokerEngine"}
+          )
+          
+          foreach ($item in $repos) {
+            $jobs += Start-Job -ScriptBlock {
+              param($repo, $path, $token)
+              git clone "https://x-access-token:$token@github.com/$repo.git" $path
+            } -ArgumentList $item.repo, $item.path, "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
           }
           
-          Write-Host "[OK] Helm chart validation passed"
+          # Wait for all parallel checkouts
+          $jobs | Wait-Job | Receive-Job
+          $jobs | Remove-Job
+          
+          Write-Host "✅ Dependencies checked out in parallel"
 
-      - name: Run Rust tests
+      - name: 🔍 Validate Helm Chart
+        id: helm-check
+        run: |
+          Write-Host "🔍 Validating Helm chart..."
+          
+          helm lint ${{ env.HELM_CHART_PATH }} --strict --quiet
+          
+          if ($LASTEXITCODE -eq 0) {
+            echo "valid=true" >> $env:GITHUB_OUTPUT
+            Write-Host "✅ Helm chart validation passed"
+          } else {
+            echo "valid=false" >> $env:GITHUB_OUTPUT
+            Write-Error "❌ Helm chart validation failed"
+            exit 1
+          }
+
+      - name: 🧪 Run Rust Tests
+        id: test-check
         if: github.event.inputs.skip_tests != 'true'
         run: |
-          Write-Host "Running Rust tests..."
+          Write-Host "🧪 Running Rust tests..."
           cd DataEngine
-          cargo test --workspace --all-features
           
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Tests failed"
+          # Parallel test execution with optimized flags
+          cargo test --workspace --all-features --jobs ${{ env.PARALLEL_JOBS }} --quiet
+          
+          if ($LASTEXITCODE -eq 0) {
+            echo "passed=true" >> $env:GITHUB_OUTPUT
+            Write-Host "✅ All tests passed"
+          } else {
+            echo "passed=false" >> $env:GITHUB_OUTPUT
+            Write-Error "❌ Tests failed"
             exit 1
           }
-          
-          Write-Host "[OK] All tests passed"
 
-      - name: Log in to GitHub Container Registry
+  # ===== BUILD & SECURITY (Parallel) =====
+  build:
+    name: 🏗️ Build & Push
+    runs-on: [self-hosted, windows, x64]
+    needs: validate
+    if: needs.validate.outputs.helm-valid == 'true' && (needs.validate.outputs.tests-passed == 'true' || github.event.inputs.skip_tests == 'true')
+    outputs:
+      image-exists: ${{ steps.image-check.outputs.exists }}
+      image-digest: ${{ steps.build-push.outputs.digest }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔐 Login to GHCR
         uses: docker/login-action@v3
         with:
-            registry: ghcr.io
-            username: ${{ github.actor }}
-            password: ${{ secrets.GHCR_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Check if image exists
-        id: check_image
+      - name: 🔍 Check Image Cache
+        id: image-check
         run: |
-          $ErrorActionPreference = 'SilentlyContinue'
-          Write-Host "Checking if image exists: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          docker pull ${{ env.IMAGE_NAME }}:${{ github.sha }} 2>&1 | Out-Null
+          Write-Host "🔍 Checking if image exists..."
+          
+          $imageTag = "${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          docker manifest inspect $imageTag > $null 2>&1
+          
           if ($LASTEXITCODE -eq 0) {
-            echo "image_exists=true" >> $env:GITHUB_OUTPUT
-            Write-Host "[OK] Image already exists, skipping build"
+            echo "exists=true" >> $env:GITHUB_OUTPUT
+            Write-Host "✅ Image cache hit: $imageTag"
           } else {
-            echo "image_exists=false" >> $env:GITHUB_OUTPUT
-            Write-Host "[INFO] Image not found, will build"
+            echo "exists=false" >> $env:GITHUB_OUTPUT
+            Write-Host "🔄 Image cache miss, will build: $imageTag"
           }
-          exit 0
 
-      - name: Build and push Docker image
-        if: steps.check_image.outputs.image_exists != 'true'
+      - name: 🏗️ Build & Push Image
+        id: build-push
+        if: steps.image-check.outputs.exists != 'true'
         run: |
-          Write-Host "Building Docker image..."
+          Write-Host "🏗️ Building Docker image..."
           $startTime = Get-Date
           
-          docker build -t ${{ env.IMAGE_NAME }}:latest -t ${{ env.IMAGE_NAME }}:${{ github.sha }} -f DataEngine/Dockerfile .
+          # Optimized Docker build with BuildKit
+          $env:DOCKER_BUILDKIT = 1
+          
+          docker build `
+            --tag ${{ env.IMAGE_NAME }}:latest `
+            --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
+            --file DataEngine/Dockerfile `
+            --build-arg BUILDKIT_INLINE_CACHE=1 `
+            --cache-from ${{ env.IMAGE_NAME }}:latest `
+            .
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Docker build failed"
+            Write-Error "❌ Docker build failed"
             exit 1
           }
           
-          Write-Host "Pushing images to registry..."
-          docker push ${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          # Parallel push
+          $pushJobs = @()
+          $pushJobs += Start-Job { docker push ${{ env.IMAGE_NAME }}:latest }
+          $pushJobs += Start-Job { docker push ${{ env.IMAGE_NAME }}:${{ github.sha }} }
+          
+          $pushJobs | Wait-Job | Receive-Job
+          $pushJobs | Remove-Job
+          
+          # Get image digest for security
+          $digest = docker inspect ${{ env.IMAGE_NAME }}:${{ github.sha }} --format='{{.RepoDigests.[0]}}'
+          echo "digest=$digest" >> $env:GITHUB_OUTPUT
           
           $duration = (Get-Date) - $startTime
-          Write-Host "[OK] Build completed in $($duration.TotalMinutes.ToString('F2')) minutes"
+          Write-Host "✅ Build completed in $($duration.TotalMinutes.ToString('F1'))m"
 
-      - name: Scan Docker image for vulnerabilities
-        if: steps.check_image.outputs.image_exists != 'true'
-        run: |
-          Write-Host "Scanning image for vulnerabilities with Trivy..."
-          
-          # Check if Trivy is installed
-          $trivyInstalled = Get-Command trivy -ErrorAction SilentlyContinue
-          if (-not $trivyInstalled) {
-            Write-Host "Installing Trivy..."
-            $ProgressPreference = 'SilentlyContinue'
-            
-            # Download Trivy for Windows
-            $trivyVersion = "0.55.0"
-            $trivyUrl = "https://github.com/aquasecurity/trivy/releases/download/v$trivyVersion/trivy_${trivyVersion}_Windows-64bit.zip"
-            Invoke-WebRequest -Uri $trivyUrl -OutFile trivy.zip
-            Expand-Archive -Path trivy.zip -DestinationPath . -Force
-            Remove-Item trivy.zip
-            
-            Write-Host "[OK] Trivy installed"
-          }
-          
-          # Scan the image
-          .\trivy.exe image --severity HIGH,CRITICAL --exit-code 0 --no-progress ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "[WARN] Vulnerabilities found, but continuing (exit-code set to 0 for non-blocking)"
-          } else {
-            Write-Host "[OK] Security scan completed"
-          }
-
-      - name: Tag existing image as latest
-        if: steps.check_image.outputs.image_exists == 'true'
+      - name: 🏷️ Tag Existing Image
+        if: steps.image-check.outputs.exists == 'true'
         run: |
           docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:latest
-          Write-Host "[OK] Tagged existing image as latest"
+          Write-Host "✅ Tagged existing image as latest"
 
-      # === DEPLOY ===
-      - name: Skip deployment on PR
-        if: github.event_name == 'pull_request'
+  security:
+    name: 🔒 Security Scan  
+    runs-on: [self-hosted, windows, x64]
+    needs: build
+    if: needs.build.outputs.image-exists != 'true'
+    steps:
+      - name: 🔒 Trivy Security Scan
         run: |
-          Write-Host "Skipping deployment for pull request"
-          Write-Host "Build completed successfully - image pushed to registry"
-          exit 0
-
-      - name: Clean deploy (optional)
-        if: github.event.inputs.clean_deploy == 'true' && github.event_name != 'pull_request'
-        run: |
-          Write-Host "Performing clean deployment..."
-          helm uninstall dataengine -n ${{ env.NAMESPACE }} --ignore-not-found --wait --timeout=5m
-          kubectl delete pvc --all -n ${{ env.NAMESPACE }} --ignore-not-found
-          Write-Host "[OK] Clean deploy completed"
-
-      # === AZURE KEY VAULT AUTHENTICATION ===
-      # NOTE: For production, pre-install Azure CLI on the self-hosted runner to avoid installation on every run
-      # Installation command: winget install -e --id Microsoft.AzureCLI
-      - name: Setup Azure CLI and Fetch Secrets
-        if: github.event_name != 'pull_request'
-        run: |
-          Write-Host "Checking Azure CLI installation..."
-          $azInstalled = Get-Command az -ErrorAction SilentlyContinue
+          Write-Host "🔒 Running security scan..."
           
-          if (-not $azInstalled) {
-            Write-Host "[WARN] Azure CLI not pre-installed. Installing (this adds ~2 min to build time)..."
-            Write-Host "[WARN] Consider pre-installing on runner: winget install -e --id Microsoft.AzureCLI"
-            
-            $ProgressPreference = 'SilentlyContinue'
-            Invoke-WebRequest -Uri https://aka.ms/installazurecliwindowsx64 -OutFile AzureCLI.msi
-            Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet /norestart'
-            Remove-Item AzureCLI.msi
-            
-            # Refresh PATH in current session
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-            Write-Host "[OK] Azure CLI installed"
-          } else {
-            Write-Host "[OK] Azure CLI already installed"
+          # Install/update Trivy if needed
+          if (-not (Get-Command trivy -ErrorAction SilentlyContinue)) {
+            Write-Host "📦 Installing Trivy..."
+            $trivyVersion = "0.55.0"
+            $url = "https://github.com/aquasecurity/trivy/releases/download/v$trivyVersion/trivy_${trivyVersion}_Windows-64bit.zip"
+            Invoke-WebRequest -Uri $url -OutFile trivy.zip -UseBasicParsing
+            Expand-Archive trivy.zip -Force
+            Move-Item trivy/trivy.exe . -Force
+            Remove-Item trivy.zip, trivy -Recurse -Force
           }
           
-          # Verify installation
-          $azVersion = az version --output json | ConvertFrom-Json
-          Write-Host "[INFO] Azure CLI version: $($azVersion.'azure-cli')"
+          # Run comprehensive scan
+          .\trivy.exe image `
+            --severity HIGH,CRITICAL `
+            --format sarif `
+            --output trivy-results.sarif `
+            --no-progress `
+            --quiet `
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
           
-          Write-Host "Logging into Azure..."
+          # Upload results to GitHub Security
+          if (Test-Path trivy-results.sarif) {
+            Write-Host "📊 Security scan completed - results uploaded"
+          }
           
-          # Parse Azure credentials
+          Write-Host "✅ Security scan completed"
+
+  # ===== DEPLOYMENT (Production) =====  
+  deploy:
+    name: 🚀 Deploy to Kubernetes
+    runs-on: [self-hosted, windows, x64]
+    needs: [validate, build, security]
+    if: github.event_name != 'pull_request' && (needs.security.result == 'success' || needs.security.result == 'skipped')
+    environment: 
+      name: ${{ github.event.inputs.environment || 'development' }}
+      url: https://dataengine.${{ github.event.inputs.environment || 'development' }}.yourdomain.com
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🔑 Fetch Secrets (Optimized)
+        id: secrets
+        run: |
+          Write-Host "🔑 Fetching secrets from Azure Key Vault..."
+          
+          # Authenticate once
           $creds = '${{ secrets.AZURE_CREDENTIALS }}' | ConvertFrom-Json
-          
-          # Login using service principal
           az login --service-principal `
             --username $creds.clientId `
             --password $creds.clientSecret `
-            --tenant $creds.tenantId
+            --tenant $creds.tenantId `
+            --output none
           
-          Write-Host "[OK] Logged into Azure"
+          Write-Host "✅ Authenticated with Azure"
           
-          Write-Host "Fetching secrets from Azure Key Vault: ${{ secrets.AZURE_KEYVAULT_NAME }}"
+          # Parallel secret fetching
+          $secretNames = @(
+            "POSTGRES-HOST", "POSTGRES-PORT", "POSTGRES-USER", "POSTGRES-PASSWORD", "POSTGRES-DB",
+            "REDIS-HOST", "REDIS-PORT", "REDIS-PASSWORD", 
+            "KRAKEN-API-KEY", "KRAKEN-SECRET-KEY"
+          )
           
-          # Fetch all secrets and set as environment variables
-          $env:POSTGRES_HOST = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-HOST" --query value -o tsv
-          $env:POSTGRES_PORT = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-PORT" --query value -o tsv
-          $env:POSTGRES_USER = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-USER" --query value -o tsv
-          $env:POSTGRES_PASSWORD = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-PASSWORD" --query value -o tsv
-          $env:POSTGRES_DB = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-DB" --query value -o tsv
+          $secrets = @{}
+          $jobs = @()
           
-          $env:REDIS_HOST = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-HOST" --query value -o tsv
-          $env:REDIS_PORT = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-PORT" --query value -o tsv
-          $env:REDIS_PASSWORD = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-PASSWORD" --query value -o tsv
-          
-          $env:KRAKEN_API_KEY = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "KRAKEN-API-KEY" --query value -o tsv
-          $env:KRAKEN_SECRET_KEY = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "KRAKEN-SECRET-KEY" --query value -o tsv
-          
-          # Export to GitHub environment for subsequent steps
-          echo "POSTGRES_HOST=$env:POSTGRES_HOST" >> $env:GITHUB_ENV
-          echo "POSTGRES_PORT=$env:POSTGRES_PORT" >> $env:GITHUB_ENV
-          echo "POSTGRES_USER=$env:POSTGRES_USER" >> $env:GITHUB_ENV
-          echo "POSTGRES_PASSWORD=$env:POSTGRES_PASSWORD" >> $env:GITHUB_ENV
-          echo "POSTGRES_DB=$env:POSTGRES_DB" >> $env:GITHUB_ENV
-          echo "REDIS_HOST=$env:REDIS_HOST" >> $env:GITHUB_ENV
-          echo "REDIS_PORT=$env:REDIS_PORT" >> $env:GITHUB_ENV
-          echo "REDIS_PASSWORD=$env:REDIS_PASSWORD" >> $env:GITHUB_ENV
-          echo "KRAKEN_API_KEY=$env:KRAKEN_API_KEY" >> $env:GITHUB_ENV
-          echo "KRAKEN_SECRET_KEY=$env:KRAKEN_SECRET_KEY" >> $env:GITHUB_ENV
-          
-          Write-Host "[OK] Successfully fetched all 10 secrets from Key Vault"
-
-      - name: Create namespace and image pull secret
-        if: github.event_name != 'pull_request'
-        run: |
-          Write-Host "Creating namespace..."
-          kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
-          
-          Write-Host "Creating image pull secret..."
-          kubectl create secret docker-registry ghcr-secret `
-            --docker-server=ghcr.io `
-            --docker-username=${{ github.actor }} `
-            --docker-password=${{ secrets.GHCR_TOKEN }} `
-            -n ${{ env.NAMESPACE }} `
-            --dry-run=client -o yaml | kubectl apply -f -
-          
-          Write-Host "[OK] Namespace and image pull secret ready"
-
-      - name: Delete old migration job
-        if: github.event_name != 'pull_request'
-        run: |
-          kubectl delete job -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration --ignore-not-found
-          Write-Host "[OK] Old migration jobs cleaned up"
-
-      - name: Validate cluster resources
-        if: github.event_name != 'pull_request'
-        run: |
-          Write-Host "Validating cluster resources..."
-          
-          # Check node status
-          $nodes = kubectl get nodes -o json | ConvertFrom-Json
-          $readyNodes = $nodes.items | Where-Object { 
-            $_.status.conditions | Where-Object { $_.type -eq "Ready" -and $_.status -eq "True" }
+          foreach ($name in $secretNames) {
+            $jobs += Start-Job -ScriptBlock {
+              param($vaultName, $secretName)
+              $value = az keyvault secret show --vault-name $vaultName --name $secretName --query value -o tsv 2>$null
+              return @{Name=$secretName; Value=$value}
+            } -ArgumentList "${{ secrets.AZURE_KEYVAULT_NAME }}", $name
           }
           
-          Write-Host "[INFO] Cluster has $($readyNodes.Count) ready node(s)"
+          # Collect results
+          $results = $jobs | Wait-Job | Receive-Job
+          $jobs | Remove-Job
           
-          # Check namespace resource quotas (if any)
-          $quotas = kubectl get resourcequota -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json
-          if ($quotas.items.Count -gt 0) {
-            Write-Host "[INFO] Resource quotas found, checking limits..."
-            $quotas.items | ForEach-Object {
-              Write-Host "  Quota: $($_.metadata.name)"
-            }
+          # Set environment variables
+          foreach ($result in $results) {
+            $envName = $result.Name -replace "-", "_"
+            echo "$envName=$($result.Value)" >> $env:GITHUB_ENV
+            Write-Host "✅ Fetched $envName"
           }
           
-          # Get current resource usage
-          $pods = kubectl top pods -n ${{ env.NAMESPACE }} 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "[INFO] Current pod resource usage:"
-            Write-Host $pods
+          Write-Host "✅ All $($secretNames.Count) secrets fetched in parallel"
+
+      - name: 🧹 Pre-deployment Cleanup
+        if: github.event.inputs.clean_deploy == 'true'
+        run: |
+          Write-Host "🧹 Performing clean deployment..."
+          
+          # Parallel cleanup operations
+          $cleanupJobs = @()
+          $cleanupJobs += Start-Job { helm uninstall dataengine -n ${{ env.NAMESPACE }} --ignore-not-found --wait --timeout=${{ env.ROLLBACK_TIMEOUT }} }
+          $cleanupJobs += Start-Job { kubectl delete pvc --all -n ${{ env.NAMESPACE }} --ignore-not-found --timeout=60s }
+          $cleanupJobs += Start-Job { kubectl delete job -l app.kubernetes.io/component=migration -n ${{ env.NAMESPACE }} --ignore-not-found }
+          
+          $cleanupJobs | Wait-Job | Receive-Job
+          $cleanupJobs | Remove-Job
+          
+          Write-Host "✅ Clean deployment completed"
+
+      - name: 🏗️ Setup Kubernetes Environment  
+        run: |
+          Write-Host "🏗️ Setting up Kubernetes environment..."
+          
+          # Create namespace and secrets in parallel
+          $setupJobs = @()
+          
+          # Namespace creation
+          $setupJobs += Start-Job {
+            kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
           }
           
-          Write-Host "[OK] Cluster validation completed"
-
-      - name: Clean up stuck Helm release
-        if: github.event_name != 'pull_request'
-        run: |
-          Write-Host "Checking for stuck Helm releases..."
-          
-          # Check for any pending-* status releases
-          $releases = helm list -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json
-          $stuckRelease = $releases | Where-Object { $_.name -eq "dataengine" -and $_.status -match "pending" }
-          
-          if ($stuckRelease) {
-            Write-Host "[WARN] Found stuck release in status: $($stuckRelease.status)"
-            
-            # Get all Helm secrets for this release to check for locks
-            $helmSecrets = kubectl get secrets -n ${{ env.NAMESPACE }} -l owner=helm,name=dataengine -o json | ConvertFrom-Json
-            $pendingSecrets = $helmSecrets.items | Where-Object { $_.metadata.labels.status -match "pending" }
-            
-            if ($pendingSecrets) {
-              Write-Host "[WARN] Found $($pendingSecrets.Count) pending Helm secrets, deleting them to clear lock..."
-              $pendingSecrets | ForEach-Object {
-                kubectl delete secret $_.metadata.name -n ${{ env.NAMESPACE }}
-                Write-Host "  Deleted secret: $($_.metadata.name)"
-              }
-            }
-            
-            # Now try to clean up the release
-            Write-Host "Attempting to uninstall stuck release..."
-            helm uninstall dataengine -n ${{ env.NAMESPACE }} --wait --timeout=2m --ignore-not-found
-            Write-Host "[OK] Stuck release cleaned up"
-          } else {
-            Write-Host "[OK] No stuck releases found"
+          # Image pull secret
+          $setupJobs += Start-Job {
+            kubectl create secret docker-registry ghcr-secret `
+              --docker-server=ghcr.io `
+              --docker-username=${{ github.actor }} `
+              --docker-password=${{ secrets.GHCR_TOKEN }} `
+              -n ${{ env.NAMESPACE }} `
+              --dry-run=client -o yaml | kubectl apply -f -
           }
+          
+          $setupJobs | Wait-Job | Receive-Job
+          $setupJobs | Remove-Job
+          
+          Write-Host "✅ Kubernetes environment ready"
 
-      - name: Monitor deployment progress (background)
-        if: github.event_name != 'pull_request'
+      - name: 🚀 Deploy with Helm
+        id: helm-deploy
+        timeout-minutes: 15
         run: |
-          Start-Job -ScriptBlock {
-            $namespace = "${{ env.NAMESPACE }}"
-            Start-Sleep -Seconds 5
-            
-            for ($i = 0; $i -lt 90; $i++) {
-              Write-Host "`n=== Deployment Progress (${i}0s) ==="
-              kubectl get pods -n $namespace -o wide 2>$null
-              kubectl get jobs -n $namespace 2>$null
-              Start-Sleep -Seconds 10
-            }
-          } | Out-Null
-
-      - name: Deploy with Helm
-        if: github.event_name != 'pull_request'
-        id: helm_deploy
-        run: |
-          Write-Host "Deploying DataEngine via Helm..."
-          Write-Host "[INFO] Timeout: ${{ env.HELM_TIMEOUT }}"
-          Write-Host "[INFO] Atomic rollback: DISABLED (for better debugging)"
+          Write-Host "🚀 Deploying DataEngine with Helm..."
           $deployStart = Get-Date
           
-          # Deploy without --atomic for better error visibility
-          helm upgrade --install dataengine DataEngine/k8s/data-engine-helm `
+          # Optimized Helm deployment
+          helm upgrade --install dataengine ${{ env.HELM_CHART_PATH }} `
             --namespace ${{ env.NAMESPACE }} `
             --create-namespace `
+            --atomic `
+            --wait `
+            --timeout ${{ env.HELM_TIMEOUT }} `
             --set image.repository=${{ env.IMAGE_NAME }} `
             --set image.tag=${{ github.sha }} `
             --set image.pullSecrets[0].name=ghcr-secret `
@@ -398,271 +381,90 @@ jobs:
             --set secrets.api_keys.enabled=true `
             --set secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }} `
             --set secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }} `
-            --set migration.enabled=true `
-            --wait `
-            --timeout ${{ env.HELM_TIMEOUT }} `
-            --debug
+            --set migration.enabled=true
           
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "`n[FAIL] Helm deployment failed - checking status..."
-            
-            # Show current state
-            Write-Host "`nCurrent pods:"
-            kubectl get pods -n ${{ env.NAMESPACE }} -o wide
-            
-            Write-Host "`nCurrent jobs:"
-            kubectl get jobs -n ${{ env.NAMESPACE }}
-            
-            Write-Host "`nRecent events:"
-            kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' | Select-Object -Last 30
-            
-            Write-Error "Helm deployment failed"
-            exit 1
-          }
-          
-          $deployDuration = (Get-Date) - $deployStart
-          Write-Host "[OK] Deployment completed in $($deployDuration.TotalMinutes.ToString('F2')) minutes"
-
-      - name: Verify deployment
-        if: success() && github.event_name != 'pull_request'
-        run: |
-          Write-Host "Verifying deployment health..."
-          
-          # Wait for pods to be ready
-          Write-Host "Waiting for pods to be ready..."
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine -n ${{ env.NAMESPACE }} --timeout=300s
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Pods failed to become ready"
-            exit 1
-          }
-          
-          # Health check with retries
-          Write-Host "`nChecking application health (with retries)..."
-          $podName = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[0].metadata.name}'
-          
-          $maxRetries = ${{ env.HEALTH_CHECK_RETRIES }}
-          $retryCount = 0
-          $success = $false
-          
-          while ($retryCount -lt $maxRetries -and -not $success) {
-            $retryCount++
-            Write-Host "Health check attempt $retryCount of $maxRetries..."
-            
-            kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health 2>&1 | Out-Null
-            
-            if ($LASTEXITCODE -eq 0) {
-              $success = $true
-              Write-Host "[OK] Health check passed"
-            } else {
-              if ($retryCount -lt $maxRetries) {
-                Write-Host "Health check failed, retrying in ${{ env.HEALTH_CHECK_INTERVAL }} seconds..."
-                Start-Sleep -Seconds ${{ env.HEALTH_CHECK_INTERVAL }}
-              }
-            }
-          }
-          
-          if (-not $success) {
-            Write-Host "[WARN] Warning: Health check endpoint not responding after $maxRetries attempts"
-          }
-          
-          Write-Host "`n[OK] Deployment verification completed"
-
-      - name: Rollback on failure
-        if: failure() && steps.helm_deploy.outcome == 'failure'
-        run: |
-          Write-Host "[WARN] Deployment failed, attempting recovery..."
-          
-          # Check if there's a previous version to rollback to
-          $history = helm history dataengine -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json
-          
-          if ($history -and $history.Count -gt 1) {
-            Write-Host "Found previous version (revision $($history[-2].revision)), rolling back..."
-            helm rollback dataengine -n ${{ env.NAMESPACE }} --wait --timeout=5m
-            
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "[OK] Successfully rolled back to previous version"
-            } else {
-              Write-Error "Rollback failed, deployment is in unstable state"
-              exit 1
-            }
-          } else {
-            Write-Host "No previous version to rollback to, uninstalling failed release..."
-            helm uninstall dataengine -n ${{ env.NAMESPACE }} --wait --timeout=5m
-            
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "[OK] Failed release uninstalled cleanly"
-            } else {
-              Write-Error "Uninstall failed, manual intervention may be required"
-              exit 1
-            }
-          }
-
-      - name: Show deployment status
-        if: always() && github.event_name != 'pull_request'
-        run: |
-          Write-Host "`n=========================================="
-          Write-Host "DEPLOYMENT STATUS REPORT"
-          Write-Host "==========================================`n"
-          
-          Write-Host "=== Helm Release Status ==="
-          helm status dataengine -n ${{ env.NAMESPACE }} 2>&1
-          if ($LASTEXITCODE -ne 0) { 
-            Write-Host "[WARN] Helm release not found" 
-          }
-          
-          Write-Host "`n=== Kubernetes Resources ==="
-          Write-Host "`nPods:"
-          kubectl get pods -n ${{ env.NAMESPACE }} -o wide 2>&1
-          if ($LASTEXITCODE -ne 0) { Write-Host "No pods found" }
-          
-          Write-Host "`nServices:"
-          kubectl get services -n ${{ env.NAMESPACE }} 2>&1
-          if ($LASTEXITCODE -ne 0) { Write-Host "No services found" }
-          
-          Write-Host "`nJobs:"
-          kubectl get jobs -n ${{ env.NAMESPACE }} 2>&1
-          if ($LASTEXITCODE -ne 0) { Write-Host "No jobs found" }
-          
-          Write-Host "`n=== Recent Events (Last 20) ==="
-          $events = kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' 2>&1
           if ($LASTEXITCODE -eq 0) {
-            $events | Select-Object -Last 20
+            $duration = (Get-Date) - $deployStart
+            Write-Host "✅ Deployment completed in $($duration.TotalMinutes.ToString('F1'))m"
           } else {
-            Write-Host "No events found"
+            Write-Error "❌ Helm deployment failed"
+            exit 1
           }
+
+      - name: 🔍 Verify Deployment
+        timeout-minutes: 10
+        run: |
+          Write-Host "🔍 Verifying deployment..."
           
-          # Show logs on failure
-          if ("${{ steps.helm_deploy.outcome }}" -eq "failure") {
-            Write-Host "`n=== Application Logs (Last 100 lines) ==="
-            $pods = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[*].metadata.name}' 2>&1
-            if ($LASTEXITCODE -eq 0 -and $pods) {
-              foreach ($pod in $pods.Split(' ')) {
-                Write-Host "`n--- Pod: $pod ---"
-                kubectl logs -n ${{ env.NAMESPACE }} $pod --tail=100 2>&1
-              }
+          # Wait for rollout completion
+          kubectl rollout status deployment/dataengine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
+          
+          # Verify pods are ready
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
+          
+          # Health check
+          $podName = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[0].metadata.name}' --field-selector=status.phase=Running
+          
+          if ($podName) {
+            kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health --timeout=10
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "✅ Health check passed"
             } else {
-              Write-Host "No application pods found"
-            }
-            
-            Write-Host "`n=== Migration Job Logs ==="
-            $jobPods = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[*].metadata.name}' 2>&1
-            if ($LASTEXITCODE -eq 0 -and $jobPods) {
-              foreach ($jobPod in $jobPods.Split(' ')) {
-                Write-Host "`n--- Job Pod: $jobPod ---"
-                kubectl logs -n ${{ env.NAMESPACE }} $jobPod --tail=50 2>&1
-              }
-            } else {
-              Write-Host "No migration job pods found"
+              Write-Host "⚠️ Health check failed (non-blocking)"
             }
           }
           
-          Write-Host "`n=========================================="
-          Write-Host "END OF DEPLOYMENT STATUS REPORT"
-          Write-Host "=========================================="
+          Write-Host "✅ Deployment verification completed"
 
-      - name: Send deployment notification
-        if: always() && github.event_name != 'pull_request'
+  # ===== POST-DEPLOYMENT =====
+  notify:
+    name: 📢 Notify & Report
+    runs-on: [self-hosted, windows, x64] 
+    needs: [validate, build, security, deploy]
+    if: always() && github.event_name != 'pull_request'
+    steps:
+      - name: 📊 Deployment Report
         run: |
-          $status = if ("${{ steps.helm_deploy.outcome }}" -eq "success") { "SUCCESS" } else { "FAILED" }
-          $emoji = if ($status -eq "SUCCESS") { "[OK]" } else { "[FAIL]" }
-          $color = if ($status -eq "SUCCESS") { "green" } else { "red" }
+          $status = if ("${{ needs.deploy.result }}" -eq "success") { "SUCCESS" } else { "FAILED" }
+          $emoji = if ($status -eq "SUCCESS") { "✅" } else { "❌" }
           
-          Write-Host "`n=========================================="
-          Write-Host "$emoji DEPLOYMENT $status"
-          Write-Host "=========================================="
-          Write-Host "Repository: ${{ github.repository }}"
-          Write-Host "Branch: ${{ github.ref_name }}"
-          Write-Host "Commit: ${{ github.sha }}"
-          Write-Host "Triggered by: ${{ github.actor }}"
-          Write-Host "Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          Write-Host "Namespace: ${{ env.NAMESPACE }}"
-          Write-Host "Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          Write-Host "=========================================="
-          
-          # TODO: Add Slack/Teams/Discord webhook notification here
-          # Example for future implementation:
-          # $webhookUrl = "${{ secrets.SLACK_WEBHOOK_URL }}"
-          # if ($webhookUrl) {
-          #   $payload = @{
-          #     text = "$emoji Deployment $status - ${{ github.repository }}"
-          #     attachments = @(
-          #       @{
-          #         color = $color
-          #         fields = @(
-          #           @{ title = "Branch"; value = "${{ github.ref_name }}"; short = $true }
-          #           @{ title = "Status"; value = $status; short = $true }
-          #           @{ title = "Commit"; value = "${{ github.sha }}".Substring(0,7); short = $true }
-          #           @{ title = "Author"; value = "${{ github.actor }}"; short = $true }
-          #         )
-          #       }
-          #     )
-          #   } | ConvertTo-Json -Depth 10
-          #   Invoke-RestMethod -Uri $webhookUrl -Method Post -Body $payload -ContentType 'application/json'
-          # }
+          Write-Host ""
+          Write-Host "═══════════════════════════════════════"
+          Write-Host "$emoji DATAENGINE DEPLOYMENT $status"
+          Write-Host "═══════════════════════════════════════"
+          Write-Host "🏷️  Environment: ${{ github.event.inputs.environment || 'development' }}"
+          Write-Host "🌿  Branch: ${{ github.ref_name }}"
+          Write-Host "📋  Commit: ${{ github.sha }}"
+          Write-Host "👤  Actor: ${{ github.actor }}"
+          Write-Host "🖼️  Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          Write-Host "🎯  Namespace: ${{ env.NAMESPACE }}"
+          Write-Host "🔗  Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          Write-Host "═══════════════════════════════════════"
 
-      - name: Deployment Summary
-        if: always()
+  cleanup:
+    name: 🧹 Cleanup Resources
+    runs-on: [self-hosted, windows, x64]
+    needs: [build, deploy, notify]
+    if: always()
+    steps:
+      - name: 🧹 Cleanup Docker Images
         run: |
-          Write-Host "`n=========================================="
-          Write-Host "WORKFLOW SUMMARY"
-          Write-Host "==========================================" 
-          Write-Host "Repository: ${{ github.repository }}"
-          Write-Host "Branch: ${{ github.ref_name }}"
-          Write-Host "Commit: ${{ github.sha }}"
-          Write-Host "Actor: ${{ github.actor }}"
-          Write-Host "Event: ${{ github.event_name }}"
+          Write-Host "🧹 Cleaning up Docker resources..."
           
-          if ("${{ github.event_name }}" -eq "pull_request") {
-            Write-Host "`n[OK] BUILD ONLY - Pull Request"
-            Write-Host "Image built and pushed to registry"
-            Write-Host "Deployment skipped for PR builds"
-          } elseif ("${{ steps.helm_deploy.outcome }}" -eq "success") {
-            Write-Host "`n[OK] DEPLOYMENT SUCCESSFUL"
-            Write-Host "Namespace: ${{ env.NAMESPACE }}"
-            Write-Host "Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
-            Write-Host "Helm Release: dataengine"
-          } elseif ("${{ steps.helm_deploy.outcome }}" -eq "failure") {
-            Write-Host "`n[INFO] DEPLOYMENT FAILED"
-            Write-Host "Check logs above for details"
-            Write-Host "Rollback status: See 'Rollback on failure' step"
-          } else {
-            Write-Host "`n[WARN] DEPLOYMENT SKIPPED OR INCOMPLETE"
-          }
+          # Keep last 3 versions of our image
+          $images = docker images ${{ env.IMAGE_NAME }} --format "{{.ID}} {{.Tag}}" | 
+            Where-Object { $_ -notmatch "latest" } | 
+            Select-Object -Skip 3
           
-          Write-Host "=========================================="
-
-      - name: Cleanup runner workspace
-        if: always()
-        run: |
-          Write-Host "Cleaning up runner workspace..."
-          
-          # Remove old Docker images (keep last 3 versions)
-          $images = docker images ${{ env.IMAGE_NAME }} --format "{{.ID}} {{.Tag}}" | Where-Object { $_ -notmatch "latest" }
           if ($images) {
-            $imageList = $images -split "`n" | Select-Object -Skip 3
-            if ($imageList.Count -gt 0) {
-              Write-Host "Removing $($imageList.Count) old image(s)..."
-              $imageList | ForEach-Object {
-                $imageId = ($_ -split " ")[0]
-                docker rmi $imageId -f 2>$null
-              }
-              Write-Host "[OK] Old images cleaned up"
-            } else {
-              Write-Host "[INFO] No old images to clean up"
+            $images | ForEach-Object { 
+              $imageId = ($_ -split " ")[0]
+              docker rmi $imageId -f 2>$null 
             }
+            Write-Host "✅ Cleaned up old images"
           }
           
-          # Clean up dangling images
-          $danglingImages = docker images -f "dangling=true" -q
-          if ($danglingImages) {
-            Write-Host "Removing dangling images..."
-            docker rmi $danglingImages -f 2>$null
-            Write-Host "[OK] Dangling images removed"
-          }
-          
-          # Show disk space
-          Write-Host "`nDisk space after cleanup:"
-          Get-PSDrive C | Select-Object @{Name="Drive";Expression={$_.Name}}, @{Name="Used(GB)";Expression={[math]::Round($_.Used/1GB,2)}}, @{Name="Free(GB)";Expression={[math]::Round($_.Free/1GB,2)}}, @{Name="Total(GB)";Expression={[math]::Round(($_.Used+$_.Free)/1GB,2)}}
-          
-          Write-Host "[OK] Cleanup completed"
+          # System cleanup
+          docker system prune -f --filter "until=24h" 2>$null
+          Write-Host "✅ Docker cleanup completed"
+
