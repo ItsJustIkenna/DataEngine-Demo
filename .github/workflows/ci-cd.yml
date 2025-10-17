@@ -1,4 +1,4 @@
-name: DataEngine CI/CD
+﻿name: DataEngine CI/CD
 
 on:
   push:
@@ -77,10 +77,10 @@ jobs:
           docker pull ${{ env.IMAGE_NAME }}:${{ github.sha }} 2>&1 | Out-Null
           if ($LASTEXITCODE -eq 0) {
             echo "image_exists=true" >> $env:GITHUB_OUTPUT
-            Write-Host "✓ Image already exists, skipping build"
+            Write-Host "[OK] Image already exists, skipping build"
           } else {
             echo "image_exists=false" >> $env:GITHUB_OUTPUT
-            Write-Host "✗ Image not found, will build"
+            Write-Host "[INFO] Image not found, will build"
           }
           exit 0
 
@@ -102,14 +102,14 @@ jobs:
           docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
           
           $duration = (Get-Date) - $startTime
-          Write-Host "✓ Build completed in $($duration.TotalMinutes.ToString('F2')) minutes"
+          Write-Host "[OK] Build completed in $($duration.TotalMinutes.ToString('F2')) minutes"
 
       - name: Tag existing image as latest
         if: steps.check_image.outputs.image_exists == 'true'
         run: |
           docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:latest
-          Write-Host "✓ Tagged existing image as latest"
+          Write-Host "[OK] Tagged existing image as latest"
 
       # === DEPLOY ===
       - name: Skip deployment on PR
@@ -125,7 +125,7 @@ jobs:
           Write-Host "Performing clean deployment..."
           helm uninstall dataengine -n ${{ env.NAMESPACE }} --ignore-not-found --wait --timeout=5m
           kubectl delete pvc --all -n ${{ env.NAMESPACE }} --ignore-not-found
-          Write-Host "✓ Clean deploy completed"
+          Write-Host "[OK] Clean deploy completed"
 
       # === AZURE KEY VAULT AUTHENTICATION ===
       - name: Azure Login
@@ -167,7 +167,7 @@ jobs:
             echo "KRAKEN_API_KEY=$env:KRAKEN_API_KEY" >> $env:GITHUB_ENV
             echo "KRAKEN_SECRET_KEY=$env:KRAKEN_SECRET_KEY" >> $env:GITHUB_ENV
             
-            Write-Host "✓ Successfully fetched all secrets from Key Vault"
+            Write-Host "[OK] Successfully fetched all secrets from Key Vault"
 
       - name: Create namespace and image pull secret
         if: github.event_name != 'pull_request'
@@ -183,13 +183,13 @@ jobs:
             -n ${{ env.NAMESPACE }} `
             --dry-run=client -o yaml | kubectl apply -f -
           
-          Write-Host "✓ Namespace and image pull secret ready"
+          Write-Host "[OK] Namespace and image pull secret ready"
 
       - name: Delete old migration job
         if: github.event_name != 'pull_request'
         run: |
           kubectl delete job -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration --ignore-not-found
-          Write-Host "✓ Old migration jobs cleaned up"
+          Write-Host "[OK] Old migration jobs cleaned up"
 
       - name: Clean up stuck Helm release
         if: github.event_name != 'pull_request'
@@ -197,18 +197,18 @@ jobs:
           Write-Host "Checking for stuck Helm releases..."
           $release = helm list -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json | Where-Object { $_.name -eq "dataengine" -and $_.status -match "pending" }
           if ($release) {
-            Write-Host "⚠ Found stuck release in status: $($release.status)"
+            Write-Host "[WARN] Found stuck release in status: $($release.status)"
             Write-Host "Attempting rollback..."
             helm rollback dataengine -n ${{ env.NAMESPACE }} --wait --timeout=2m 2>&1 | Out-Null
             if ($LASTEXITCODE -ne 0) {
               Write-Host "Rollback failed, uninstalling release..."
               helm uninstall dataengine -n ${{ env.NAMESPACE }} --wait --timeout=2m
-              Write-Host "✓ Stuck release uninstalled"
+              Write-Host "[OK] Stuck release uninstalled"
             } else {
-              Write-Host "✓ Stuck release rolled back"
+              Write-Host "[OK] Stuck release rolled back"
             }
           } else {
-            Write-Host "✓ No stuck releases found"
+            Write-Host "[OK] No stuck releases found"
           }
 
       - name: Deploy with Helm
@@ -255,7 +255,7 @@ jobs:
           }
           
           $deployDuration = (Get-Date) - $deployStart
-          Write-Host "✓ Deployment completed in $($deployDuration.TotalMinutes.ToString('F2')) minutes"
+          Write-Host "[OK] Deployment completed in $($deployDuration.TotalMinutes.ToString('F2')) minutes"
 
       - name: Verify deployment
         if: success() && github.event_name != 'pull_request'
@@ -287,7 +287,7 @@ jobs:
             
             if ($LASTEXITCODE -eq 0) {
               $success = $true
-              Write-Host "✓ Health check passed"
+              Write-Host "[OK] Health check passed"
             } else {
               if ($retryCount -lt $maxRetries) {
                 Write-Host "Health check failed, retrying in 10 seconds..."
@@ -297,15 +297,15 @@ jobs:
           }
           
           if (-not $success) {
-            Write-Host "⚠ Warning: Health check endpoint not responding after $maxRetries attempts"
+            Write-Host "[WARN] Warning: Health check endpoint not responding after $maxRetries attempts"
           }
           
-          Write-Host "`n✓ Deployment verification completed"
+          Write-Host "`n[OK] Deployment verification completed"
 
       - name: Rollback on failure
         if: failure() && steps.helm_deploy.outcome == 'failure'
         run: |
-          Write-Host "⚠ Deployment failed, attempting recovery..."
+          Write-Host "[WARN] Deployment failed, attempting recovery..."
           
           # Check if there's a previous version to rollback to
           $history = helm history dataengine -n ${{ env.NAMESPACE }} -o json 2>$null | ConvertFrom-Json
@@ -315,7 +315,7 @@ jobs:
             helm rollback dataengine -n ${{ env.NAMESPACE }} --wait --timeout=5m
             
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✓ Successfully rolled back to previous version"
+              Write-Host "[OK] Successfully rolled back to previous version"
             } else {
               Write-Error "Rollback failed, deployment is in unstable state"
               exit 1
@@ -325,7 +325,7 @@ jobs:
             helm uninstall dataengine -n ${{ env.NAMESPACE }} --wait --timeout=5m
             
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✓ Failed release uninstalled cleanly"
+              Write-Host "[OK] Failed release uninstalled cleanly"
             } else {
               Write-Error "Uninstall failed, manual intervention may be required"
               exit 1
@@ -342,7 +342,7 @@ jobs:
           Write-Host "=== Helm Release Status ==="
           helm status dataengine -n ${{ env.NAMESPACE }} 2>&1
           if ($LASTEXITCODE -ne 0) { 
-            Write-Host "⚠ Helm release not found" 
+            Write-Host "[WARN] Helm release not found" 
           }
           
           Write-Host "`n=== Kubernetes Resources ==="
@@ -408,20 +408,20 @@ jobs:
           Write-Host "Event: ${{ github.event_name }}"
           
           if ("${{ github.event_name }}" -eq "pull_request") {
-            Write-Host "`n✓ BUILD ONLY - Pull Request"
+            Write-Host "`n[OK] BUILD ONLY - Pull Request"
             Write-Host "Image built and pushed to registry"
             Write-Host "Deployment skipped for PR builds"
           } elseif ("${{ steps.helm_deploy.outcome }}" -eq "success") {
-            Write-Host "`n✓ DEPLOYMENT SUCCESSFUL"
+            Write-Host "`n[OK] DEPLOYMENT SUCCESSFUL"
             Write-Host "Namespace: ${{ env.NAMESPACE }}"
             Write-Host "Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
             Write-Host "Helm Release: dataengine"
           } elseif ("${{ steps.helm_deploy.outcome }}" -eq "failure") {
-            Write-Host "`n✗ DEPLOYMENT FAILED"
+            Write-Host "`n[INFO] DEPLOYMENT FAILED"
             Write-Host "Check logs above for details"
             Write-Host "Rollback status: See 'Rollback on failure' step"
           } else {
-            Write-Host "`n⚠ DEPLOYMENT SKIPPED OR INCOMPLETE"
+            Write-Host "`n[WARN] DEPLOYMENT SKIPPED OR INCOMPLETE"
           }
           
           Write-Host "=========================================="
