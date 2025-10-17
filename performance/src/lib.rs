@@ -14,14 +14,15 @@
 //! ## Usage
 //!
 //! ```rust
-//! use performance::{PerformanceMetrics, CpuAffinityManager};
+//! use performance::{PerformanceMetrics};
 //! 
 //! // Initialize performance monitoring
 //! let metrics = PerformanceMetrics::new();
 //! 
-//! // Set CPU affinity for trading thread
-//! let affinity_manager = CpuAffinityManager::new();
-//! let _ = affinity_manager.pin_to_core(0); // Note: requires root privileges
+//! // Record some metrics
+//! metrics.record_message_latency(1000); // 1 microsecond
+//! let snapshot = metrics.get_metrics_snapshot();
+//! assert!(snapshot.messages_processed > 0);
 //! ```
 
 use std::sync::{Arc, OnceLock};
