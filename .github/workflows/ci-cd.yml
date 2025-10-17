@@ -155,46 +155,51 @@ jobs:
           # Verify installation
           az version
 
-      - name: Azure Login
+      - name: Azure Login and Fetch Secrets from Key Vault
         if: github.event_name != 'pull_request'
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Fetch secrets from Azure Key Vault
-        if: github.event_name != 'pull_request'
-        uses: azure/CLI@v1
-        with:
-          inlineScript: |
-            Write-Host "Fetching secrets from Azure Key Vault: ${{ secrets.AZURE_KEYVAULT_NAME }}"
-            
-            # Fetch all secrets and set as environment variables
-            $env:POSTGRES_HOST = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-HOST" --query value -o tsv
-            $env:POSTGRES_PORT = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-PORT" --query value -o tsv
-            $env:POSTGRES_USER = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-USER" --query value -o tsv
-            $env:POSTGRES_PASSWORD = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-PASSWORD" --query value -o tsv
-            $env:POSTGRES_DB = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-DB" --query value -o tsv
-            
-            $env:REDIS_HOST = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-HOST" --query value -o tsv
-            $env:REDIS_PORT = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-PORT" --query value -o tsv
-            $env:REDIS_PASSWORD = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-PASSWORD" --query value -o tsv
-            
-            $env:KRAKEN_API_KEY = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "KRAKEN-API-KEY" --query value -o tsv
-            $env:KRAKEN_SECRET_KEY = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "KRAKEN-SECRET-KEY" --query value -o tsv
-            
-            # Export to GitHub environment for subsequent steps
-            echo "POSTGRES_HOST=$env:POSTGRES_HOST" >> $env:GITHUB_ENV
-            echo "POSTGRES_PORT=$env:POSTGRES_PORT" >> $env:GITHUB_ENV
-            echo "POSTGRES_USER=$env:POSTGRES_USER" >> $env:GITHUB_ENV
-            echo "POSTGRES_PASSWORD=$env:POSTGRES_PASSWORD" >> $env:GITHUB_ENV
-            echo "POSTGRES_DB=$env:POSTGRES_DB" >> $env:GITHUB_ENV
-            echo "REDIS_HOST=$env:REDIS_HOST" >> $env:GITHUB_ENV
-            echo "REDIS_PORT=$env:REDIS_PORT" >> $env:GITHUB_ENV
-            echo "REDIS_PASSWORD=$env:REDIS_PASSWORD" >> $env:GITHUB_ENV
-            echo "KRAKEN_API_KEY=$env:KRAKEN_API_KEY" >> $env:GITHUB_ENV
-            echo "KRAKEN_SECRET_KEY=$env:KRAKEN_SECRET_KEY" >> $env:GITHUB_ENV
-            
-            Write-Host "[OK] Successfully fetched all secrets from Key Vault"
+        run: |
+          Write-Host "Logging into Azure..."
+          
+          # Parse Azure credentials
+          $creds = '${{ secrets.AZURE_CREDENTIALS }}' | ConvertFrom-Json
+          
+          # Login using service principal
+          az login --service-principal `
+            --username $creds.clientId `
+            --password $creds.clientSecret `
+            --tenant $creds.tenantId
+          
+          Write-Host "[OK] Logged into Azure"
+          
+          Write-Host "Fetching secrets from Azure Key Vault: ${{ secrets.AZURE_KEYVAULT_NAME }}"
+          
+          # Fetch all secrets and set as environment variables
+          $env:POSTGRES_HOST = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-HOST" --query value -o tsv
+          $env:POSTGRES_PORT = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-PORT" --query value -o tsv
+          $env:POSTGRES_USER = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-USER" --query value -o tsv
+          $env:POSTGRES_PASSWORD = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-PASSWORD" --query value -o tsv
+          $env:POSTGRES_DB = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "POSTGRES-DB" --query value -o tsv
+          
+          $env:REDIS_HOST = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-HOST" --query value -o tsv
+          $env:REDIS_PORT = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-PORT" --query value -o tsv
+          $env:REDIS_PASSWORD = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "REDIS-PASSWORD" --query value -o tsv
+          
+          $env:KRAKEN_API_KEY = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "KRAKEN-API-KEY" --query value -o tsv
+          $env:KRAKEN_SECRET_KEY = az keyvault secret show --vault-name ${{ secrets.AZURE_KEYVAULT_NAME }} --name "KRAKEN-SECRET-KEY" --query value -o tsv
+          
+          # Export to GitHub environment for subsequent steps
+          echo "POSTGRES_HOST=$env:POSTGRES_HOST" >> $env:GITHUB_ENV
+          echo "POSTGRES_PORT=$env:POSTGRES_PORT" >> $env:GITHUB_ENV
+          echo "POSTGRES_USER=$env:POSTGRES_USER" >> $env:GITHUB_ENV
+          echo "POSTGRES_PASSWORD=$env:POSTGRES_PASSWORD" >> $env:GITHUB_ENV
+          echo "POSTGRES_DB=$env:POSTGRES_DB" >> $env:GITHUB_ENV
+          echo "REDIS_HOST=$env:REDIS_HOST" >> $env:GITHUB_ENV
+          echo "REDIS_PORT=$env:REDIS_PORT" >> $env:GITHUB_ENV
+          echo "REDIS_PASSWORD=$env:REDIS_PASSWORD" >> $env:GITHUB_ENV
+          echo "KRAKEN_API_KEY=$env:KRAKEN_API_KEY" >> $env:GITHUB_ENV
+          echo "KRAKEN_SECRET_KEY=$env:KRAKEN_SECRET_KEY" >> $env:GITHUB_ENV
+          
+          Write-Host "[OK] Successfully fetched all secrets from Key Vault"
 
       - name: Create namespace and image pull secret
         if: github.event_name != 'pull_request'
