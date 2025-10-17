@@ -133,7 +133,7 @@ jobs:
           Write-Host "[OK] Clean deploy completed"
 
       # === AZURE KEY VAULT AUTHENTICATION ===
-      - name: Install Azure CLI
+      - name: Install Azure CLI, Login, and Fetch Secrets
         if: github.event_name != 'pull_request'
         run: |
           Write-Host "Checking if Azure CLI is installed..."
@@ -145,7 +145,7 @@ jobs:
             Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet /norestart'
             Remove-Item AzureCLI.msi
             
-            # Refresh PATH
+            # Refresh PATH in current session
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
             Write-Host "[OK] Azure CLI installed"
           } else {
@@ -154,10 +154,7 @@ jobs:
           
           # Verify installation
           az version
-
-      - name: Azure Login and Fetch Secrets from Key Vault
-        if: github.event_name != 'pull_request'
-        run: |
+          
           Write-Host "Logging into Azure..."
           
           # Parse Azure credentials
@@ -198,6 +195,8 @@ jobs:
           echo "REDIS_PASSWORD=$env:REDIS_PASSWORD" >> $env:GITHUB_ENV
           echo "KRAKEN_API_KEY=$env:KRAKEN_API_KEY" >> $env:GITHUB_ENV
           echo "KRAKEN_SECRET_KEY=$env:KRAKEN_SECRET_KEY" >> $env:GITHUB_ENV
+          
+          Write-Host "[OK] Successfully fetched all secrets from Key Vault"
           
           Write-Host "[OK] Successfully fetched all secrets from Key Vault"
 
