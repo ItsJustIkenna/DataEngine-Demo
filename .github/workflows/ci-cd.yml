@@ -209,16 +209,34 @@ jobs:
           # Optimized Docker build with BuildKit
           $env:DOCKER_BUILDKIT = 1
           
+          # Build with verbose output to diagnose Rust compilation issues
           docker build `
             --tag ${{ env.IMAGE_NAME }}:latest `
             --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
             --file DataEngine/Dockerfile `
             --build-arg BUILDKIT_INLINE_CACHE=1 `
             --cache-from ${{ env.IMAGE_NAME }}:latest `
+            --progress=plain `
+            --no-cache `
             .
           
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "[FAIL] Docker build failed"
+            Write-Host "[ERROR] Docker build failed - checking build context..."
+            Write-Host "Current directory contents:"
+            Get-ChildItem -Path . -Name
+            Write-Host "DataEngine directory contents:"
+            if (Test-Path "DataEngine") {
+              Get-ChildItem -Path "DataEngine" -Name
+            } else {
+              Write-Host "DataEngine directory not found!"
+            }
+            Write-Host "Dockerfile contents:"
+            if (Test-Path "DataEngine/Dockerfile") {
+              Get-Content "DataEngine/Dockerfile" | Select-Object -First 20
+            } else {
+              Write-Host "Dockerfile not found!"
+            }
+            Write-Error "[FAIL] Docker build failed - see logs above for details"
             exit 1
           }
           
