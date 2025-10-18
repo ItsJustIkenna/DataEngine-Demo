@@ -42,6 +42,13 @@ COPY LoggingEngine/ ./LoggingEngine/
 COPY MessageBrokerEngine/publisher/ ./MessageBrokerEngine/publisher/
 COPY MessageBrokerEngine/protocol/ ./MessageBrokerEngine/protocol/
 
+# Debug: Check what was actually copied
+RUN echo "=== DEBUG: Checking databaseschema directory contents ===" && \
+    find ./databaseschema -name "*.rs" | head -20 && \
+    echo "=== Checking for specific files ===" && \
+    ls -la ./databaseschema/src/models/ || echo "models directory not found" && \
+    ls -la ./databaseschema/src/ops/ || echo "ops directory not found"
+
 # Change to DataEngine directory for build
 WORKDIR /app/DataEngine
 
