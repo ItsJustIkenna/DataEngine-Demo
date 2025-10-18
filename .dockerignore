@@ -95,7 +95,7 @@ Thumbs.db
 # Test files
 **/tests/**
 **/*_test.rs
-**/*test*.rs
+**/*_tests.rs
 
 # Docker and deployment files
 **/Dockerfile*
