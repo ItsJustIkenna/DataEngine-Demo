@@ -211,6 +211,22 @@ jobs:
           
           # Build with proper context - Dockerfile expects to be run from TradingPlatform root
           # Current directory already has all checkouts: DataEngine/, databaseschema/, etc.
+          
+          # Debug: Check databaseschema directory contents before build
+          Write-Host "[DEBUG] Checking databaseschema directory contents..."
+          if (Test-Path "databaseschema") {
+            Write-Host "databaseschema directory exists with contents:"
+            Get-ChildItem -Path "databaseschema" -Recurse | Select-Object -First 10 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            Write-Host "Checking for models/mod.rs specifically:"
+            if (Test-Path "databaseschema\src\models\mod.rs") {
+              Write-Host "  models/mod.rs EXISTS"
+            } else {
+              Write-Host "  models/mod.rs MISSING"
+            }
+          } else {
+            Write-Host "databaseschema directory MISSING"
+          }
+          
           docker build `
             --tag ${{ env.IMAGE_NAME }}:latest `
             --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
