@@ -18,7 +18,7 @@ on:
       environment:
         description: 'Target environment'
         type: choice
-        options: ['development', 'staging', 'production']
+        options: ['development', 'staging', 'production', 'database-only']
         default: 'development'
 
 # Prevent concurrent deployments per environment
@@ -395,73 +395,127 @@ jobs:
         id: helm-deploy
         timeout-minutes: 15
         run: |
-          Write-Host "🚀 Deploying DataEngine with Helm..."
-          $deployStart = Get-Date
+          $environment = "${{ github.event.inputs.environment || 'development' }}"
           
-          # Optimized Helm deployment
-          helm upgrade --install dataengine ${{ env.HELM_CHART_PATH }} `
-            --namespace ${{ env.NAMESPACE }} `
-            --create-namespace `
-            --atomic `
-            --wait `
-            --timeout ${{ env.HELM_TIMEOUT }} `
-            --set image.repository=${{ env.IMAGE_NAME }} `
-            --set image.tag=${{ github.sha }} `
-            --set image.pullSecrets[0].name=ghcr-secret `
-            --set customPostgresql.enabled=false `
-            --set customRedis.enabled=false `
-            --set externalDatabase.enabled=true `
-            --set externalDatabase.host=${{ env.POSTGRES_HOST }} `
-            --set externalDatabase.port=${{ env.POSTGRES_PORT }} `
-            --set externalDatabase.database=${{ env.POSTGRES_DB }} `
-            --set externalDatabase.username=${{ env.POSTGRES_USER }} `
-            --set externalDatabase.existingSecret=postgresql-credentials `
-            --set externalRedis.enabled=true `
-            --set externalRedis.host=${{ env.REDIS_HOST }} `
-            --set externalRedis.port=${{ env.REDIS_PORT }} `
-            --set externalRedis.existingSecret=redis-credentials `
-            --set secrets.database.enabled=true `
-            --set secrets.database.username=${{ env.POSTGRES_USER }} `
-            --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
-            --set secrets.redis.enabled=true `
-            --set secrets.redis.password=${{ env.REDIS_PASSWORD }} `
-            --set secrets.api_keys.enabled=true `
-            --set secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }} `
-            --set secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }} `
-            --set migration.enabled=true
-          
-          if ($LASTEXITCODE -eq 0) {
-            $duration = (Get-Date) - $deployStart
-            Write-Host "✅ Deployment completed in $($duration.TotalMinutes.ToString('F1'))m"
+          if ($environment -eq "database-only") {
+            Write-Host "�️ Deploying Database-Only Configuration..."
+            
+            # Database-only deployment with minimal application footprint
+            helm upgrade --install dataengine-db ${{ env.HELM_CHART_PATH }} `
+              --namespace ${{ env.NAMESPACE }} `
+              --create-namespace `
+              --atomic `
+              --wait `
+              --timeout ${{ env.HELM_TIMEOUT }} `
+              --set deployment.enabled=false `
+              --set service.enabled=false `
+              --set ingress.enabled=false `
+              --set migration.enabled=true `
+              --set migration.runOnce=true `
+              --set secrets.database.enabled=true `
+              --set secrets.database.username=${{ env.POSTGRES_USER }} `
+              --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
+              --set externalDatabase.enabled=true `
+              --set externalDatabase.host=${{ env.POSTGRES_HOST }} `
+              --set externalDatabase.port=${{ env.POSTGRES_PORT }} `
+              --set externalDatabase.database=${{ env.POSTGRES_DB }} `
+              --set externalDatabase.username=${{ env.POSTGRES_USER }}
+              
+            Write-Host "✅ Database-only deployment completed"
           } else {
-            Write-Error "❌ Helm deployment failed"
-            exit 1
+            Write-Host "🚀 Deploying Full DataEngine Application..."
+            $deployStart = Get-Date
+            
+            # Full application deployment
+            helm upgrade --install dataengine ${{ env.HELM_CHART_PATH }} `
+              --namespace ${{ env.NAMESPACE }} `
+              --create-namespace `
+              --atomic `
+              --wait `
+              --timeout ${{ env.HELM_TIMEOUT }} `
+              --set image.repository=${{ env.IMAGE_NAME }} `
+              --set image.tag=${{ github.sha }} `
+              --set image.pullSecrets[0].name=ghcr-secret `
+              --set customPostgresql.enabled=false `
+              --set customRedis.enabled=false `
+              --set externalDatabase.enabled=true `
+              --set externalDatabase.host=${{ env.POSTGRES_HOST }} `
+              --set externalDatabase.port=${{ env.POSTGRES_PORT }} `
+              --set externalDatabase.database=${{ env.POSTGRES_DB }} `
+              --set externalDatabase.username=${{ env.POSTGRES_USER }} `
+              --set externalDatabase.existingSecret=postgresql-credentials `
+              --set externalRedis.enabled=true `
+              --set externalRedis.host=${{ env.REDIS_HOST }} `
+              --set externalRedis.port=${{ env.REDIS_PORT }} `
+              --set externalRedis.existingSecret=redis-credentials `
+              --set secrets.database.enabled=true `
+              --set secrets.database.username=${{ env.POSTGRES_USER }} `
+              --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
+              --set secrets.redis.enabled=true `
+              --set secrets.redis.password=${{ env.REDIS_PASSWORD }} `
+              --set secrets.api_keys.enabled=true `
+              --set secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }} `
+              --set secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }} `
+              --set migration.enabled=true
+            
+            if ($LASTEXITCODE -eq 0) {
+              $duration = (Get-Date) - $deployStart
+              Write-Host "✅ Deployment completed in $($duration.TotalMinutes.ToString('F1'))m"
+            } else {
+              Write-Error "❌ Helm deployment failed"
+              exit 1
+            }
           }
 
       - name: 🔍 Verify Deployment
         timeout-minutes: 10
         run: |
-          Write-Host "🔍 Verifying deployment..."
+          $environment = "${{ github.event.inputs.environment || 'development' }}"
           
-          # Wait for rollout completion
-          kubectl rollout status deployment/dataengine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
-          
-          # Verify pods are ready
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
-          
-          # Health check
-          $podName = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[0].metadata.name}' --field-selector=status.phase=Running
-          
-          if ($podName) {
-            kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health --timeout=10
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ Health check passed"
+          if ($environment -eq "database-only") {
+            Write-Host "🔍 Verifying database-only deployment..."
+            
+            # Check if migration job completed successfully
+            $migrationJob = kubectl get jobs -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o name 2>$null
+            
+            if ($migrationJob) {
+              kubectl wait --for=condition=complete $migrationJob -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
+              Write-Host "✅ Database migration completed"
             } else {
-              Write-Host "⚠️ Health check failed (non-blocking)"
+              Write-Host "ℹ️ No migration job found (may not be needed)"
             }
+            
+            # Verify database connectivity (if migration pod exists)
+            $migrationPod = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[0].metadata.name}' --field-selector=status.phase=Succeeded 2>$null
+            
+            if ($migrationPod) {
+              Write-Host "✅ Database migration pod found: $migrationPod"
+            }
+            
+            Write-Host "✅ Database-only deployment verification completed"
+          } else {
+            Write-Host "🔍 Verifying application deployment..."
+            
+            # Wait for rollout completion
+            kubectl rollout status deployment/dataengine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
+            
+            # Verify pods are ready
+            kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
+            
+            # Health check
+            $podName = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/name=data-engine -o jsonpath='{.items[0].metadata.name}' --field-selector=status.phase=Running
+            
+            if ($podName) {
+              kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health --timeout=10
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Health check passed"
+              } else {
+                Write-Host "⚠️ Health check failed (non-blocking)"
+              }
+            }
+            
+            Write-Host "✅ Application deployment verification completed"
           }
-          
-          Write-Host "✅ Deployment verification completed"
 
   # ===== POST-DEPLOYMENT =====
   notify:
