@@ -28,10 +28,14 @@
 **/*.md
 !DOCKER.md
 
-# Test files
+# Test files (but explicitly include backtest_result files)
 **/tests/**
 **/*_test.rs
 **/*_tests.rs
+
+# Explicitly include critical backtest_result files  
+!databaseschema/src/models/backtest_result.rs
+!databaseschema/src/ops/backtest_result_ops.rs
 
 # Temporary files
 **/*.tmp

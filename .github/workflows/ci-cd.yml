@@ -211,6 +211,20 @@ jobs:
           
           # Build with proper context - Dockerfile expects to be run from TradingPlatform root
           # Current directory already has all checkouts: DataEngine/, databaseschema/, etc.
+          
+          # Quick debug: Check if backtest_result files exist before Docker build
+          Write-Host "[DEBUG] Checking backtest_result files before Docker build:"
+          if (Test-Path "databaseschema\src\models\backtest_result.rs") {
+            Write-Host "  ✓ backtest_result.rs EXISTS before build"
+          } else {
+            Write-Host "  ✗ backtest_result.rs MISSING before build"
+          }
+          if (Test-Path "databaseschema\src\ops\backtest_result_ops.rs") {
+            Write-Host "  ✓ backtest_result_ops.rs EXISTS before build"  
+          } else {
+            Write-Host "  ✗ backtest_result_ops.rs MISSING before build"
+          }
+          
           docker build `
             --tag ${{ env.IMAGE_NAME }}:latest `
             --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
