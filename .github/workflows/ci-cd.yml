@@ -204,27 +204,32 @@ jobs:
           Write-Host "Building Docker image..."
           $startTime = Get-Date
           
-          # Optimized Docker build with BuildKit
-          $env:DOCKER_BUILDKIT = 1
-          
-          # Build with proper context - Dockerfile expects to be run from TradingPlatform root
-          # Current directory already has all checkouts: DataEngine/, databaseschema/, etc.
-          
-          # Debug: Check databaseschema directory contents before build
+          # Debug: Check databaseschema directory contents FIRST
           Write-Host "[DEBUG] Checking databaseschema directory contents..."
           if (Test-Path "databaseschema") {
             Write-Host "databaseschema directory exists with contents:"
-            Get-ChildItem -Path "databaseschema" -Recurse | Select-Object -First 10 | ForEach-Object { Write-Host "  $($_.FullName)" }
+            Get-ChildItem -Path "databaseschema" -Recurse | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" }
             Write-Host "Checking for models/mod.rs specifically:"
             if (Test-Path "databaseschema\src\models\mod.rs") {
               Write-Host "  models/mod.rs EXISTS"
+              Get-Content "databaseschema\src\models\mod.rs" | Select-Object -First 5 | ForEach-Object { Write-Host "    $_" }
             } else {
               Write-Host "  models/mod.rs MISSING"
+            }
+            if (Test-Path "databaseschema\src\models\backtest_result.rs") {
+              Write-Host "  backtest_result.rs EXISTS"
+            } else {
+              Write-Host "  backtest_result.rs MISSING"
             }
           } else {
             Write-Host "databaseschema directory MISSING"
           }
           
+          # Optimized Docker build with BuildKit
+          $env:DOCKER_BUILDKIT = 1
+          
+          # Build with proper context - Dockerfile expects to be run from TradingPlatform root
+          # Current directory already has all checkouts: DataEngine/, databaseschema/, etc.
           docker build `
             --tag ${{ env.IMAGE_NAME }}:latest `
             --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
