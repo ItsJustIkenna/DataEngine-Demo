@@ -240,9 +240,9 @@ jobs:
             
             foreach ($file in $requiredFiles) {
               if (Test-Path $file) {
-                Write-Host "  ✓ $file EXISTS"
+                Write-Host "  [OK] $file EXISTS"
               } else {
-                Write-Host "  ✗ $file MISSING"
+                Write-Host "  [MISSING] $file NOT FOUND"
               }
             }
           } else {
