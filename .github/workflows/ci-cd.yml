@@ -156,8 +156,9 @@ jobs:
           # Try to pull the image (more reliable than manifest inspect)
           $ErrorActionPreference = 'SilentlyContinue'
           docker pull $imageTag 2>&1 | Out-Null
+          $pullResult = $LASTEXITCODE
           
-          if ($LASTEXITCODE -eq 0) {
+          if ($pullResult -eq 0) {
             echo "exists=true" >> $env:GITHUB_OUTPUT
             Write-Host "[OK] Image cache hit: $imageTag"
           } else {
@@ -165,8 +166,8 @@ jobs:
             Write-Host "[INFO] Image cache miss, will build: $imageTag"
           }
           
-          # Reset error preference
-          $ErrorActionPreference = 'Stop'
+          # Always exit successfully regardless of pull result
+          exit 0
 
       - name: 🏗️ Build & Push Image
         id: build-push
