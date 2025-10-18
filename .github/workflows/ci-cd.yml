@@ -68,6 +68,7 @@ jobs:
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
+          ref: 097697968d16301818dd41b3f95101b25f06a326  # Specific commit with all files
 
       - name: 📦 Checkout redisutils
         uses: actions/checkout@v4
@@ -145,6 +146,7 @@ jobs:
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
+          ref: 097697968d16301818dd41b3f95101b25f06a326  # Specific commit with all files
 
       - name: 📦 Checkout redisutils
         uses: actions/checkout@v4
@@ -207,19 +209,41 @@ jobs:
           # Debug: Check databaseschema directory contents FIRST
           Write-Host "[DEBUG] Checking databaseschema directory contents..."
           if (Test-Path "databaseschema") {
-            Write-Host "databaseschema directory exists with contents:"
-            Get-ChildItem -Path "databaseschema" -Recurse | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" }
-            Write-Host "Checking for models/mod.rs specifically:"
-            if (Test-Path "databaseschema\src\models\mod.rs") {
-              Write-Host "  models/mod.rs EXISTS"
-              Get-Content "databaseschema\src\models\mod.rs" | Select-Object -First 5 | ForEach-Object { Write-Host "    $_" }
+            Write-Host "databaseschema directory exists"
+            Write-Host "Checking for specific required files:"
+            
+            # Check models directory
+            if (Test-Path "databaseschema\src\models") {
+              Write-Host "  models directory EXISTS"
+              Write-Host "  models directory contents:"
+              Get-ChildItem -Path "databaseschema\src\models" | ForEach-Object { Write-Host "    $($_.Name)" }
             } else {
-              Write-Host "  models/mod.rs MISSING"
+              Write-Host "  models directory MISSING"
             }
-            if (Test-Path "databaseschema\src\models\backtest_result.rs") {
-              Write-Host "  backtest_result.rs EXISTS"
+            
+            # Check ops directory
+            if (Test-Path "databaseschema\src\ops") {
+              Write-Host "  ops directory EXISTS"
+              Write-Host "  ops directory contents:"
+              Get-ChildItem -Path "databaseschema\src\ops" | ForEach-Object { Write-Host "    $($_.Name)" }
             } else {
-              Write-Host "  backtest_result.rs MISSING"
+              Write-Host "  ops directory MISSING"
+            }
+            
+            # Check specific files
+            $requiredFiles = @(
+              "databaseschema\src\models\backtest_result.rs",
+              "databaseschema\src\ops\backtest_result_ops.rs",
+              "databaseschema\src\models\mod.rs",
+              "databaseschema\src\ops\mod.rs"
+            )
+            
+            foreach ($file in $requiredFiles) {
+              if (Test-Path $file) {
+                Write-Host "  ✓ $file EXISTS"
+              } else {
+                Write-Host "  ✗ $file MISSING"
+              }
             }
           } else {
             Write-Host "databaseschema directory MISSING"
