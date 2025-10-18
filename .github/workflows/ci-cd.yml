@@ -209,7 +209,8 @@ jobs:
           # Optimized Docker build with BuildKit
           $env:DOCKER_BUILDKIT = 1
           
-          # Build with verbose output to diagnose Rust compilation issues
+          # Build with proper context - Dockerfile expects to be run from TradingPlatform root
+          # Current directory already has all checkouts: DataEngine/, databaseschema/, etc.
           docker build `
             --tag ${{ env.IMAGE_NAME }}:latest `
             --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
@@ -217,7 +218,6 @@ jobs:
             --build-arg BUILDKIT_INLINE_CACHE=1 `
             --cache-from ${{ env.IMAGE_NAME }}:latest `
             --progress=plain `
-            --no-cache `
             .
           
           if ($LASTEXITCODE -ne 0) {
@@ -230,11 +230,11 @@ jobs:
             } else {
               Write-Host "DataEngine directory not found!"
             }
-            Write-Host "Dockerfile contents:"
+            Write-Host "Dockerfile location check:"
             if (Test-Path "DataEngine/Dockerfile") {
-              Get-Content "DataEngine/Dockerfile" | Select-Object -First 20
+              Write-Host "[OK] DataEngine/Dockerfile found"
             } else {
-              Write-Host "Dockerfile not found!"
+              Write-Host "[ERROR] DataEngine/Dockerfile not found!"
             }
             Write-Error "[FAIL] Docker build failed - see logs above for details"
             exit 1
