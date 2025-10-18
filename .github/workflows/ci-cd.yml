@@ -63,12 +63,11 @@ jobs:
           path: DataEngine
           fetch-depth: 0  # Full history for better caching
 
-      - name: � Checkout databaseschema
+      - name: 📦 Checkout databaseschema
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: 📦 Checkout redisutils
         uses: actions/checkout@v4
@@ -146,7 +145,6 @@ jobs:
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: 📦 Checkout redisutils
         uses: actions/checkout@v4
