@@ -152,7 +152,10 @@ jobs:
           Write-Host "Checking if image exists..."
           
           $imageTag = "${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          docker manifest inspect $imageTag > $null 2>&1
+          
+          # Try to pull the image (more reliable than manifest inspect)
+          $ErrorActionPreference = 'SilentlyContinue'
+          docker pull $imageTag 2>&1 | Out-Null
           
           if ($LASTEXITCODE -eq 0) {
             echo "exists=true" >> $env:GITHUB_OUTPUT
@@ -161,6 +164,9 @@ jobs:
             echo "exists=false" >> $env:GITHUB_OUTPUT
             Write-Host "[INFO] Image cache miss, will build: $imageTag"
           }
+          
+          # Reset error preference
+          $ErrorActionPreference = 'Stop'
 
       - name: 🏗️ Build & Push Image
         id: build-push
