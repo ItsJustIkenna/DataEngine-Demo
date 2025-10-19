@@ -28,14 +28,15 @@
 **/*.md
 !DOCKER.md
 
-# Test files (but explicitly include backtest_result files)
+# Test-related exclusions (very specific patterns)
 **/tests/**
 **/*_test.rs
-**/*_tests.rs
-
-# Explicitly include critical backtest_result files  
-!databaseschema/src/models/backtest_result.rs
-!databaseschema/src/ops/backtest_result_ops.rs
+**/test_*.rs
+# Exclude integration_test.rs, unit_tests.rs etc, but NOT backtest_result_ops.rs
+**/integration_test*.rs
+**/unit_test*.rs
+**/*_unit_tests.rs
+**/*_integration_tests.rs
 
 # Temporary files
 **/*.tmp
