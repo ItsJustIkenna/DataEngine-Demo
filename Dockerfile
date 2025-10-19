@@ -37,6 +37,7 @@ COPY DataEngine/config/Cargo.toml ./DataEngine/config/
 COPY DataEngine/hostbuilder/Cargo.toml ./DataEngine/hostbuilder/
 COPY DataEngine/program/Cargo.toml ./DataEngine/program/
 COPY DataEngine/performance/Cargo.toml ./DataEngine/performance/
+COPY DataEngine/tests/Cargo.toml ./DataEngine/tests/
 
 # Copy external dependency manifests and sources (complete structure)
 COPY databaseschema/ ./databaseschema/
@@ -49,18 +50,19 @@ COPY MessageBrokerEngine/protocol/ ./MessageBrokerEngine/protocol/
 WORKDIR /app/DataEngine
 
 # Create dummy source files for dependency caching
-RUN mkdir -p config/src hostbuilder/src program/src performance/src && \
+RUN mkdir -p config/src hostbuilder/src program/src performance/src tests/src && \
     echo "pub fn dummy() {}" > config/src/lib.rs && \
     echo "pub fn dummy() {}" > hostbuilder/src/lib.rs && \
     echo "fn main() { println!(\"Building dependencies...\"); }" > program/src/main.rs && \
     echo "fn main() { println!(\"Building benchmark...\"); }" > program/src/benchmark.rs && \
-    echo "pub fn dummy() {}" > performance/src/lib.rs
+    echo "pub fn dummy() {}" > performance/src/lib.rs && \
+    echo "pub fn dummy() {}" > tests/src/lib.rs
 
 # Pre-compile dependencies (this layer will be cached!)
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/DataEngine/target \
     cargo build --release --locked && \
-    rm -rf config/src hostbuilder/src program/src performance/src
+    rm -rf config/src hostbuilder/src program/src performance/src tests/src
 
 ################################################################################
 # Stage 2: Application builder
@@ -71,6 +73,7 @@ COPY DataEngine/config/ ./config/
 COPY DataEngine/hostbuilder/ ./hostbuilder/
 COPY DataEngine/program/ ./program/
 COPY DataEngine/performance/ ./performance/
+COPY DataEngine/tests/ ./tests/
 
 COPY databaseschema/ ./databaseschema/
 COPY redisutils/ ./redisutils/
