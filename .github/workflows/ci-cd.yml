@@ -223,7 +223,6 @@ jobs:
               exit 1
             }
           }
-          }
           
           # 2. Deploy enterprise .dockerignore for consistent build context
           Write-Host "[SETUP] Deploying enterprise .dockerignore..."
