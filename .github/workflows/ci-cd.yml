@@ -306,7 +306,7 @@ jobs:
           
           $duration = (Get-Date) - $startTime
           $durationMinutes = [math]::Round($duration.TotalMinutes, 1)
-          Write-Host "[OK] Build completed in ${durationMinutes}m"
+          Write-Host "[OK] Build completed in $durationMinutes" + "m"
 
       - name: 🏷️ Tag Existing Image
         if: steps.image-check.outputs.exists == 'true'
@@ -517,7 +517,7 @@ jobs:
             if ($LASTEXITCODE -eq 0) {
               $duration = (Get-Date) - $deployStart
               $durationMinutes = [math]::Round($duration.TotalMinutes, 1)
-              Write-Host "✅ Deployment completed in ${durationMinutes}m"
+              Write-Host "✅ Deployment completed in $durationMinutes" + "m"
             } else {
               Write-Error "❌ Helm deployment failed"
               exit 1
