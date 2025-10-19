@@ -1,5 +1,8 @@
-//! Comprehensive integration tests for DataEngine
-//! Tests the entire system end-to-end with realistic scenarios
+//! System-Level Integration Tests for DataEngine
+//!
+//! Tests the complete DataEngine system end-to-end with realistic business scenarios.
+//! These tests validate that all components work together correctly and meet
+//! business requirements for a trading system.
 
 use anyhow::Result;
 use chrono::Utc;

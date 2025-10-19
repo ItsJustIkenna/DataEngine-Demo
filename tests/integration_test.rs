@@ -1,7 +1,7 @@
-//! Integration tests for the reorganized DataEngine system
+//! Performance and Infrastructure Integration Tests
 //!
-//! Tests the new file organization, build system consolidation,
-//! and performance optimizations.
+//! Tests performance metrics, CPU affinity, build system organization,
+//! and infrastructure components of the DataEngine system.
 
 use performance::{
     PerformanceMetrics, CpuAffinityManager, initialize,

@@ -18,7 +18,6 @@ wiremock = "0.6"
 tempfile = "3.8"
 assert_matches = "1.5"
 proptest = "1.4"
-criterion = { version = "0.5", features = ["html_reports"] }
 
 # Test data generation
 fake = { version = "2.9", features = ["derive", "chrono"] }
@@ -33,18 +32,6 @@ hostbuilder = { path = "../hostbuilder" }
 config = { path = "../config" }
 performance = { path = "../performance" }
 ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
-
-[[bench]]
-name = "market_data_processing"
-harness = false
-
-[[bench]] 
-name = "cache_performance"
-harness = false
-
-[[bench]]
-name = "network_throughput"
-harness = false
 
 [features]
 default = ["integration_tests", "benchmarks"]
