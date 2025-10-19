@@ -214,6 +214,11 @@ jobs:
           # Ensure consistent workspace structure for both local and CI/CD builds
           Write-Host "[ARCH] Setting up enterprise build environment..."
           
+          # DEBUG: Verify current working directory and structure
+          Write-Host "[DEBUG] Current working directory: $(Get-Location)"
+          Write-Host "[DEBUG] Available items in current directory:"
+          Get-ChildItem | ForEach-Object { Write-Host "  - $($_.Name) ($($_.GetType().Name))" }
+          
           # 1. Verify all required dependencies are present
           $requiredDeps = @("DataEngine", "databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
           foreach ($dep in $requiredDeps) {
@@ -255,6 +260,11 @@ jobs:
           # 4. Execute enterprise Docker build with comprehensive logging
           Write-Host "[BUILD] Starting enterprise Docker build..." -ForegroundColor Green
           $buildStartTime = Get-Date
+          
+          # Ensure we're in the repository root (where all dependencies are checked out)
+          Write-Host "[DEBUG] Current working directory: $(Get-Location)"
+          Write-Host "[DEBUG] Available directories in current location:"
+          Get-ChildItem -Directory | ForEach-Object { Write-Host "  - $($_.Name)" }
           
           # Set optimal Docker BuildKit configuration
           $env:DOCKER_BUILDKIT = 1
