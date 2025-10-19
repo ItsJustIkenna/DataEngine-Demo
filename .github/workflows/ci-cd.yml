@@ -275,7 +275,7 @@ jobs:
             }
             
             $buildDuration = (Get-Date) - $buildStartTime
-            Write-Host "[✓] Enterprise Docker build completed successfully in $($buildDuration.TotalMinutes.ToString('F1')) minutes" -ForegroundColor Green
+            Write-Host "[✓] Enterprise Docker build completed successfully in $($buildDuration.TotalMinutes.ToString(\"F1\")) minutes" -ForegroundColor Green
             
           } catch {
             Write-Host "[✗] Enterprise Docker build failed!" -ForegroundColor Red
@@ -304,7 +304,7 @@ jobs:
           echo "digest=$digest" >> $env:GITHUB_OUTPUT
           
           $duration = (Get-Date) - $startTime
-          Write-Host "[OK] Build completed in $($duration.TotalMinutes.ToString('F1'))m"
+          Write-Host "[OK] Build completed in $($duration.TotalMinutes.ToString(\"F1\"))m"
 
       - name: 🏷️ Tag Existing Image
         if: steps.image-check.outputs.exists == 'true'
@@ -514,7 +514,7 @@ jobs:
             
             if ($LASTEXITCODE -eq 0) {
               $duration = (Get-Date) - $deployStart
-              Write-Host "✅ Deployment completed in $($duration.TotalMinutes.ToString('F1'))m"
+              Write-Host "✅ Deployment completed in $($duration.TotalMinutes.ToString(\"F1\"))m"
             } else {
               Write-Error "❌ Helm deployment failed"
               exit 1
