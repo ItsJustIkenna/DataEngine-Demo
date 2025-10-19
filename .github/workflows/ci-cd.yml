@@ -51,47 +51,47 @@ env:
 jobs:
   # ===== VALIDATION & TESTING (Parallel) =====
   validate:
-    name: 🔍 Validate & Test
+    name: Validate & Test
     runs-on: [self-hosted, windows, x64]
     outputs:
       helm-valid: ${{ steps.helm-check.outputs.valid }}
       tests-passed: ${{ steps.test-check.outputs.passed }}
     steps:
-      - name: 📥 Checkout DataEngine
+      - name: Checkout DataEngine
         uses: actions/checkout@v4
         with:
           path: DataEngine
           fetch-depth: 0  # Full history for better caching
 
-      - name: 📦 Checkout databaseschema
+      - name: Checkout databaseschema
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
           fetch-depth: 0  # Get full history to ensure all files are available
 
-      - name: 📦 Checkout redisutils
+      - name: Checkout redisutils
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
           path: redisutils
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
-      - name: 📦 Checkout LoggingEngine
+      - name: Checkout LoggingEngine
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
           path: LoggingEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
-      - name: 📦 Checkout MessageBrokerEngine
+      - name: Checkout MessageBrokerEngine
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
           path: MessageBrokerEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
-      - name: 🔍 Validate Helm Chart
+      - name: Validate Helm Chart
         id: helm-check
         run: |
           Write-Host "Validating Helm chart..."
@@ -107,7 +107,7 @@ jobs:
             exit 1
           }
 
-      - name: 🧪 Run Rust Tests
+      - name: Run Rust Tests
         id: test-check
         if: github.event.inputs.skip_tests != 'true'
         run: |
@@ -128,7 +128,7 @@ jobs:
 
   # ===== BUILD & SECURITY (Parallel) =====
   build:
-    name: 🏗️ Build & Push
+    name: Build & Push
     runs-on: [self-hosted, windows, x64]
     needs: validate
     if: needs.validate.outputs.helm-valid == 'true' && (needs.validate.outputs.tests-passed == 'true' || github.event.inputs.skip_tests == 'true')
@@ -136,47 +136,47 @@ jobs:
       image-exists: ${{ steps.image-check.outputs.exists }}
       image-digest: ${{ steps.build-push.outputs.digest }}
     steps:
-      - name: 📥 Checkout DataEngine
+      - name: Checkout DataEngine
         uses: actions/checkout@v4
         with:
           path: DataEngine
 
-      - name: 📦 Checkout databaseschema
+      - name: Checkout databaseschema
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/databaseschema
           path: databaseschema
           fetch-depth: 0  # Get full history to ensure all files are available
 
-      - name: 📦 Checkout redisutils
+      - name: Checkout redisutils
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/redisutils
           path: redisutils
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
-      - name: 📦 Checkout LoggingEngine
+      - name: Checkout LoggingEngine
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/LoggingEngine
           path: LoggingEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
-      - name: 📦 Checkout MessageBrokerEngine
+      - name: Checkout MessageBrokerEngine
         uses: actions/checkout@v4
         with:
           repository: Nwagbara-Group-LLC/MessageBrokerEngine
           path: MessageBrokerEngine
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
-      - name: 🔐 Login to GHCR
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🔍 Check Image Cache
+      - name: Check Image Cache
         id: image-check
         run: |
           Write-Host "Checking if image exists..."
@@ -199,7 +199,7 @@ jobs:
           # Always exit successfully regardless of pull result
           exit 0
 
-      - name: 🏗️ Build & Push Image
+      - name: Build & Push Image
         id: build-push
         if: steps.image-check.outputs.exists != 'true'
         run: |
@@ -217,17 +217,18 @@ jobs:
           $requiredDeps = @("DataEngine", "databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
           foreach ($dep in $requiredDeps) {
             if (Test-Path $dep) {
-              Write-Host "[✓] Dependency found: $dep"
+              Write-Host "[OK] Dependency found: $dep"
             } else {
-              Write-Error "[✗] MISSING DEPENDENCY: $dep - Build will fail!"
+              Write-Host "[MISSING] MISSING DEPENDENCY: $dep - Build will fail!"
               exit 1
             }
+          }
           }
           
           # 2. Deploy enterprise .dockerignore for consistent build context
           Write-Host "[SETUP] Deploying enterprise .dockerignore..."
           Copy-Item "DataEngine\.dockerignore" ".dockerignore" -Force
-          Write-Host "[✓] Enterprise .dockerignore deployed to build context root"
+          Write-Host "[OK] Enterprise .dockerignore deployed to build context root"
           
           # 3. Validate critical backtest_result files before build
           Write-Host "[VALIDATE] Checking critical business logic files..."
@@ -239,9 +240,9 @@ jobs:
           $allFilesPresent = $true
           foreach ($file in $criticalFiles) {
             if (Test-Path $file) {
-              Write-Host "[✓] Critical file found: $file"
+              Write-Host "[OK] Critical file found: $file"
             } else {
-              Write-Host "[✗] MISSING CRITICAL FILE: $file" -ForegroundColor Red
+              Write-Host "[MISSING] MISSING CRITICAL FILE: $file" -ForegroundColor Red
               $allFilesPresent = $false
             }
           }
@@ -276,10 +277,10 @@ jobs:
             
             $buildDuration = (Get-Date) - $buildStartTime
             $durationMinutes = [math]::Round($buildDuration.TotalMinutes, 1)
-            Write-Host "[✓] Enterprise Docker build completed successfully in $durationMinutes minutes" -ForegroundColor Green
+            Write-Host "[OK] Enterprise Docker build completed successfully in $durationMinutes minutes" -ForegroundColor Green
             
           } catch {
-            Write-Host "[✗] Enterprise Docker build failed!" -ForegroundColor Red
+            Write-Host "[FAIL] Enterprise Docker build failed!" -ForegroundColor Red
             Write-Host "[DEBUG] Build context analysis:" -ForegroundColor Yellow
             Write-Host "Working directory: $(Get-Location)"
             Write-Host "Available directories:" 
@@ -287,9 +288,9 @@ jobs:
             Write-Host "Critical files check:"
             foreach ($file in $criticalFiles) {
               if (Test-Path $file) {
-                Write-Host "  ✓ $file" -ForegroundColor Green
+                Write-Host "  OK $file" -ForegroundColor Green
               } else {
-                Write-Host "  ✗ $file" -ForegroundColor Red
+                Write-Host "  MISSING $file" -ForegroundColor Red
               }
             }
             throw $_
@@ -306,9 +307,9 @@ jobs:
           
           $duration = (Get-Date) - $startTime
           $durationMinutes = [math]::Round($duration.TotalMinutes, 1)
-          Write-Host "[OK] Build completed in $durationMinutes" + "m"
+          Write-Host "[OK] Build completed in $durationMinutes minutes"
 
-      - name: 🏷️ Tag Existing Image
+      - name: Tag Existing Image
         if: steps.image-check.outputs.exists == 'true'
         run: |
           docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.IMAGE_NAME }}:latest
@@ -316,12 +317,12 @@ jobs:
           Write-Host "[OK] Tagged existing image as latest"
 
   security:
-    name: 🔒 Security Scan  
+    name: Security Scan
     runs-on: [self-hosted, windows, x64]
     needs: build
     if: needs.build.outputs.image-exists != 'true'
     steps:
-      - name: 🔒 Trivy Security Scan
+      - name: Trivy Security Scan
         run: |
           Write-Host "Running security scan..."
           
@@ -354,7 +355,7 @@ jobs:
 
   # ===== DEPLOYMENT (Production) =====  
   deploy:
-    name: 🚀 Deploy to Kubernetes
+    name: Deploy to Kubernetes
     runs-on: [self-hosted, windows, x64]
     needs: [validate, build, security]
     if: github.event_name != 'pull_request' && (needs.security.result == 'success' || needs.security.result == 'skipped')
@@ -362,7 +363,7 @@ jobs:
       name: ${{ github.event.inputs.environment || 'development' }}
       url: https://dataengine.${{ github.event.inputs.environment || 'development' }}.yourdomain.com
     steps:
-      - name: 📥 Checkout
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: 🔑 Fetch Secrets (Optimized)
@@ -404,10 +405,10 @@ jobs:
           
           Write-Host "[OK] All $($secretNames.Count) secrets fetched successfully"
 
-      - name: 🧹 Pre-deployment Cleanup
+      - name: Pre-deployment Cleanup
         if: github.event.inputs.clean_deploy == 'true'
         run: |
-          Write-Host "🧹 Performing clean deployment..."
+          Write-Host "[CLEANUP] Performing clean deployment..."
           
           # Parallel cleanup operations
           $cleanupJobs = @()
@@ -418,11 +419,11 @@ jobs:
           $cleanupJobs | Wait-Job | Receive-Job
           $cleanupJobs | Remove-Job
           
-          Write-Host "✅ Clean deployment completed"
+          Write-Host "[SUCCESS] Clean deployment completed"
 
-      - name: 🏗️ Setup Kubernetes Environment  
+      - name: Setup Kubernetes Environment
         run: |
-          Write-Host "🏗️ Setting up Kubernetes environment..."
+          Write-Host "[SETUP] Setting up Kubernetes environment..."
           
           # Create namespace and secrets in parallel
           $setupJobs = @()
@@ -445,16 +446,16 @@ jobs:
           $setupJobs | Wait-Job | Receive-Job
           $setupJobs | Remove-Job
           
-          Write-Host "✅ Kubernetes environment ready"
+          Write-Host "[SUCCESS] Kubernetes environment ready"
 
-      - name: 🚀 Deploy with Helm
+      - name: Deploy with Helm
         id: helm-deploy
         timeout-minutes: 15
         run: |
           $environment = "${{ github.event.inputs.environment || 'development' }}"
           
           if ($environment -eq "database-only") {
-            Write-Host "�️ Deploying Database-Only Configuration..."
+            Write-Host "[DATABASE] Deploying Database-Only Configuration..."
             
             # Database-only deployment with minimal application footprint
             helm upgrade --install dataengine-db ${{ env.HELM_CHART_PATH }} `
@@ -477,9 +478,9 @@ jobs:
               --set externalDatabase.database=${{ env.POSTGRES_DB }} `
               --set externalDatabase.username=${{ env.POSTGRES_USER }}
               
-            Write-Host "✅ Database-only deployment completed"
+            Write-Host "[SUCCESS] Database-only deployment completed"
           } else {
-            Write-Host "🚀 Deploying Full DataEngine Application..."
+            Write-Host "[DEPLOY] Deploying Full DataEngine Application..."
             $deployStart = Get-Date
             
             # Full application deployment
@@ -517,41 +518,41 @@ jobs:
             if ($LASTEXITCODE -eq 0) {
               $duration = (Get-Date) - $deployStart
               $durationMinutes = [math]::Round($duration.TotalMinutes, 1)
-              Write-Host "✅ Deployment completed in $durationMinutes" + "m"
+              Write-Host "[SUCCESS] Deployment completed in $durationMinutes minutes"
             } else {
-              Write-Error "❌ Helm deployment failed"
+              Write-Error "[FAILED] Helm deployment failed"
               exit 1
             }
           }
 
-      - name: 🔍 Verify Deployment
+      - name: Verify Deployment
         timeout-minutes: 10
         run: |
           $environment = "${{ github.event.inputs.environment || 'development' }}"
           
           if ($environment -eq "database-only") {
-            Write-Host "🔍 Verifying database-only deployment..."
+            Write-Host "[VERIFY] Verifying database-only deployment..."
             
             # Check if migration job completed successfully
             $migrationJob = kubectl get jobs -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o name 2>$null
             
             if ($migrationJob) {
               kubectl wait --for=condition=complete $migrationJob -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
-              Write-Host "✅ Database migration completed"
+              Write-Host "[SUCCESS] Database migration completed"
             } else {
-              Write-Host "ℹ️ No migration job found (may not be needed)"
+              Write-Host "[INFO] No migration job found (may not be needed)"
             }
             
             # Verify database connectivity (if migration pod exists)
             $migrationPod = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[0].metadata.name}' --field-selector=status.phase=Succeeded 2>$null
             
             if ($migrationPod) {
-              Write-Host "✅ Database migration pod found: $migrationPod"
+              Write-Host "[SUCCESS] Database migration pod found: $migrationPod"
             }
             
-            Write-Host "✅ Database-only deployment verification completed"
+            Write-Host "[SUCCESS] Database-only deployment verification completed"
           } else {
-            Write-Host "🔍 Verifying application deployment..."
+            Write-Host "[VERIFY] Verifying application deployment..."
             
             # Wait for rollout completion
             kubectl rollout status deployment/dataengine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
@@ -565,47 +566,47 @@ jobs:
             if ($podName) {
               kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health --timeout=10
               if ($LASTEXITCODE -eq 0) {
-                Write-Host "✅ Health check passed"
+                Write-Host "[SUCCESS] Health check passed"
               } else {
-                Write-Host "⚠️ Health check failed (non-blocking)"
+                Write-Host "[WARNING] Health check failed (non-blocking)"
               }
             }
             
-            Write-Host "✅ Application deployment verification completed"
+            Write-Host "[SUCCESS] Application deployment verification completed"
           }
 
   # ===== POST-DEPLOYMENT =====
   notify:
-    name: 📢 Notify & Report
+    name: Notify & Report
     runs-on: [self-hosted, windows, x64] 
     needs: [validate, build, security, deploy]
     if: always() && github.event_name != 'pull_request'
     steps:
-      - name: 📊 Deployment Report
+      - name: Deployment Report
         run: |
           $status = if ("${{ needs.deploy.result }}" -eq "success") { "SUCCESS" } else { "FAILED" }
-          $emoji = if ($status -eq "SUCCESS") { "✅" } else { "❌" }
+          $statusIcon = if ($status -eq "SUCCESS") { "[SUCCESS]" } else { "[FAILED]" }
           
           Write-Host ""
           Write-Host "═══════════════════════════════════════"
-          Write-Host "$emoji DATAENGINE DEPLOYMENT $status"
+          Write-Host "$statusIcon DATAENGINE DEPLOYMENT $status"
           Write-Host "═══════════════════════════════════════"
-          Write-Host "🏷️  Environment: ${{ github.event.inputs.environment || 'development' }}"
-          Write-Host "🌿  Branch: ${{ github.ref_name }}"
-          Write-Host "📋  Commit: ${{ github.sha }}"
-          Write-Host "👤  Actor: ${{ github.actor }}"
-          Write-Host "🖼️  Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          Write-Host "🎯  Namespace: ${{ env.NAMESPACE }}"
-          Write-Host "🔗  Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          Write-Host "Environment: ${{ github.event.inputs.environment || 'development' }}"
+          Write-Host "Branch: ${{ github.ref_name }}"
+          Write-Host "Commit: ${{ github.sha }}"
+          Write-Host "Actor: ${{ github.actor }}"
+          Write-Host "Image: ${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          Write-Host "Namespace: ${{ env.NAMESPACE }}"
+          Write-Host "Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           Write-Host "═══════════════════════════════════════"
 
   cleanup:
-    name: 🧹 Cleanup Resources
+    name: Cleanup Resources
     runs-on: [self-hosted, windows, x64]
     needs: [build, deploy, notify]
     if: always()
     steps:
-      - name: 🧹 Cleanup Docker Images
+      - name: Cleanup Docker Images
         run: |
           Write-Host "🧹 Cleaning up Docker resources..."
           
@@ -619,10 +620,10 @@ jobs:
               $imageId = ($_ -split " ")[0]
               docker rmi $imageId -f 2>$null 
             }
-            Write-Host "✅ Cleaned up old images"
+            Write-Host "[SUCCESS] Cleaned up old images"
           }
           
           # System cleanup
           docker system prune -f --filter "until=24h" 2>$null
-          Write-Host "✅ Docker cleanup completed"
+          Write-Host "[SUCCESS] Docker cleanup completed"
 
