@@ -1,0 +1,53 @@
+[package]
+name = "dataengine-tests"
+version = "0.1.0"
+edition = "2021"
+description = "Comprehensive test suite for DataEngine"
+
+[dependencies]
+# Core dependencies
+anyhow = "1.0"
+tokio = { version = "1.38", features = ["full", "test-util"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Testing framework
+tokio-test = "0.4"
+mockall = "0.12"
+wiremock = "0.6"
+tempfile = "3.8"
+assert_matches = "1.5"
+proptest = "1.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Test data generation
+fake = { version = "2.9", features = ["derive", "chrono"] }
+quickcheck = "1.0"
+
+# Benchmarking
+criterion = { version = "0.5", features = ["html_reports"] }
+pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
+
+# Local dependencies
+hostbuilder = { path = "../hostbuilder" }
+config = { path = "../config" }
+performance = { path = "../performance" }
+ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
+
+[[bench]]
+name = "market_data_processing"
+harness = false
+
+[[bench]] 
+name = "cache_performance"
+harness = false
+
+[[bench]]
+name = "network_throughput"
+harness = false
+
+[features]
+default = ["integration_tests", "benchmarks"]
+integration_tests = []
+benchmarks = []
+load_tests = []

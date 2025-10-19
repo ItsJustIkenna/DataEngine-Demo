@@ -38,6 +38,13 @@ tokio = { version = "1.38.0", features = ["full"] }
 tokio-retry = "0.3.0"
 tokio-tungstenite = { version = "0.23.1", features = ["native-tls"] }
 url = "2.5.2"
+
+# Enhanced security dependencies
+jsonwebtoken = "9.2"
+validator = { version = "0.18", features = ["derive"] }
+rand = "0.8"
+hex = "0.4"
+toml = "0.8"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 serde_yaml = "0.9.34"
 # High-performance additions

@@ -209,53 +209,93 @@ jobs:
           # Optimized Docker build with BuildKit
           $env:DOCKER_BUILDKIT = 1
           
-          # Build with proper context - Dockerfile expects to be run from TradingPlatform root
-          # Current directory already has all checkouts: DataEngine/, databaseschema/, etc.
+          # ENTERPRISE BUILD STRATEGY
+          # Ensure consistent workspace structure for both local and CI/CD builds
+          Write-Host "[ARCH] Setting up enterprise build environment..."
           
-          # Quick debug: Check if backtest_result files exist before Docker build
-          Write-Host "[DEBUG] Checking backtest_result files before Docker build:"
-          if (Test-Path "databaseschema\src\models\backtest_result.rs") {
-            Write-Host "  ✓ backtest_result.rs EXISTS before build"
-          } else {
-            Write-Host "  ✗ backtest_result.rs MISSING before build"
-          }
-          if (Test-Path "databaseschema\src\ops\backtest_result_ops.rs") {
-            Write-Host "  ✓ backtest_result_ops.rs EXISTS before build"  
-          } else {
-            Write-Host "  ✗ backtest_result_ops.rs MISSING before build"
-          }
-          
-          docker build `
-            --tag ${{ env.IMAGE_NAME }}:latest `
-            --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
-            --file DataEngine/Dockerfile `
-            --build-arg BUILDKIT_INLINE_CACHE=1 `
-            --cache-from ${{ env.IMAGE_NAME }}:latest `
-            --progress=plain `
-            .
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERROR] Docker build failed - checking build context..."
-            Write-Host "Current directory contents:"
-            Get-ChildItem -Path . -Name
-            Write-Host "DataEngine directory contents:"
-            if (Test-Path "DataEngine") {
-              Get-ChildItem -Path "DataEngine" -Name
+          # 1. Verify all required dependencies are present
+          $requiredDeps = @("DataEngine", "databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
+          foreach ($dep in $requiredDeps) {
+            if (Test-Path $dep) {
+              Write-Host "[✓] Dependency found: $dep"
             } else {
-              Write-Host "DataEngine directory not found!"
+              Write-Error "[✗] MISSING DEPENDENCY: $dep - Build will fail!"
+              exit 1
             }
-            Write-Host "Dockerfile location check:"
-            if (Test-Path "DataEngine/Dockerfile") {
-              Write-Host "[OK] DataEngine/Dockerfile found"
+          }
+          
+          # 2. Deploy enterprise .dockerignore for consistent build context
+          Write-Host "[SETUP] Deploying enterprise .dockerignore..."
+          Copy-Item "DataEngine\.dockerignore" ".dockerignore" -Force
+          Write-Host "[✓] Enterprise .dockerignore deployed to build context root"
+          
+          # 3. Validate critical backtest_result files before build
+          Write-Host "[VALIDATE] Checking critical business logic files..."
+          $criticalFiles = @(
+            "databaseschema\src\models\backtest_result.rs",
+            "databaseschema\src\ops\backtest_result_ops.rs"
+          )
+          
+          $allFilesPresent = $true
+          foreach ($file in $criticalFiles) {
+            if (Test-Path $file) {
+              Write-Host "[✓] Critical file found: $file"
             } else {
-              Write-Host "[ERROR] DataEngine/Dockerfile not found!"
+              Write-Host "[✗] MISSING CRITICAL FILE: $file" -ForegroundColor Red
+              $allFilesPresent = $false
             }
-            Write-Error "[FAIL] Docker build failed - see logs above for details"
+          }
+          
+          if (-not $allFilesPresent) {
+            Write-Error "[FAIL] Critical business logic files missing - cannot proceed with build"
             exit 1
           }
           
-          # Push images
-          Write-Host "Pushing images to registry..."
+          # 4. Execute enterprise Docker build with comprehensive logging
+          Write-Host "[BUILD] Starting enterprise Docker build..." -ForegroundColor Green
+          $buildStartTime = Get-Date
+          
+          # Set optimal Docker BuildKit configuration
+          $env:DOCKER_BUILDKIT = 1
+          $env:BUILDKIT_PROGRESS = "plain"
+          
+          # Execute build with enterprise error handling
+          try {
+            docker build `
+              --tag ${{ env.IMAGE_NAME }}:latest `
+              --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
+              --file DataEngine/Dockerfile `
+              --build-arg BUILDKIT_INLINE_CACHE=1 `
+              --cache-from ${{ env.IMAGE_NAME }}:latest `
+              --progress=plain `
+              .
+              
+            if ($LASTEXITCODE -ne 0) {
+              throw "Docker build failed with exit code $LASTEXITCODE"
+            }
+            
+            $buildDuration = (Get-Date) - $buildStartTime
+            Write-Host "[✓] Enterprise Docker build completed successfully in $($buildDuration.TotalMinutes.ToString('F1')) minutes" -ForegroundColor Green
+            
+          } catch {
+            Write-Host "[✗] Enterprise Docker build failed!" -ForegroundColor Red
+            Write-Host "[DEBUG] Build context analysis:" -ForegroundColor Yellow
+            Write-Host "Working directory: $(Get-Location)"
+            Write-Host "Available directories:" 
+            Get-ChildItem -Directory | ForEach-Object { Write-Host "  - $($_.Name)" }
+            Write-Host "Critical files check:"
+            foreach ($file in $criticalFiles) {
+              if (Test-Path $file) {
+                Write-Host "  ✓ $file" -ForegroundColor Green
+              } else {
+                Write-Host "  ✗ $file" -ForegroundColor Red
+              }
+            }
+            throw $_
+          }
+          
+          # Push images to registry with enterprise logging
+          Write-Host "[PUSH] Pushing images to registry..." -ForegroundColor Cyan
           docker push ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
           

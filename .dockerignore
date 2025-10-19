@@ -1,160 +1,100 @@
-# DataEngine Optimized Docker Ignore
-# Excludes unnecessary files to speed up Docker builds
+# Enterprise DataEngine Docker Ignore
+# Designed for workspace build context containing all dependencies
+# Optimized for: DataEngine/, databaseschema/, redisutils/, LoggingEngine/, MessageBrokerEngine/
 
-# Version control
-**/.git
+# ============= EXCLUDE PATTERNS =============
+
+# Version control (never needed in containers)
+**/.git/
 **/.gitignore
-**/.github
+**/.github/
 
-# Development environment
+# Development environment files
 **/.DS_Store
-**/.env
-**/.vscode
-**/.vs
-**/.idea
+**/.env*
+**/.vscode/
+**/.vs/
+**/.idea/
 **/.project
-**/.settings
+**/.settings/
 **/.toolstarget
 
-# Build artifacts and caches
-**/target/**
-**/node_modules/**
-**/.cargo/**
+# Build artifacts and caches (rebuild in container)
+**/target/
+**/node_modules/
+**/.cargo/
+**/dist/
+**/build/
 
-# Documentation and non-essential files
+# Documentation (not needed for runtime)
 **/README.md
 **/CHANGELOG.md
-**/docs/**
+**/LICENSE*
+**/docs/
 **/*.md
-!DOCKER.md
+# Exception: Keep essential Docker docs
+!**/DOCKER.md
 
-# Test-related exclusions (very specific patterns)
-**/tests/**
+# Test infrastructure (exclude but be surgical)
+**/tests/
+**/benches/
+# Exclude test files but NOT files containing "test" in business logic
 **/*_test.rs
 **/test_*.rs
-# Exclude integration_test.rs, unit_tests.rs etc, but NOT backtest_result_ops.rs
 **/integration_test*.rs
 **/unit_test*.rs
 **/*_unit_tests.rs
-**/*_integration_tests.rs
+**/integration_tests.rs
+# Explicitly protect backtest_result files (business logic, not tests)
+!**/backtest_result*.rs
 
-# Temporary files
+# Examples and demos (not needed for production)
+**/examples/
+**/demo*/
+**/sample*/
+
+# DevOps and deployment (not needed in container)
+**/k8s/
+**/helm/
+**/*helm*/
+**/terraform/
+**/ansible/
+**/docker-compose*.yml
+**/compose*.yml
+**/Dockerfile*
+**/.dockerignore
+
+# Temporary and cache files
 **/*.tmp
 **/*.temp
+**/*.cache
 **/*.swp
 **/*.swo
 **/.*~
-
-# OS specific files
-Thumbs.db
-.DS_Store
-
-# IDE files
-*.suo
-*.user
-*.sln.docstates
-
-# Log files
-**/*.log
-**/logs/**
-
-# Docker related files (avoid recursion)
-**/Dockerfile*
-**/docker-compose*.yml
-**/.dockerignore
-
-# Scripts and tools (not needed in container)
-**/scripts/**
-**/tools/**
-**/*.sh
-**/*.bat
-**/*.ps1
-
-# Kubernetes manifests
-**/k8s/**
-**/*.yaml
-**/*.yml
-!docker-compose.yml
-
-# Backup files
 **/*.bak
 **/*.backup
 
-# Development dependencies
-**/examples/**
-**/benches/**
-**/bin/**
-**/.cargo/**
-**/node_modules/**
-**/npm-debug.log
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Documentation and examples  
-**/README.md
-**/LICENSE
-**/CHANGELOG.md
-**/docs/**
-**/examples/**
-**/notebooks/**
-**/benchmarks/**
+# IDE and editor artifacts
+**/*.suo
+**/*.user
+**/*.userosscache
+**/*.sln.docstates
 
-# Test files
-**/tests/**
-**/*_test.rs
-**/*_tests.rs
+# ============= EXPLICIT INCLUDES (Override excludes) =============
 
-# Docker and deployment files
-**/Dockerfile*
-**/docker-compose*
-**/compose.y*ml
-**/k8s/**
-**/helm/**
-**/charts/**
-**/scripts/**
+# Critical business logic files that might be caught by broad patterns
+!**/backtest_result.rs
+!**/backtest_result_ops.rs
 
-# Database migrations (will be handled via init scripts)
-**/migrations/**
+# Essential configuration files
+!**/Cargo.toml
+!**/Cargo.lock
 
-# Configuration files that shouldn't be in image
-**/secrets.dev.yaml
-**/values.dev.yaml
-**/.env*
-**/config.local.*
-
-# Logs and temporary files
-**/logs/**
-**/*.log
-**/*.tmp
-**/*.temp
-**/*.swp
-**/*.swo
-**/*~
-
-# IDE specific
-**/*.dbmdl
-**/*.jfm
-**/*.*proj.user
-**/.classpath
-
-# OS specific
-**/Thumbs.db
-**/.DS_Store
-
-# Performance: Only include essential workspace members
-# Exclude other engines that DataEngine doesn't directly need
-/BacktestingEngine/examples/**
-/BacktestingEngine/tests/**
-/BacktestingEngine/notebooks/**
-/SignalEngine/examples/**
-/SignalEngine/tests/**
-/SimulationEngine/examples/**
-/SimulationEngine/tests/**
-
-# Keep essential dependencies but exclude their non-essential parts
-/databaseschema/examples/**
-/databaseschema/docs/**
-/LoggingEngine/examples/**
-/LoggingEngine/docs/**
-/MessageBrokerEngine/examples/**
-/MessageBrokerEngine/docs/**
-/redisutils/examples/**
-/redisutils/docs/**
+# Production configuration (if any)
+!**/prod.conf
+!**/production.conf

@@ -1,5 +1,8 @@
 # Ultra-optimized production Dockerfile for DataEngine
-# Build from TradingPlatform root: docker build -f DataEngine/Dockerfile -t dataengine:latest .
+# ENTERPRISE BUILD STRATEGY: Always build from workspace root containing all dependencies
+# Local:  docker build -f DataEngine/Dockerfile -t dataengine:latest .
+# CI/CD:  docker build -f DataEngine/Dockerfile -t dataengine:latest .
+# Build context MUST contain: DataEngine/, databaseschema/, redisutils/, LoggingEngine/, MessageBrokerEngine/
 
 ARG RUST_VERSION=1.82.0
 ARG APP_NAME=program
