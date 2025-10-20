@@ -496,7 +496,7 @@ jobs:
         id: helm-deploy
         timeout-minutes: 15
         run: |
-          $environment = "${{ github.event.inputs.environment || 'development' }}"
+          $environment = "${{ github.event.inputs.environment || 'production' }}"
           
           # Determine values file and release name based on environment
           $valuesFile = "k8s/data-engine-helm/values.yaml"  # Default
@@ -551,20 +551,19 @@ jobs:
             --set externalRedis.host=${{ env.REDIS_HOST }} `
             --set externalRedis.port=${{ env.REDIS_PORT }}
             
-            if ($LASTEXITCODE -eq 0) {
-              $duration = (Get-Date) - $deployStart
-              $durationMinutes = [math]::Round($duration.TotalMinutes, 1)
-              Write-Host "[SUCCESS] Deployment completed in $durationMinutes minutes"
-            } else {
-              Write-Error "[FAILED] Helm deployment failed"
-              exit 1
-            }
+          if ($LASTEXITCODE -eq 0) {
+            $duration = (Get-Date) - $deployStart
+            $durationMinutes = [math]::Round($duration.TotalMinutes, 1)
+            Write-Host "[SUCCESS] Deployment completed in $durationMinutes minutes"
+          } else {
+            Write-Error "[FAILED] Helm deployment failed"
+            exit 1
           }
 
       - name: Verify Deployment
         timeout-minutes: 10
         run: |
-          $environment = "${{ github.event.inputs.environment || 'development' }}"
+          $environment = "${{ github.event.inputs.environment || 'production' }}"
           
           # Determine release name based on environment
           $releaseName = if ($environment -eq "database-only") { "dataengine-db" } else { "dataengine" }
