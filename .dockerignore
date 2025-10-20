@@ -38,6 +38,8 @@
 # Test infrastructure (exclude but be surgical)
 **/tests/
 **/benches/
+# EXCEPTION: Include DataEngine tests directory (part of workspace build)
+!tests/
 # Exclude test files but NOT files containing "test" in business logic
 **/*_test.rs
 **/test_*.rs
