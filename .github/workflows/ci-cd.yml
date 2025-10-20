@@ -481,66 +481,58 @@ jobs:
         run: |
           $environment = "${{ github.event.inputs.environment || 'development' }}"
           
-          if ($environment -eq "database-only") {
-            Write-Host "[DATABASE] Deploying Database-Only Configuration..."
-            
-            # Database-only deployment with minimal application footprint
-            helm upgrade --install dataengine-db ${{ env.HELM_CHART_PATH }} `
-              --namespace ${{ env.NAMESPACE }} `
-              --create-namespace `
-              --atomic `
-              --wait `
-              --timeout ${{ env.HELM_TIMEOUT }} `
-              --set deployment.enabled=false `
-              --set service.enabled=false `
-              --set ingress.enabled=false `
-              --set migration.enabled=true `
-              --set migration.runOnce=true `
-              --set secrets.database.enabled=true `
-              --set secrets.database.username=${{ env.POSTGRES_USER }} `
-              --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
-              --set externalDatabase.enabled=true `
-              --set externalDatabase.host=${{ env.POSTGRES_HOST }} `
-              --set externalDatabase.port=${{ env.POSTGRES_PORT }} `
-              --set externalDatabase.database=${{ env.POSTGRES_DB }} `
-              --set externalDatabase.username=${{ env.POSTGRES_USER }}
-              
-            Write-Host "[SUCCESS] Database-only deployment completed"
-          } else {
-            Write-Host "[DEPLOY] Deploying Full DataEngine Application..."
-            $deployStart = Get-Date
-            
-            # Full application deployment
-            helm upgrade --install dataengine ${{ env.HELM_CHART_PATH }} `
-              --namespace ${{ env.NAMESPACE }} `
-              --create-namespace `
-              --atomic `
-              --wait `
-              --timeout ${{ env.HELM_TIMEOUT }} `
-              --set image.repository=${{ env.IMAGE_NAME }} `
-              --set image.tag=${{ github.sha }} `
-              --set image.pullSecrets[0].name=ghcr-secret `
-              --set customPostgresql.enabled=false `
-              --set customRedis.enabled=false `
-              --set externalDatabase.enabled=true `
-              --set externalDatabase.host=${{ env.POSTGRES_HOST }} `
-              --set externalDatabase.port=${{ env.POSTGRES_PORT }} `
-              --set externalDatabase.database=${{ env.POSTGRES_DB }} `
-              --set externalDatabase.username=${{ env.POSTGRES_USER }} `
-              --set externalDatabase.existingSecret=postgresql-credentials `
-              --set externalRedis.enabled=true `
-              --set externalRedis.host=${{ env.REDIS_HOST }} `
-              --set externalRedis.port=${{ env.REDIS_PORT }} `
-              --set externalRedis.existingSecret=redis-credentials `
-              --set secrets.database.enabled=true `
-              --set secrets.database.username=${{ env.POSTGRES_USER }} `
-              --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
-              --set secrets.redis.enabled=true `
-              --set secrets.redis.password=${{ env.REDIS_PASSWORD }} `
-              --set secrets.api_keys.enabled=true `
-              --set secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }} `
-              --set secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }} `
-              --set migration.enabled=true
+          # Determine values file and release name based on environment
+          $valuesFile = "k8s/data-engine-helm/values.yaml"  # Default
+          $releaseName = "dataengine"
+          
+          switch ($environment) {
+            "database-only" {
+              $valuesFile = "k8s/data-engine-helm/values-database-only.yaml"
+              $releaseName = "dataengine-db"
+              Write-Host "[DATABASE] Deploying Database-Only Configuration using $valuesFile..."
+            }
+            "development" {
+              $valuesFile = "k8s/data-engine-helm/values-dev.yaml"
+              Write-Host "[DEV] Deploying Development Environment using $valuesFile..."
+            }
+            "staging" {
+              $valuesFile = "k8s/data-engine-helm/values-qa.yaml"
+              Write-Host "[STAGING] Deploying Staging Environment using $valuesFile..."
+            }
+            "production" {
+              $valuesFile = "k8s/data-engine-helm/values-prod.yaml"
+              Write-Host "[PROD] Deploying Production Environment using $valuesFile..."
+            }
+            default {
+              Write-Host "[DEFAULT] Deploying with default values.yaml..."
+            }
+          }
+          
+          Write-Host "[INFO] Using values file: $valuesFile"
+          Write-Host "[INFO] Release name: $releaseName"
+          
+          $deployStart = Get-Date
+          
+          # Deploy using the appropriate values file with minimal runtime overrides
+          helm upgrade --install $releaseName ${{ env.HELM_CHART_PATH }} `
+            --namespace ${{ env.NAMESPACE }} `
+            --create-namespace `
+            --atomic `
+            --wait `
+            --timeout ${{ env.HELM_TIMEOUT }} `
+            --values $valuesFile `
+            --set image.tag=${{ github.sha }} `
+            --set secrets.database.username=${{ env.POSTGRES_USER }} `
+            --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
+            --set secrets.redis.password=${{ env.REDIS_PASSWORD }} `
+            --set secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }} `
+            --set secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }} `
+            --set externalDatabase.host=${{ env.POSTGRES_HOST }} `
+            --set externalDatabase.port=${{ env.POSTGRES_PORT }} `
+            --set externalDatabase.database=${{ env.POSTGRES_DB }} `
+            --set externalDatabase.username=${{ env.POSTGRES_USER }} `
+            --set externalRedis.host=${{ env.REDIS_HOST }} `
+            --set externalRedis.port=${{ env.REDIS_PORT }}
             
             if ($LASTEXITCODE -eq 0) {
               $duration = (Get-Date) - $deployStart
@@ -557,8 +549,13 @@ jobs:
         run: |
           $environment = "${{ github.event.inputs.environment || 'development' }}"
           
+          # Determine release name based on environment
+          $releaseName = if ($environment -eq "database-only") { "dataengine-db" } else { "dataengine" }
+          
+          Write-Host "[VERIFY] Verifying $environment deployment (release: $releaseName)..."
+          
           if ($environment -eq "database-only") {
-            Write-Host "[VERIFY] Verifying database-only deployment..."
+            Write-Host "[VERIFY] Checking database-only deployment..."
             
             # Check if migration job completed successfully
             $migrationJob = kubectl get jobs -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o name 2>$null
@@ -579,10 +576,10 @@ jobs:
             
             Write-Host "[SUCCESS] Database-only deployment verification completed"
           } else {
-            Write-Host "[VERIFY] Verifying application deployment..."
+            Write-Host "[VERIFY] Checking full application deployment..."
             
             # Wait for rollout completion
-            kubectl rollout status deployment/dataengine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
+            kubectl rollout status deployment/$releaseName -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
             
             # Verify pods are ready
             kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=data-engine -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
@@ -593,9 +590,9 @@ jobs:
             if ($podName) {
               kubectl exec -n ${{ env.NAMESPACE }} $podName -- wget -q -O- http://localhost:8080/health --timeout=10
               if ($LASTEXITCODE -eq 0) {
-                Write-Host "[SUCCESS] Health check passed"
+                Write-Host "[SUCCESS] Health check passed for $environment environment"
               } else {
-                Write-Host "[WARNING] Health check failed (non-blocking)"
+                Write-Host "[WARNING] Health check failed (non-blocking) for $environment environment"
               }
             }
             
