@@ -377,15 +377,15 @@ jobs:
 
       - name: Fetch Secrets (Optimized)
         id: secrets
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_KEYVAULT_NAME: ${{ secrets.AZURE_KEYVAULT_NAME }}
         run: |
           Write-Host "Fetching secrets from Azure Key Vault..."
           
-          # Authenticate once with robust JSON parsing
+          # Parse credentials from env to avoid here-string interpolation issues
           try {
-            # Use environment variable to avoid GitHub secret masking issues
-            $env:AZURE_CREDS = '${{ secrets.AZURE_CREDENTIALS }}'
-            $creds = $env:AZURE_CREDS | ConvertFrom-Json
-            
+            $creds = $env:AZURE_CREDENTIALS | ConvertFrom-Json
             if (-not $creds.clientId -or -not $creds.clientSecret -or -not $creds.tenantId) {
               throw "Invalid Azure credentials format. Missing required fields."
             }
@@ -398,7 +398,6 @@ jobs:
           # Authenticate with Azure CLI with comprehensive error handling
           try {
             Write-Host "[INFO] Attempting Azure CLI login..."
-            
             $loginResult = az login --service-principal `
               --username $creds.clientId `
               --password $creds.clientSecret `
@@ -417,30 +416,25 @@ jobs:
             exit 1
           }
           
-          # Batch secret fetching (optimized but sequential for reliability)
+          # Names of secrets to fetch
           $secretNames = @(
-            "POSTGRES-HOST", "POSTGRES-PORT", "POSTGRES-USER", "POSTGRES-PASSWORD", "POSTGRES-DB",
-            "REDIS-HOST", "REDIS-PORT", "REDIS-PASSWORD", 
-            "KRAKEN-API-KEY", "KRAKEN-SECRET-KEY"
+            "POSTGRES-HOST","POSTGRES-PORT","POSTGRES-USER","POSTGRES-PASSWORD","POSTGRES-DB",
+            "REDIS-HOST","REDIS-PORT","REDIS-PASSWORD", 
+            "KRAKEN-API-KEY","KRAKEN-SECRET-KEY"
           )
-          
-          Write-Host "[INFO] Fetching $($secretNames.Count) secrets from Key Vault..."
           
           foreach ($secretName in $secretNames) {
             try {
               $envName = $secretName -replace "-", "_"
-              Write-Host "[INFO] Fetching secret: $secretName"
-              
-              $value = az keyvault secret show --vault-name "${{ secrets.AZURE_KEYVAULT_NAME }}" --name $secretName --query value -o tsv 2>&1
+              $value = az keyvault secret show --vault-name $env:AZURE_KEYVAULT_NAME --name $secretName --query value -o tsv 2>&1
               
               if ($LASTEXITCODE -ne 0) {
                 Write-Error "Azure Key Vault error for secret $secretName : $value"
                 throw "Failed to fetch secret $secretName from Key Vault"
               }
               
-              if ($value -and $value -ne "null" -and $value.Trim() -ne "") {
-                # Ensure no problematic characters in environment variable assignment
-                $cleanValue = $value.Trim()
+              $cleanValue = $value.Trim()
+              if (-not [string]::IsNullOrEmpty($cleanValue) -and $cleanValue -ne "null") {
                 Add-Content -Path $env:GITHUB_ENV -Value "$envName=$cleanValue"
                 Write-Host "[OK] Successfully fetched $envName"
               } else {
