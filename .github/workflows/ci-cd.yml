@@ -209,67 +209,21 @@ jobs:
           # Optimized Docker build with BuildKit
           $env:DOCKER_BUILDKIT = 1
           
-          # ENTERPRISE BUILD STRATEGY
-          # Ensure consistent workspace structure for both local and CI/CD builds
-          Write-Host "[ARCH] Setting up enterprise build environment..."
-          
-          # DEBUG: Verify current working directory and structure
-          Write-Host "[DEBUG] Current working directory: $(Get-Location)"
-          Write-Host "[DEBUG] Available items in current directory:"
-          Get-ChildItem | ForEach-Object { Write-Host "  - $($_.Name) ($($_.GetType().Name))" }
-          
-          # 1. Verify all required dependencies are present
+          # Verify all required dependencies are present
           $requiredDeps = @("databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
           foreach ($dep in $requiredDeps) {
             if (Test-Path $dep) {
               Write-Host "[OK] Dependency found: $dep"
             } else {
-              Write-Host "[MISSING] MISSING DEPENDENCY: $dep - Build will fail!"
+              Write-Host "[ERROR] Missing dependency: $dep"
               exit 1
             }
           }
           
-          # 2. Deploy enterprise .dockerignore for consistent build context
-          Write-Host "[SETUP] Deploying enterprise .dockerignore..."
-          # .dockerignore is already at the current directory level
-          Write-Host "[OK] Enterprise .dockerignore already present in build context root"
-          
-          # 3. Validate critical backtest_result files before build
-          Write-Host "[VALIDATE] Checking critical business logic files..."
-          $criticalFiles = @(
-            "databaseschema\src\models\backtest_result.rs",
-            "databaseschema\src\ops\backtest_result_ops.rs"
-          )
-          
-          $allFilesPresent = $true
-          foreach ($file in $criticalFiles) {
-            if (Test-Path $file) {
-              Write-Host "[OK] Critical file found: $file"
-            } else {
-              Write-Host "[MISSING] MISSING CRITICAL FILE: $file" -ForegroundColor Red
-              $allFilesPresent = $false
-            }
-          }
-          
-          if (-not $allFilesPresent) {
-            Write-Error "[FAIL] Critical business logic files missing - cannot proceed with build"
-            exit 1
-          }
-          
-          # 4. Execute enterprise Docker build with comprehensive logging
-          Write-Host "[BUILD] Starting enterprise Docker build..." -ForegroundColor Green
+          # Execute Docker build
+          Write-Host "[BUILD] Starting Docker build..."
           $buildStartTime = Get-Date
           
-          # Ensure we're in the repository root (where all dependencies are checked out)
-          Write-Host "[DEBUG] Current working directory: $(Get-Location)"
-          Write-Host "[DEBUG] Available directories in current location:"
-          Get-ChildItem -Directory | ForEach-Object { Write-Host "  - $($_.Name)" }
-          
-          # Set optimal Docker BuildKit configuration
-          $env:DOCKER_BUILDKIT = 1
-          $env:BUILDKIT_PROGRESS = "plain"
-          
-          # Execute build with enterprise error handling
           try {
             docker build `
               --tag ${{ env.IMAGE_NAME }}:latest `
@@ -286,27 +240,15 @@ jobs:
             
             $buildDuration = (Get-Date) - $buildStartTime
             $durationMinutes = [math]::Round($buildDuration.TotalMinutes, 1)
-            Write-Host "[OK] Enterprise Docker build completed successfully in $durationMinutes minutes" -ForegroundColor Green
+            Write-Host "[OK] Docker build completed successfully in $durationMinutes minutes"
             
           } catch {
-            Write-Host "[FAIL] Enterprise Docker build failed!" -ForegroundColor Red
-            Write-Host "[DEBUG] Build context analysis:" -ForegroundColor Yellow
-            Write-Host "Working directory: $(Get-Location)"
-            Write-Host "Available directories:" 
-            Get-ChildItem -Directory | ForEach-Object { Write-Host "  - $($_.Name)" }
-            Write-Host "Critical files check:"
-            foreach ($file in $criticalFiles) {
-              if (Test-Path $file) {
-                Write-Host "  OK $file" -ForegroundColor Green
-              } else {
-                Write-Host "  MISSING $file" -ForegroundColor Red
-              }
-            }
+            Write-Host "[FAIL] Docker build failed!"
             throw $_
           }
           
-          # Push images to registry with enterprise logging
-          Write-Host "[PUSH] Pushing images to registry..." -ForegroundColor Cyan
+          # Push images to registry
+          Write-Host "[PUSH] Pushing images to registry..."
           docker push ${{ env.IMAGE_NAME }}:latest
           docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
           
@@ -538,7 +480,9 @@ jobs:
             --wait `
             --timeout ${{ env.HELM_TIMEOUT }} `
             --values $valuesFile `
+            --set image.repository=${{ env.IMAGE_NAME }} `
             --set image.tag=${{ github.sha }} `
+            --set image.pullPolicy=Always `
             --set secrets.database.username=${{ env.POSTGRES_USER }} `
             --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
             --set secrets.redis.password=${{ env.REDIS_PASSWORD }} `
