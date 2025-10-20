@@ -32,12 +32,12 @@ ENV CARGO_HOME=/usr/local/cargo \
 WORKDIR /app
 
 # Copy only Cargo manifests first for maximum caching
-COPY Cargo.toml Cargo.lock ./DataEngine/
-COPY config/Cargo.toml ./DataEngine/config/
-COPY hostbuilder/Cargo.toml ./DataEngine/hostbuilder/
-COPY program/Cargo.toml ./DataEngine/program/
-COPY performance/Cargo.toml ./DataEngine/performance/
-COPY tests/Cargo.toml ./DataEngine/tests/
+COPY DataEngine/Cargo.toml DataEngine/Cargo.lock ./DataEngine/
+COPY DataEngine/config/Cargo.toml ./DataEngine/config/
+COPY DataEngine/hostbuilder/Cargo.toml ./DataEngine/hostbuilder/
+COPY DataEngine/program/Cargo.toml ./DataEngine/program/
+COPY DataEngine/performance/Cargo.toml ./DataEngine/performance/
+COPY DataEngine/tests/Cargo.toml ./DataEngine/tests/
 
 # Copy external dependency manifests and sources (complete structure)
 COPY databaseschema/ ./databaseschema/
@@ -69,11 +69,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM deps AS build
 ARG APP_NAME
 
-COPY config/ ./config/
-COPY hostbuilder/ ./hostbuilder/
-COPY program/ ./program/
-COPY performance/ ./performance/
-COPY tests/ ./tests/
+COPY DataEngine/config/ ./config/
+COPY DataEngine/hostbuilder/ ./hostbuilder/
+COPY DataEngine/program/ ./program/
+COPY DataEngine/performance/ ./performance/
+COPY DataEngine/tests/ ./tests/
 
 COPY databaseschema/ ./databaseschema/
 COPY redisutils/ ./redisutils/
