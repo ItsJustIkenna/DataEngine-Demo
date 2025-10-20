@@ -375,20 +375,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 🔑 Fetch Secrets (Optimized)
+      - name: Fetch Secrets (Optimized)
         id: secrets
         run: |
-          Write-Host "🔑 Fetching secrets from Azure Key Vault..."
+          Write-Host "Fetching secrets from Azure Key Vault..."
           
-          # Authenticate once
-          $creds = '${{ secrets.AZURE_CREDENTIALS }}' | ConvertFrom-Json
-          az login --service-principal `
-            --username $creds.clientId `
-            --password $creds.clientSecret `
-            --tenant $creds.tenantId `
-            --output none
+          # Authenticate once with proper JSON parsing
+          try {
+            $credsJson = @'
+          ${{ secrets.AZURE_CREDENTIALS }}
+          '@
+            $creds = $credsJson | ConvertFrom-Json
+          } catch {
+            Write-Error "Failed to parse Azure credentials JSON: $_"
+            exit 1
+          }
           
-          Write-Host "[OK] Authenticated with Azure"
+          # Authenticate with Azure CLI with error handling
+          try {
+            az login --service-principal `
+              --username $creds.clientId `
+              --password $creds.clientSecret `
+              --tenant $creds.tenantId `
+              --output none
+            
+            if ($LASTEXITCODE -ne 0) {
+              throw "Azure CLI login failed with exit code $LASTEXITCODE"
+            }
+            Write-Host "[OK] Authenticated with Azure"
+          } catch {
+            Write-Error "Azure authentication failed: $_"
+            exit 1
+          }
           
           # Batch secret fetching (optimized but sequential for reliability)
           $secretNames = @(
