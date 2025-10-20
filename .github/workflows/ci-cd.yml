@@ -174,7 +174,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Check Image Cache
         id: image-check
@@ -311,7 +311,7 @@ jobs:
           docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
           
           # Get image digest for security
-          $digest = docker inspect ${{ env.IMAGE_NAME }}:${{ github.sha }} --format="{{.RepoDigests.[0]}}"
+          $digest = docker inspect ${{ env.IMAGE_NAME }}:${{ github.sha }} --format="{{index .RepoDigests 0}}"
           echo "digest=$digest" >> $env:GITHUB_OUTPUT
           
           $duration = (Get-Date) - $startTime
