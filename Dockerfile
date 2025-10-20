@@ -61,7 +61,7 @@ RUN mkdir -p config/src hostbuilder/src program/src performance/src tests/src &&
 # Pre-compile dependencies (this layer will be cached!)
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/DataEngine/target \
-    cargo build --release --locked && \
+    cargo build --release && \
     rm -rf config/src hostbuilder/src program/src performance/src tests/src
 
 ################################################################################
@@ -85,7 +85,7 @@ ENV RUSTFLAGS="-C opt-level=3 -C codegen-units=1 -C panic=abort -C target-cpu=na
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/DataEngine/target \
-    cargo build --release --locked && \
+    cargo build --release && \
     cp target/release/$APP_NAME /bin/dataengine && \
     strip --strip-all /bin/dataengine && \
     chmod +x /bin/dataengine
