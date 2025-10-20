@@ -23,7 +23,7 @@ on:
 
 # Prevent concurrent deployments per environment
 concurrency:
-  group: dataengine-${{ github.event.inputs.environment || 'development' }}
+  group: dataengine-${{ github.event.inputs.environment || 'database-only' }}
   cancel-in-progress: false
 
 # Grant minimal required permissions
@@ -368,9 +368,9 @@ jobs:
     runs-on: [self-hosted, windows, x64]
     needs: [validate, build, security]
     if: github.event_name != 'pull_request' && (needs.security.result == 'success' || needs.security.result == 'skipped')
-    environment: 
-      name: ${{ github.event.inputs.environment || 'development' }}
-      url: https://dataengine.${{ github.event.inputs.environment || 'development' }}.yourdomain.com
+    environment:
+      name: ${{ github.event.inputs.environment || 'database-only' }}
+      url: https://dataengine.${{ github.event.inputs.environment || 'database-only' }}.yourdomain.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -496,7 +496,7 @@ jobs:
         id: helm-deploy
         timeout-minutes: 15
         run: |
-          $environment = "${{ github.event.inputs.environment || 'production' }}"
+          $environment = "${{ github.event.inputs.environment || 'database-only' }}"
           
           # Determine values file and release name based on environment
           $valuesFile = "k8s/data-engine-helm/values.yaml"  # Default
@@ -563,7 +563,7 @@ jobs:
       - name: Verify Deployment
         timeout-minutes: 10
         run: |
-          $environment = "${{ github.event.inputs.environment || 'production' }}"
+          $environment = "${{ github.event.inputs.environment || 'database-only' }}"
           
           # Determine release name based on environment
           $releaseName = if ($environment -eq "database-only") { "dataengine-db" } else { "dataengine" }
@@ -631,7 +631,7 @@ jobs:
           Write-Host "═══════════════════════════════════════"
           Write-Host "$statusIcon DATAENGINE DEPLOYMENT $status"
           Write-Host "═══════════════════════════════════════"
-          Write-Host "Environment: ${{ github.event.inputs.environment || 'development' }}"
+          Write-Host "Environment: ${{ github.event.inputs.environment || 'database-only' }}"
           Write-Host "Branch: ${{ github.ref_name }}"
           Write-Host "Commit: ${{ github.sha }}"
           Write-Host "Actor: ${{ github.actor }}"
