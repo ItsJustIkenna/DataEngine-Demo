@@ -36,7 +36,7 @@ env:
   # Core configuration
   IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
   NAMESPACE: dataengine
-  HELM_CHART_PATH: k8s/data-engine-helm
+  HELM_CHART_PATH: DataEngine/k8s/data-engine-helm
   
   # Deployment configuration  
   HELM_TIMEOUT: 10m
@@ -139,6 +139,7 @@ jobs:
       - name: Checkout DataEngine
         uses: actions/checkout@v4
         with:
+          path: DataEngine
           fetch-depth: 0
 
       - name: Checkout databaseschema
@@ -219,7 +220,7 @@ jobs:
           Get-ChildItem | ForEach-Object { Write-Host "  - $($_.Name) ($($_.GetType().Name))" }
           
           # 1. Verify all required dependencies are present
-          $requiredDeps = @("databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
+          $requiredDeps = @("DataEngine", "databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
           foreach ($dep in $requiredDeps) {
             if (Test-Path $dep) {
               Write-Host "[OK] Dependency found: $dep"
@@ -231,8 +232,8 @@ jobs:
           
           # 2. Deploy enterprise .dockerignore for consistent build context
           Write-Host "[SETUP] Deploying enterprise .dockerignore..."
-          # .dockerignore is already in the current directory, no need to copy
-          Write-Host "[OK] Enterprise .dockerignore already present in build context root"
+          Copy-Item "DataEngine\.dockerignore" ".dockerignore" -Force
+          Write-Host "[OK] Enterprise .dockerignore deployed to build context root"
           
           # 3. Validate critical backtest_result files before build
           Write-Host "[VALIDATE] Checking critical business logic files..."
@@ -265,6 +266,12 @@ jobs:
           Write-Host "[DEBUG] Available directories in current location:"
           Get-ChildItem -Directory | ForEach-Object { Write-Host "  - $($_.Name)" }
           
+          # Move to parent directory (workspace root) for correct build context
+          cd ..
+          Write-Host "[DEBUG] Changed to parent directory: $(Get-Location)"
+          Write-Host "[DEBUG] Available directories in build context:"
+          Get-ChildItem -Directory | ForEach-Object { Write-Host "  - $($_.Name)" }
+          
           # Set optimal Docker BuildKit configuration
           $env:DOCKER_BUILDKIT = 1
           $env:BUILDKIT_PROGRESS = "plain"
@@ -274,7 +281,7 @@ jobs:
             docker build `
               --tag ${{ env.IMAGE_NAME }}:latest `
               --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
-              --file Dockerfile `
+              --file DataEngine/Dockerfile `
               --build-arg BUILDKIT_INLINE_CACHE=1 `
               --cache-from ${{ env.IMAGE_NAME }}:latest `
               --progress=plain `
