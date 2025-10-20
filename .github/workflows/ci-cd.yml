@@ -19,7 +19,7 @@ on:
         description: 'Target environment'
         type: choice
         options: ['development', 'staging', 'production', 'database-only']
-        default: 'development'
+        default: 'database-only'
 
 # Prevent concurrent deployments per environment
 concurrency:
