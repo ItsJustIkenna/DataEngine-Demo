@@ -380,31 +380,40 @@ jobs:
         run: |
           Write-Host "Fetching secrets from Azure Key Vault..."
           
-          # Authenticate once with proper JSON parsing
+          # Authenticate once with robust JSON parsing
           try {
-            $credsJson = @'
-          ${{ secrets.AZURE_CREDENTIALS }}
-          '@
-            $creds = $credsJson | ConvertFrom-Json
+            # Use environment variable to avoid GitHub secret masking issues
+            $env:AZURE_CREDS = '${{ secrets.AZURE_CREDENTIALS }}'
+            $creds = $env:AZURE_CREDS | ConvertFrom-Json
+            
+            if (-not $creds.clientId -or -not $creds.clientSecret -or -not $creds.tenantId) {
+              throw "Invalid Azure credentials format. Missing required fields."
+            }
           } catch {
             Write-Error "Failed to parse Azure credentials JSON: $_"
+            Write-Error "Please ensure AZURE_CREDENTIALS secret contains valid JSON with clientId, clientSecret, and tenantId"
             exit 1
           }
           
-          # Authenticate with Azure CLI with error handling
+          # Authenticate with Azure CLI with comprehensive error handling
           try {
-            az login --service-principal `
+            Write-Host "[INFO] Attempting Azure CLI login..."
+            
+            $loginResult = az login --service-principal `
               --username $creds.clientId `
               --password $creds.clientSecret `
               --tenant $creds.tenantId `
-              --output none
+              --output json 2>&1
             
             if ($LASTEXITCODE -ne 0) {
+              Write-Error "Azure CLI login output: $loginResult"
               throw "Azure CLI login failed with exit code $LASTEXITCODE"
             }
-            Write-Host "[OK] Authenticated with Azure"
+            
+            Write-Host "[OK] Successfully authenticated with Azure"
           } catch {
             Write-Error "Azure authentication failed: $_"
+            Write-Error "Please verify AZURE_CREDENTIALS secret and Azure CLI installation"
             exit 1
           }
           
@@ -418,14 +427,28 @@ jobs:
           Write-Host "[INFO] Fetching $($secretNames.Count) secrets from Key Vault..."
           
           foreach ($secretName in $secretNames) {
-            $envName = $secretName -replace "-", "_"
-            $value = az keyvault secret show --vault-name "${{ secrets.AZURE_KEYVAULT_NAME }}" --name $secretName --query value -o tsv
-            
-            if ($value -and $value -ne "null") {
-              echo "$envName=$value" >> $env:GITHUB_ENV
-              Write-Host "[OK] Fetched $envName"
-            } else {
-              Write-Error "[FAIL] Failed to fetch secret: $secretName"
+            try {
+              $envName = $secretName -replace "-", "_"
+              Write-Host "[INFO] Fetching secret: $secretName"
+              
+              $value = az keyvault secret show --vault-name "${{ secrets.AZURE_KEYVAULT_NAME }}" --name $secretName --query value -o tsv 2>&1
+              
+              if ($LASTEXITCODE -ne 0) {
+                Write-Error "Azure Key Vault error for secret $secretName : $value"
+                throw "Failed to fetch secret $secretName from Key Vault"
+              }
+              
+              if ($value -and $value -ne "null" -and $value.Trim() -ne "") {
+                # Ensure no problematic characters in environment variable assignment
+                $cleanValue = $value.Trim()
+                Add-Content -Path $env:GITHUB_ENV -Value "$envName=$cleanValue"
+                Write-Host "[OK] Successfully fetched $envName"
+              } else {
+                Write-Error "[FAIL] Secret $secretName is empty or null"
+                exit 1
+              }
+            } catch {
+              Write-Error "[FAIL] Failed to fetch secret $secretName : $_"
               exit 1
             }
           }
