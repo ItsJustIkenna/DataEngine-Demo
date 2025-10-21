@@ -158,22 +158,13 @@ logging:
 service:
   enabled: false
 
-# Enable ingress with TLS
+# Disable ingress for database-only CI/testing (no cert-manager dependency)
 ingress:
-  enabled: true
+  enabled: false
   className: nginx
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-staging"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-  hosts:
-    - host: database-only.dev.nwagbara-group.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: database-only-tls
-      hosts:
-        - database-only.dev.nwagbara-group.com
+  annotations: {}
+  hosts: []
+  tls: []
 
 # Disable all monitoring components
 monitoring:
@@ -255,11 +246,9 @@ backup:
 # =============================================================================
 # TLS/Certificate Management
 # =============================================================================
+# Disabled for database-only CI/testing to avoid cert-manager CRD dependency
 certManager:
-  enabled: true
-  email: "devops@nwagbara-group.com"
-  server: "https://acme-staging-v02.api.letsencrypt.org/directory"  # Staging for database-only testing
-  solvers:
-    - http01:
-        ingress:
-          class: nginx
+  enabled: false
+  email: ""
+  server: ""
+  solvers: []

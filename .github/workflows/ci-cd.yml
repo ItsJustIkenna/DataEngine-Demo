@@ -374,31 +374,40 @@ jobs:
             "KRAKEN-API-KEY","KRAKEN-SECRET-KEY"
           )
           
+          Write-Host "[INFO] Fetching $($secretNames.Count) secrets from Key Vault..."
+          
           foreach ($secretName in $secretNames) {
             try {
               $envName = $secretName -replace "-", "_"
               $value = az keyvault secret show --vault-name $env:AZURE_KEYVAULT_NAME --name $secretName --query value -o tsv 2>&1
               
-              if ($LASTEXITCODE -ne 0) {
-                Write-Error "Azure Key Vault error for secret $secretName : $value"
-                throw "Failed to fetch secret $secretName from Key Vault"
+              if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($value)) {
+                Write-Error "[FAIL] Failed to fetch secret $secretName from Key Vault"
+                Write-Error "Exit code: $LASTEXITCODE, Output: $value"
+                exit 1
               }
               
               $cleanValue = $value.Trim()
-              if (-not [string]::IsNullOrEmpty($cleanValue) -and $cleanValue -ne "null") {
-                Add-Content -Path $env:GITHUB_ENV -Value "$envName=$cleanValue"
-                Write-Host "[OK] Successfully fetched $envName"
-              } else {
-                Write-Error "[FAIL] Secret $secretName is empty or null"
+              
+              if ([string]::IsNullOrWhiteSpace($cleanValue) -or $cleanValue -eq "null") {
+                Write-Error "[FAIL] Secret $secretName is empty or null in Key Vault"
                 exit 1
               }
+              
+              # Mask the secret value in logs
+              Write-Host "::add-mask::$cleanValue"
+              
+              # Set environment variable
+              Add-Content -Path $env:GITHUB_ENV -Value "$envName=$cleanValue"
+              Write-Host "[OK] Fetched and masked secret $envName"
+              
             } catch {
-              Write-Error "[FAIL] Failed to fetch secret $secretName : $_"
+              Write-Error "[FAIL] Exception while fetching secret $secretName : $_"
               exit 1
             }
           }
           
-          Write-Host "[OK] All $($secretNames.Count) secrets fetched successfully"
+          Write-Host "[SUCCESS] All $($secretNames.Count) secrets fetched and masked successfully"
 
       - name: Pre-deployment Cleanup
         if: github.event.inputs.clean_deploy == 'true'
@@ -484,27 +493,42 @@ jobs:
           # Deploy using the appropriate values file with minimal runtime overrides
           Write-Host "[DEPLOY] Starting Helm deployment of $releaseName..."
           
-          helm upgrade --install $releaseName ${{ env.HELM_CHART_PATH }} `
-            --namespace ${{ env.NAMESPACE }} `
-            --create-namespace `
-            --atomic `
-            --wait `
-            --timeout ${{ env.HELM_TIMEOUT }} `
-            --values $valuesFile `
-            --set image.repository=${{ env.IMAGE_NAME }} `
-            --set image.tag=${{ github.sha }} `
-            --set image.pullPolicy=Always `
-            --set secrets.database.username=${{ env.POSTGRES_USER }} `
-            --set secrets.database.password=${{ env.POSTGRES_PASSWORD }} `
-            --set secrets.redis.password=${{ env.REDIS_PASSWORD }} `
-            --set secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }} `
-            --set secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }} `
-            --set externalDatabase.host=${{ env.POSTGRES_HOST }} `
-            --set externalDatabase.port=${{ env.POSTGRES_PORT }} `
-            --set externalDatabase.database=${{ env.POSTGRES_DB }} `
-            --set externalDatabase.username=${{ env.POSTGRES_USER }} `
-            --set externalRedis.host=${{ env.REDIS_HOST }} `
-            --set externalRedis.port=${{ env.REDIS_PORT }}
+          # Build base helm command
+          $helmCmd = @(
+            "upgrade", "--install", $releaseName, "${{ env.HELM_CHART_PATH }}",
+            "--namespace", "${{ env.NAMESPACE }}",
+            "--create-namespace",
+            "--atomic",
+            "--wait",
+            "--timeout", "${{ env.HELM_TIMEOUT }}",
+            "--values", $valuesFile,
+            "--set", "image.repository=${{ env.IMAGE_NAME }}",
+            "--set", "image.tag=${{ github.sha }}",
+            "--set", "image.pullPolicy=Always",
+            "--set", "secrets.database.username=${{ env.POSTGRES_USER }}",
+            "--set", "secrets.database.password=${{ env.POSTGRES_PASSWORD }}",
+            "--set", "secrets.redis.password=${{ env.REDIS_PASSWORD }}",
+            "--set", "secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }}",
+            "--set", "secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }}",
+            "--set", "externalDatabase.host=${{ env.POSTGRES_HOST }}",
+            "--set", "externalDatabase.port=${{ env.POSTGRES_PORT }}",
+            "--set", "externalDatabase.database=${{ env.POSTGRES_DB }}",
+            "--set", "externalDatabase.username=${{ env.POSTGRES_USER }}",
+            "--set", "externalRedis.host=${{ env.REDIS_HOST }}",
+            "--set", "externalRedis.port=${{ env.REDIS_PORT }}"
+          )
+          
+          # For database-only environment, explicitly disable cert-manager and ingress to avoid CRD dependencies
+          if ($environment -eq "database-only") {
+            Write-Host "[DATABASE-ONLY] Explicitly disabling cert-manager and ingress (no CRD dependency)"
+            $helmCmd += @(
+              "--set", "certManager.enabled=false",
+              "--set", "ingress.enabled=false"
+            )
+          }
+          
+          # Execute helm command
+          & helm $helmCmd
             
           if ($LASTEXITCODE -eq 0) {
             $duration = (Get-Date) - $deployStart
