@@ -180,27 +180,33 @@ persistence:
 healthcheck:
   enabled: true
   livenessProbe:
-    httpGet:
-      path: /health
-      port: 8080
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3
     successThreshold: 1
   readinessProbe:
-    httpGet:
-      path: /ready
-      port: 8080
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "pgrep -f dataengine && nc -z localhost 5432 2>/dev/null || exit 1"
     initialDelaySeconds: 10
     periodSeconds: 5
     timeoutSeconds: 3
     failureThreshold: 3
     successThreshold: 1
   startupProbe:
-    httpGet:
-      path: /startup
-      port: 8080
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 10
     periodSeconds: 5
     timeoutSeconds: 3

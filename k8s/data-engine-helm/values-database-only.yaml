@@ -210,6 +210,46 @@ securityContext:
   readOnlyRootFilesystem: false
 
 # =============================================================================
+# Health Probes - Using exec commands (app has no HTTP endpoints)
+# =============================================================================
+
+healthcheck:
+  enabled: true
+  livenessProbe:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "pgrep -f dataengine || exit 1"
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+  readinessProbe:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "pgrep -f dataengine || exit 1"
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
+  startupProbe:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - "pgrep -f dataengine || exit 1"
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+    successThreshold: 1
+
+# =============================================================================
 # Resource Limits (Database Focus)
 # =============================================================================
 
