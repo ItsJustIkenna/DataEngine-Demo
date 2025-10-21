@@ -99,6 +99,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.externalDatabase.existingSecret }}
                   key: password
+                {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}-database
+                  key: password
                 {{- end }}
               {{- end }}
             - name: DATABASE_URL
