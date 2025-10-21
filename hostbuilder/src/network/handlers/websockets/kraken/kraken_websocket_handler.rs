@@ -161,7 +161,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
         // Ultra-high performance optimizations
         let cpu_manager = CpuAffinityManager::new();
         
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             // Pin WebSocket handler to dedicated high-priority core
             if let Err(e) = cpu_manager.pin_websocket_handler() {
                 log_warn!(KRAKEN_LOGGER, "Failed to set CPU affinity: {}", e);
@@ -337,6 +337,9 @@ impl EndpointHandler for KrakenWebSocketHandler {
             }
         });
 
+        // Wait for the WebSocket listener task to complete
+        handle.await.map_err(|e| anyhow::anyhow!("WebSocket listener task panicked: {}", e))?;
+        
         Ok(())
     }
 }
