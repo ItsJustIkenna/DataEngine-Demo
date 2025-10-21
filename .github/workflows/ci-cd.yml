@@ -308,8 +308,8 @@ jobs:
   deploy:
     name: Deploy to Kubernetes
     runs-on: [self-hosted, windows, x64]
-    needs: [validate, build, security]
-    if: github.event_name != 'pull_request' && (needs.security.result == 'success' || needs.security.result == 'skipped')
+    needs: [validate, build]
+    if: github.event_name != 'pull_request' && always() && (needs.validate.result == 'success' && needs.build.result == 'success')
     environment:
       name: ${{ github.event.inputs.environment || 'database-only' }}
       url: https://dataengine.${{ github.event.inputs.environment || 'database-only' }}.yourdomain.com
