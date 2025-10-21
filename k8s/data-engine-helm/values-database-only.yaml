@@ -25,6 +25,13 @@ image:
 imagePullSecrets:
   - name: ghcr-secret
 
+# Service account configuration for GHCR access
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
 # =============================================================================
 # Resource Management - Increased for stable operation
 # =============================================================================
