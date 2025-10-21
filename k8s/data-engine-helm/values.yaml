@@ -440,7 +440,7 @@ externalDatabase:
   port: 5432
   username: ""   # Injected via secrets.database.username
   database: "dataengine"
-  existingSecret: "postgresql-credentials"  # Name of existing secret with 'password' key
+  existingSecret: ""  # Use Helm-generated secret, not hardcoded
   # Password is provided via secrets.database.password
   # Connection string format: postgresql://username:password@host:port/database
 
