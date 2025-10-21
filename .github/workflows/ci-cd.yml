@@ -560,16 +560,31 @@ jobs:
               }
             }
             
-            # Show migration pod logs and details
+            # Show migration pod logs and details (PowerShell-safe)
             Write-Host "[DEBUG] Migration pods:"
-            $migrationPods = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[*].metadata.name}' 2>$null
-            if ($migrationPods) {
-              foreach ($pod in $migrationPods -split ' ') {
-                if ($pod) {
+            $migrationPods = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[*].metadata.name}' 2>&1
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($migrationPods)) {
+              Write-Host "No migration pods found or failed to query pods: $migrationPods"
+            } else {
+              foreach ($pod in $migrationPods -split '\s+') {
+                if (-not [string]::IsNullOrWhiteSpace($pod)) {
                   Write-Host "=== Logs for pod $pod ==="
-                  kubectl logs $pod -n ${{ env.NAMESPACE }} --tail=300 2>$null || Write-Host "No logs available"
+                  try {
+                    $logs = kubectl logs $pod -n ${{ env.NAMESPACE }} --tail=300 2>&1
+                    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($logs)) {
+                      Write-Host "No logs available for pod $pod (kubectl returned: $LASTEXITCODE)"
+                    } else {
+                      $logs -split "`n" | ForEach-Object { Write-Host $_ }
+                    }
+                  } catch {
+                    Write-Host "Failed to fetch logs for pod $pod : $_"
+                  }
                   Write-Host "=== Describe pod $pod ==="
-                  kubectl describe pod $pod -n ${{ env.NAMESPACE }} | Select-Object -Last 200
+                  try {
+                    kubectl describe pod $pod -n ${{ env.NAMESPACE }} 2>&1 | ForEach-Object { Write-Host $_ }
+                  } catch {
+                    Write-Host "Failed to describe pod $pod : $_"
+                  }
                 }
               }
             }
