@@ -101,7 +101,7 @@ config:
 # Enable EXTERNAL database (TimescaleDB Cloud)
 externalDatabase:
   enabled: true
-  useCompleteUrl: true
+  useCompleteUrl: false
 
 # Enable EXTERNAL Redis
 externalRedis:
