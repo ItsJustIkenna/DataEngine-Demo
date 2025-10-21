@@ -39,8 +39,8 @@ env:
   HELM_CHART_PATH: k8s/data-engine-helm
   
   # Deployment configuration  
-  HELM_TIMEOUT: 10m
-  HEALTH_CHECK_TIMEOUT: 300s
+  HELM_TIMEOUT: 20m
+  HEALTH_CHECK_TIMEOUT: 600s
   ROLLBACK_TIMEOUT: 5m
   
   # Performance optimization
@@ -436,7 +436,7 @@ jobs:
 
       - name: Deploy with Helm
         id: helm-deploy
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: |
           $environment = "${{ github.event.inputs.environment || 'database-only' }}"
           
@@ -473,10 +473,11 @@ jobs:
           $deployStart = Get-Date
           
           # Deploy using the appropriate values file with minimal runtime overrides
+          Write-Host "[DEPLOY] Starting Helm deployment of $releaseName..."
+          
           helm upgrade --install $releaseName ${{ env.HELM_CHART_PATH }} `
             --namespace ${{ env.NAMESPACE }} `
             --create-namespace `
-            --atomic `
             --wait `
             --timeout ${{ env.HELM_TIMEOUT }} `
             --values $valuesFile `
@@ -499,7 +500,34 @@ jobs:
             $duration = (Get-Date) - $deployStart
             $durationMinutes = [math]::Round($duration.TotalMinutes, 1)
             Write-Host "[SUCCESS] Deployment completed in $durationMinutes minutes"
+            
+            # Show deployment status
+            Write-Host "[STATUS] Checking deployed resources..."
+            kubectl get pods -n ${{ env.NAMESPACE }}
+            kubectl get services -n ${{ env.NAMESPACE }}
+            kubectl get deployments -n ${{ env.NAMESPACE }}
+            
           } else {
+            Write-Host "[ERROR] Helm deployment failed. Getting diagnostic information..."
+            
+            # Show Helm status
+            helm status $releaseName -n ${{ env.NAMESPACE }} || Write-Host "No Helm release found"
+            
+            # Show Kubernetes resources
+            Write-Host "[DEBUG] Kubernetes resources in namespace ${{ env.NAMESPACE }}:"
+            kubectl get all -n ${{ env.NAMESPACE }}
+            
+            # Show recent events
+            Write-Host "[DEBUG] Recent events:"
+            kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' | tail -10
+            
+            # Show pod logs if any exist
+            $pods = kubectl get pods -n ${{ env.NAMESPACE }} --no-headers 2>$null
+            if ($pods) {
+              Write-Host "[DEBUG] Pod logs:"
+              kubectl logs -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --tail=50 || Write-Host "No logs available"
+            }
+            
             Write-Error "[FAILED] Helm deployment failed"
             exit 1
           }

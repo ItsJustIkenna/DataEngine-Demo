@@ -19,7 +19,11 @@ replicaCount: 1
 image:
   repository: data-engine
   tag: latest
-  pullPolicy: Never
+  pullPolicy: Always
+
+# Image pull secrets for private registry
+imagePullSecrets:
+  - name: ghcr-secret
 
 # =============================================================================
 # Resource Management - Increased for stable operation
