@@ -30,7 +30,11 @@ spec:
             - sh
             - -c
             - |
+              {{- if .Values.customPostgresql.enabled }}
               until pg_isready -h {{ include "data-engine.postgresql.host" . }} -p 5432 -U {{ .Values.customPostgresql.auth.username }}; do
+              {{- else }}
+              until pg_isready -h {{ include "data-engine.postgresql.host" . }} -p {{ .Values.externalDatabase.port }} -U {{ .Values.externalDatabase.username }}; do
+              {{- end }}
                 echo "Waiting for PostgreSQL..."
                 sleep 2
               done
