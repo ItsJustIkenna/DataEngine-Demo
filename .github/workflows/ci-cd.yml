@@ -327,13 +327,22 @@ jobs:
           
           # Parse credentials from env to avoid here-string interpolation issues
           try {
-            $creds = $env:AZURE_CREDENTIALS | ConvertFrom-Json
-            if (-not $creds.clientId -or -not $creds.clientSecret -or -not $creds.tenantId) {
-              throw "Invalid Azure credentials format. Missing required fields."
+            if ([string]::IsNullOrWhiteSpace($env:AZURE_CREDENTIALS)) {
+              throw "AZURE_CREDENTIALS secret is empty or not set"
             }
+            
+            Write-Host "[DEBUG] Parsing Azure credentials JSON..."
+            $creds = $env:AZURE_CREDENTIALS | ConvertFrom-Json
+            
+            if (-not $creds.clientId -or -not $creds.clientSecret -or -not $creds.tenantId) {
+              throw "Invalid Azure credentials format. Missing required fields: clientId, clientSecret, or tenantId"
+            }
+            
+            Write-Host "[OK] Azure credentials parsed successfully"
           } catch {
-            Write-Error "Failed to parse Azure credentials JSON: $_"
-            Write-Error "Please ensure AZURE_CREDENTIALS secret contains valid JSON with clientId, clientSecret, and tenantId"
+            Write-Error "Failed to parse Azure credentials JSON: $($_.Exception.Message)"
+            Write-Error "AZURE_CREDENTIALS must be valid JSON with format:"
+            Write-Error '{"clientId":"xxx","clientSecret":"xxx","tenantId":"xxx"}'
             exit 1
           }
           
