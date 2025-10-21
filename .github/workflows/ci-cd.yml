@@ -493,7 +493,20 @@ jobs:
           # Deploy using the appropriate values file with minimal runtime overrides
           Write-Host "[DEPLOY] Starting Helm deployment of $releaseName..."
           
-          # Build base helm command
+          # Validate runtime secrets are available (fetched from Key Vault in previous step)
+          Write-Host "[VALIDATION] Checking runtime secrets availability..."
+          $requiredSecrets = @("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD")
+          foreach ($secret in $requiredSecrets) {
+            $value = [Environment]::GetEnvironmentVariable($secret)
+            if ([string]::IsNullOrWhiteSpace($value)) {
+              Write-Error "[FAIL] Required secret $secret is not set in environment"
+              exit 1
+            }
+            Write-Host "[OK] Secret $secret is present (length: $($value.Length))"
+          }
+          
+          # Build base helm command using RUNTIME PowerShell env vars ($env:...), not workflow expressions
+          # CRITICAL: Must use $env:POSTGRES_PASSWORD (runtime) not ${{ env.POSTGRES_PASSWORD }} (compile-time, empty)
           $helmCmd = @(
             "upgrade", "--install", $releaseName, "${{ env.HELM_CHART_PATH }}",
             "--namespace", "${{ env.NAMESPACE }}",
@@ -505,17 +518,20 @@ jobs:
             "--set", "image.repository=${{ env.IMAGE_NAME }}",
             "--set", "image.tag=${{ github.sha }}",
             "--set", "image.pullPolicy=Always",
-            "--set", "secrets.database.username=${{ env.POSTGRES_USER }}",
-            "--set", "secrets.database.password=${{ env.POSTGRES_PASSWORD }}",
-            "--set", "secrets.redis.password=${{ env.REDIS_PASSWORD }}",
-            "--set", "secrets.api_keys.kraken_api_key=${{ env.KRAKEN_API_KEY }}",
-            "--set", "secrets.api_keys.kraken_secret_key=${{ env.KRAKEN_SECRET_KEY }}",
-            "--set", "externalDatabase.host=${{ env.POSTGRES_HOST }}",
-            "--set", "externalDatabase.port=${{ env.POSTGRES_PORT }}",
-            "--set", "externalDatabase.database=${{ env.POSTGRES_DB }}",
-            "--set", "externalDatabase.username=${{ env.POSTGRES_USER }}",
-            "--set", "externalRedis.host=${{ env.REDIS_HOST }}",
-            "--set", "externalRedis.port=${{ env.REDIS_PORT }}"
+            # Use --set-string for secrets with runtime PowerShell variables to prevent placeholder issues
+            "--set-string", "secrets.database.username=$($env:POSTGRES_USER)",
+            "--set-string", "secrets.database.password=$($env:POSTGRES_PASSWORD)",
+            "--set-string", "secrets.redis.password=$($env:REDIS_PASSWORD)",
+            "--set-string", "secrets.api_keys.kraken_api_key=$($env:KRAKEN_API_KEY)",
+            "--set-string", "secrets.api_keys.kraken_secret_key=$($env:KRAKEN_SECRET_KEY)",
+            # External database settings using runtime variables
+            "--set-string", "externalDatabase.host=$($env:POSTGRES_HOST)",
+            "--set", "externalDatabase.port=$($env:POSTGRES_PORT)",
+            "--set-string", "externalDatabase.database=$($env:POSTGRES_DB)",
+            "--set-string", "externalDatabase.username=$($env:POSTGRES_USER)",
+            # External Redis settings using runtime variables
+            "--set-string", "externalRedis.host=$($env:REDIS_HOST)",
+            "--set", "externalRedis.port=$($env:REDIS_PORT)"
           )
           
           # For database-only environment, explicitly disable cert-manager and ingress to avoid CRD dependencies
@@ -527,6 +543,7 @@ jobs:
             )
           }
           
+          Write-Host "[HELM] Executing helm upgrade with runtime secrets..."
           # Execute helm command
           & helm $helmCmd
             
