@@ -511,7 +511,11 @@ jobs:
             Write-Host "[ERROR] Helm deployment failed. Getting diagnostic information..."
             
             # Show Helm status
-            helm status $releaseName -n ${{ env.NAMESPACE }} || Write-Host "No Helm release found"
+            try {
+              helm status $releaseName -n ${{ env.NAMESPACE }}
+            } catch {
+              Write-Host "No Helm release found"
+            }
             
             # Show Kubernetes resources
             Write-Host "[DEBUG] Kubernetes resources in namespace ${{ env.NAMESPACE }}:"
@@ -525,7 +529,11 @@ jobs:
             $pods = kubectl get pods -n ${{ env.NAMESPACE }} --no-headers 2>$null
             if ($pods) {
               Write-Host "[DEBUG] Pod logs:"
-              kubectl logs -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --tail=50 || Write-Host "No logs available"
+              try {
+                kubectl logs -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --tail=50
+              } catch {
+                Write-Host "No logs available"
+              }
             }
             
             Write-Error "[FAILED] Helm deployment failed"
