@@ -14,8 +14,8 @@ global:
 # Enable the main DataEngine application in database-only mode
 enabled: true
 
-# Single replica for development
-replicaCount: 1
+# Three replicas for high availability matching production
+replicaCount: 3
 image:
   repository: data-engine
   tag: latest
