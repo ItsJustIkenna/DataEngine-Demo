@@ -39,8 +39,8 @@ env:
   HELM_CHART_PATH: k8s/data-engine-helm
   
   # Deployment configuration  
-  HELM_TIMEOUT: 20m
-  HEALTH_CHECK_TIMEOUT: 600s
+  HELM_TIMEOUT: 60m
+  HEALTH_CHECK_TIMEOUT: 3600s
   ROLLBACK_TIMEOUT: 5m
   
   # Performance optimization
@@ -445,7 +445,7 @@ jobs:
 
       - name: Deploy with Helm
         id: helm-deploy
-        timeout-minutes: 25
+        timeout-minutes: 65
         run: |
           $environment = "${{ github.event.inputs.environment || 'database-only' }}"
           
@@ -487,6 +487,7 @@ jobs:
           helm upgrade --install $releaseName ${{ env.HELM_CHART_PATH }} `
             --namespace ${{ env.NAMESPACE }} `
             --create-namespace `
+            --atomic `
             --wait `
             --timeout ${{ env.HELM_TIMEOUT }} `
             --values $valuesFile `
@@ -530,14 +531,53 @@ jobs:
             Write-Host "[DEBUG] Kubernetes resources in namespace ${{ env.NAMESPACE }}:"
             kubectl get all -n ${{ env.NAMESPACE }}
             
-            # Show recent events
+            # Show recent events (PowerShell-compatible)
             Write-Host "[DEBUG] Recent events:"
-            kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' | tail -10
+            $events = kubectl get events -n ${{ env.NAMESPACE }} --sort-by='.lastTimestamp' 2>$null
+            if ($events) {
+              $events -split "`n" | Select-Object -Last 10 | ForEach-Object { Write-Host $_ }
+            } else {
+              Write-Host "No events found"
+            }
             
-            # Show pod logs if any exist
+            # Show Helm manifest
+            Write-Host "[DEBUG] Helm manifest:"
+            try {
+              helm get manifest $releaseName -n ${{ env.NAMESPACE }}
+            } catch {
+              Write-Host "Could not retrieve Helm manifest"
+            }
+            
+            # Show migration jobs details
+            Write-Host "[DEBUG] Migration jobs:"
+            $migrationJobs = kubectl get jobs -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o name 2>$null
+            if ($migrationJobs) {
+              foreach ($job in $migrationJobs -split "`n") {
+                if ($job) {
+                  Write-Host "=== Describe $job ==="
+                  kubectl describe $job -n ${{ env.NAMESPACE }} | Select-Object -Last 200
+                }
+              }
+            }
+            
+            # Show migration pod logs and details
+            Write-Host "[DEBUG] Migration pods:"
+            $migrationPods = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[*].metadata.name}' 2>$null
+            if ($migrationPods) {
+              foreach ($pod in $migrationPods -split ' ') {
+                if ($pod) {
+                  Write-Host "=== Logs for pod $pod ==="
+                  kubectl logs $pod -n ${{ env.NAMESPACE }} --tail=300 2>$null || Write-Host "No logs available"
+                  Write-Host "=== Describe pod $pod ==="
+                  kubectl describe pod $pod -n ${{ env.NAMESPACE }} | Select-Object -Last 200
+                }
+              }
+            }
+            
+            # Show all pod logs if any exist
+            Write-Host "[DEBUG] All pod logs:"
             $pods = kubectl get pods -n ${{ env.NAMESPACE }} --no-headers 2>$null
             if ($pods) {
-              Write-Host "[DEBUG] Pod logs:"
               try {
                 kubectl logs -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --tail=50
               } catch {

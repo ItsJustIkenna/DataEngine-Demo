@@ -120,6 +120,36 @@ ingress:
       hosts:
         - data-engine.example.com
 
+# =============================================================================
+# TLS Certificate Management (cert-manager)
+# =============================================================================
+
+certManager:
+  enabled: false  # Enable when cert-manager is installed in cluster
+  issuerName: "letsencrypt-prod"
+  acme:
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+    email: "admin@example.com"  # MUST be set to valid email for Let's Encrypt
+    solvers: []
+    # Example custom solver configuration:
+    # solvers:
+    # - http01:
+    #     ingress:
+    #       class: nginx
+    # - dns01:
+    #     cloudflare:
+    #       email: admin@example.com
+    #       apiTokenSecretRef:
+    #         name: cloudflare-api-token
+    #         key: api-token
+  
+  # Staging issuer for testing (recommended to test first)
+  staging:
+    enabled: true
+    issuerName: "letsencrypt-staging"
+    acme:
+      server: "https://acme-staging-v02.api.letsencrypt.org/directory"
+
 # Network policies
 networkPolicy:
   enabled: false
@@ -545,3 +575,58 @@ autoscaling:
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
+
+# =============================================================================
+# Database Backup Configuration
+# =============================================================================
+
+backup:
+  enabled: false  # Enable for production environments
+  schedule: "0 2 * * *"  # Daily at 2 AM UTC
+  image:
+    repository: postgres
+    tag: "15-alpine"
+    pullPolicy: IfNotPresent
+  
+  # Backup retention
+  retention:
+    count: 7  # Keep last 7 backups
+  
+  # Job configuration
+  backoffLimit: 3
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid  # Don't allow concurrent backup jobs
+  
+  # Resource allocation
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999  # postgres user
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+      - ALL
+  
+  # Persistent storage for backups
+  persistence:
+    enabled: true
+    existingClaim: ""  # Use existing PVC or create new one
+    storageClass: ""  # Use default storage class
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+    annotations: {}
+    selector: {}
+  
+  # Node selection
+  nodeSelector: {}
+  tolerations: []

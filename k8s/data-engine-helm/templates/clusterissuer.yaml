@@ -1,0 +1,49 @@
+{{- if and .Values.ingress.enabled .Values.certManager.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.certManager.issuerName }}
+  labels:
+    {{- include "data-engine.labels" . | nindent 4 }}
+spec:
+  acme:
+    # Production Let's Encrypt server
+    server: {{ .Values.certManager.acme.server }}
+    email: {{ .Values.certManager.acme.email }}
+    privateKeySecretRef:
+      name: {{ .Values.certManager.issuerName }}-private-key
+    solvers:
+    {{- if .Values.certManager.acme.solvers }}
+    {{- toYaml .Values.certManager.acme.solvers | nindent 4 }}
+    {{- else }}
+    # Default HTTP-01 challenge provider
+    - http01:
+        ingress:
+          class: {{ .Values.ingress.className | default "nginx" }}
+    {{- end }}
+{{- end }}
+---
+{{- if and .Values.ingress.enabled .Values.certManager.enabled .Values.certManager.staging.enabled }}
+# Staging issuer for testing (Let's Encrypt rate limits are more forgiving)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.certManager.staging.issuerName }}
+  labels:
+    {{- include "data-engine.labels" . | nindent 4 }}
+spec:
+  acme:
+    server: {{ .Values.certManager.staging.acme.server }}
+    email: {{ .Values.certManager.acme.email }}
+    privateKeySecretRef:
+      name: {{ .Values.certManager.staging.issuerName }}-private-key
+    solvers:
+    {{- if .Values.certManager.acme.solvers }}
+    {{- toYaml .Values.certManager.acme.solvers | nindent 4 }}
+    {{- else }}
+    - http01:
+        ingress:
+          class: {{ .Values.ingress.className | default "nginx" }}
+    {{- end }}
+{{- end }}

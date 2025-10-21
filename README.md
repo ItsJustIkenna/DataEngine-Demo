@@ -291,6 +291,115 @@ spec:
             port: 8080
 ```
 
+### **Kubernetes with Helm (Recommended)**
+
+DataEngine uses Helm for production-grade Kubernetes deployments with environment-specific configurations.
+
+#### **Prerequisites**
+```bash
+# Install cert-manager for TLS
+helm repo add jetstack https://charts.jetstack.io
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --version v1.13.0 \
+  --set installCRDs=true
+```
+
+#### **Deploy to Kubernetes**
+```bash
+# Development environment
+helm upgrade --install dataengine ./k8s/data-engine-helm \
+  --namespace dataengine-dev \
+  --create-namespace \
+  --values ./k8s/data-engine-helm/values-dev.yaml
+
+# Production environment with backups and TLS
+helm upgrade --install dataengine ./k8s/data-engine-helm \
+  --namespace dataengine \
+  --create-namespace \
+  --values ./k8s/data-engine-helm/values-prod.yaml \
+  --set certManager.acme.email="devops@yourdomain.com" \
+  --set ingress.hosts[0].host="dataengine.yourdomain.com"
+```
+
+#### **Phase 1 Production Features**
+
+**✅ 1. Database Backup System**
+- Automated daily backups via CronJob (2 AM UTC)
+- Configurable retention (7-30 days)
+- Persistent storage with PVC
+- Gzip compression for efficiency
+
+```yaml
+# Enable in values-prod.yaml
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  retentionDays: 30
+  persistence:
+    size: 50Gi
+```
+
+**Manual backup:**
+```bash
+kubectl create job --from=cronjob/dataengine-backup manual-backup -n dataengine
+```
+
+**Restore from backup:**
+```bash
+# List backups
+kubectl exec -it <backup-pod> -n dataengine -- ls -lh /backups/
+
+# Restore
+kubectl exec -it <backup-pod> -n dataengine -- bash -c \
+  "gunzip -c /backups/20251021_020000_dataengine.sql.gz | psql \$DATABASE_URL"
+```
+
+**✅ 2. TLS Certificate Management (cert-manager)**
+- Automated Let's Encrypt certificates
+- Automatic renewal (30 days before expiry)
+- Staging and production issuers
+
+```yaml
+# Enable in values-prod.yaml
+certManager:
+  enabled: true
+  email: "devops@yourdomain.com"
+  server: "https://acme-v02.api.letsencrypt.org/directory"
+
+ingress:
+  enabled: true
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  tls:
+    - secretName: dataengine-prod-tls
+      hosts:
+        - dataengine.yourdomain.com
+```
+
+**Verify certificate:**
+```bash
+kubectl get certificate -n dataengine
+kubectl describe certificate dataengine-prod-tls -n dataengine
+```
+
+#### **Monitoring Deployments**
+```bash
+# Check deployment status
+kubectl get pods -n dataengine
+kubectl get deployments -n dataengine
+
+# View logs
+kubectl logs -n dataengine -l app.kubernetes.io/name=data-engine --tail=100
+
+# Check backup CronJob
+kubectl get cronjob -n dataengine
+
+# Monitor certificates
+kubectl get certificate -n dataengine
+```
+
 ### **Docker Compose (Development)**
 ```yaml
 version: '3.8'
@@ -1397,7 +1506,10 @@ kubectl get pods -n data-engine-dev
 
 ## Support
 
-#   P i p e l i n e   t e s t   t r i g g e r  
- < ! - -   P i p e l i n e   t e s t :   2 0 2 5 - 1 0 - 1 9   1 6 : 5 0 : 5 0   - - >  
- #   C I / C D   P i p e l i n e   -   A l l   f i x e s   a p p l i e d   1 0 / 2 0 / 2 0 2 5   2 1 : 0 5 : 2 3  
+#   P i p e l i n e   t e s t   t r i g g e r 
+ 
+ < ! - -   P i p e l i n e   t e s t :   2 0 2 5 - 1 0 - 1 9   1 6 : 5 0 : 5 0   - - > 
+ 
+ #   C I / C D   P i p e l i n e   -   A l l   f i x e s   a p p l i e d   1 0 / 2 0 / 2 0 2 5   2 1 : 0 5 : 2 3 
+ 
  

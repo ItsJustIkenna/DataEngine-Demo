@@ -158,9 +158,22 @@ logging:
 service:
   enabled: false
 
-# Disable ingress
+# Enable ingress with TLS
 ingress:
-  enabled: false
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-staging"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: database-only.dev.nwagbara-group.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: database-only-tls
+      hosts:
+        - database-only.dev.nwagbara-group.com
 
 # Disable all monitoring components
 monitoring:
@@ -211,3 +224,42 @@ securityContext:
 
 # No application resource limits since no application pods are deployed
 # Resources are allocated to PostgreSQL and Redis components only
+
+# =============================================================================
+# Database Backup Configuration
+# =============================================================================
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # 2 AM UTC daily for database-only environment
+  retentionDays: 30  # Keep backups for 30 days
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+
+# =============================================================================
+# TLS/Certificate Management
+# =============================================================================
+certManager:
+  enabled: true
+  email: "devops@nwagbara-group.com"
+  server: "https://acme-staging-v02.api.letsencrypt.org/directory"  # Staging for database-only testing
+  solvers:
+    - http01:
+        ingress:
+          class: nginx

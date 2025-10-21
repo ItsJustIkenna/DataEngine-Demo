@@ -1,0 +1,149 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "data-engine.fullname" . }}-backup
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "data-engine.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ .Values.backup.concurrencyPolicy }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "data-engine.labels" . | nindent 8 }}
+        app.kubernetes.io/component: backup
+    spec:
+      backoffLimit: {{ .Values.backup.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "data-engine.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          {{- if .Values.serviceAccount.create }}
+          serviceAccountName: {{ include "data-engine.serviceAccountName" . }}
+          {{- end }}
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+          - name: backup
+            image: {{ .Values.backup.image.repository }}:{{ .Values.backup.image.tag }}
+            imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -e
+              TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+              BACKUP_FILE="/backups/${TIMESTAMP}_{{ .Release.Name }}.sql.gz"
+              
+              echo "Starting database backup at $(date)"
+              echo "Database: $POSTGRES_DB"
+              echo "Host: $POSTGRES_HOST"
+              echo "Backup file: $BACKUP_FILE"
+              
+              # Create backup directory if it doesn't exist
+              mkdir -p /backups
+              
+              # Perform backup
+              {{- if .Values.externalDatabase.enabled }}
+              pg_dump "postgresql://${POSTGRES_USERNAME}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}" | gzip > "$BACKUP_FILE"
+              {{- else }}
+              PGPASSWORD=$POSTGRES_PASSWORD pg_dump -h $POSTGRES_HOST -U $POSTGRES_USERNAME -d $POSTGRES_DB | gzip > "$BACKUP_FILE"
+              {{- end }}
+              
+              # Verify backup was created
+              if [ -f "$BACKUP_FILE" ]; then
+                BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+                echo "✅ Backup completed successfully"
+                echo "Backup size: $BACKUP_SIZE"
+                echo "File: $BACKUP_FILE"
+              else
+                echo "❌ Backup failed - file not created"
+                exit 1
+              fi
+              
+              # Cleanup old backups (keep only last N backups)
+              KEEP_BACKUPS={{ .Values.backup.retention.count }}
+              echo "Cleaning up old backups, keeping last $KEEP_BACKUPS..."
+              cd /backups
+              ls -t *.sql.gz | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f
+              
+              echo "Backup process completed at $(date)"
+            env:
+            - name: POSTGRES_HOST
+              {{- if .Values.customPostgresql.enabled }}
+              value: {{ include "data-engine.postgresql.host" . }}
+              {{- else }}
+              value: {{ .Values.externalDatabase.host }}
+              {{- end }}
+            - name: POSTGRES_PORT
+              {{- if .Values.customPostgresql.enabled }}
+              value: "5432"
+              {{- else }}
+              value: {{ .Values.externalDatabase.port | quote }}
+              {{- end }}
+            - name: POSTGRES_DB
+              {{- if .Values.customPostgresql.enabled }}
+              value: {{ .Values.customPostgresql.auth.database }}
+              {{- else }}
+              value: {{ .Values.externalDatabase.database }}
+              {{- end }}
+            - name: POSTGRES_USERNAME
+              {{- if .Values.customPostgresql.enabled }}
+              value: {{ .Values.customPostgresql.auth.username }}
+              {{- else }}
+              value: {{ .Values.externalDatabase.username }}
+              {{- end }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.customPostgresql.enabled }}
+                    {{- if .Values.customPostgresql.auth.existingSecret }}
+                  name: {{ .Values.customPostgresql.auth.existingSecret }}
+                    {{- else }}
+                  name: {{ include "data-engine.fullname" . }}-postgresql
+                    {{- end }}
+                  {{- else if .Values.externalDatabase.enabled }}
+                    {{- if .Values.externalDatabase.existingSecret }}
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                    {{- else }}
+                  name: {{ include "data-engine.fullname" . }}-database
+                    {{- end }}
+                  {{- end }}
+                  key: password
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backups
+            {{- with .Values.backup.resources }}
+            resources:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+            {{- with .Values.backup.securityContext }}
+            securityContext:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          volumes:
+          - name: backup-storage
+            {{- if .Values.backup.persistence.enabled }}
+            persistentVolumeClaim:
+              claimName: {{ .Values.backup.persistence.existingClaim | default (printf "%s-backup" (include "data-engine.fullname" .)) }}
+            {{- else }}
+            emptyDir: {}
+            {{- end }}
+          {{- with .Values.backup.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backup.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
