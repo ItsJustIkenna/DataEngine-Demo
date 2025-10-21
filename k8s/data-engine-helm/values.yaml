@@ -479,7 +479,7 @@ externalRedis:
   enabled: true  # Enable external Redis
   host: ""       # Injected via secrets.redis.url parsing
   port: 6379
-  existingSecret: "redis-credentials"  # Name of existing secret with 'password' key
+  existingSecret: ""  # Use Helm-generated secret, not hardcoded
   # Password is provided via secrets.redis.password
   # Connection string format: redis://:password@host:port
 
