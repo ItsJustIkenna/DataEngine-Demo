@@ -69,7 +69,7 @@ impl KernelBypassManager {
     }
 
     /// Create ultra-optimized socket for trading
-    pub fn create_trading_socket(&self, addr: SocketAddr) -> Result<Socket> {
+    pub fn create_trading_socket(&self, _addr: SocketAddr) -> Result<Socket> {
         let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
         
         // Ultra-aggressive TCP optimizations for sub-microsecond latency

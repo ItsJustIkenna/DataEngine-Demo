@@ -120,7 +120,7 @@ pub async fn get_exchange(
 pub async fn get_securities(
     redis_pool: Arc<deadpool_redis::Pool>,
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
-    symbols: &Vec<String>,
+    symbols: &[String],
 ) -> Result<Vec<Security>, Error> {
     let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(3);
     let mut securities = vec![];

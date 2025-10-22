@@ -179,7 +179,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
 
             tokio::select! {
                 // Listening to WebSocket Messages
-                result = async {
+                _result = async {
                     loop {
                         let message = handler.reader.write().await.next().await;
 

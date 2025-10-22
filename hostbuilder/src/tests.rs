@@ -4,7 +4,7 @@ mod tests {
     
     #[test]
     fn test_fast_parser_creation() {
-        let parser = FastMessageParser::new();
+        let _parser = FastMessageParser::new();
         assert!(FastMessageParser::detect_channel_fast(b"{\"channel\":\"level3\"}").is_some());
     }
     
