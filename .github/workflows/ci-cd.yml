@@ -117,6 +117,23 @@ jobs:
           rustc --version
           cargo --version
 
+      - name: Generate Dependency Tree
+        if: github.event.inputs.skip_tests != 'true'
+        shell: powershell
+        run: |
+          cd DataEngine
+          Write-Host "Generating dependency tree..."
+          cargo tree -e features > dependency-tree.txt 2>&1
+        continue-on-error: true
+
+      - name: Upload Dependency Tree
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-tree-${{ github.sha }}
+          path: DataEngine/dependency-tree.txt
+          retention-days: 30
+
       - name: Validate Helm Chart
         id: helm-check
         run: |
@@ -138,7 +155,21 @@ jobs:
         shell: powershell
         run: |
           cd DataEngine
-          cargo build --workspace --all-targets --jobs 1
+          $env:RUST_BACKTRACE = 'full'
+          Write-Host "Starting cargo build (verbose)..."
+          cargo build --workspace --all-targets --jobs 1 --verbose 2>&1 | Tee-Object -FilePath build-log.txt
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed. See build-log.txt"
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload Build Log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.sha }}
+          path: DataEngine/build-log.txt
+          retention-days: 30
 
       - name: Run Tests
         id: test-check
@@ -146,13 +177,15 @@ jobs:
         shell: powershell
         run: |
           cd DataEngine
-          cargo test --workspace --all-features --jobs 1 2>&1 | Tee-Object -FilePath test-results.txt
+          $env:RUST_BACKTRACE = 'full'
+          Write-Host "Starting cargo test (verbose)..."
+          cargo test --workspace --all-features --jobs 1 --verbose 2>&1 | Tee-Object -FilePath test-results.txt
           
           if ($LASTEXITCODE -eq 0) {
             echo "passed=true" >> $env:GITHUB_OUTPUT
           } else {
             echo "passed=false" >> $env:GITHUB_OUTPUT
-            exit 1
+            exit $LASTEXITCODE
           }
 
       - name: Upload Test Results
