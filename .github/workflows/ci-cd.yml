@@ -107,6 +107,21 @@ jobs:
             exit 1
           }
 
+      - name: Prepare Rust toolchain & targets
+        run: |
+          Write-Host "Ensuring Rust toolchain and required targets..."
+          rustc -vV
+          # Ensure stable toolchain exists
+          rustup toolchain install stable
+          rustup default stable
+          # Install the aarch64 Windows MSVC stdlib (required by .cargo/config.toml)
+          rustup target add aarch64-pc-windows-msvc
+          # Optional but helpful: rust-src for some builds/tests and cargo tooling
+          rustup component add rust-src
+          Write-Host "[OK] Rust toolchain prepared"
+          rustup show
+        shell: powershell
+
       - name: Run Rust Tests
         id: test-check
         if: github.event.inputs.skip_tests != 'true'
