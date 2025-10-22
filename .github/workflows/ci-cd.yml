@@ -69,7 +69,7 @@ jobs:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Configure CARGO_HOME (Early Setup)
-        shell: pwsh
+        shell: powershell
         run: |
           # Use runner temp to avoid permission/home issues on Windows
           $cargoHome = "${{ runner.temp }}\cargo"
@@ -97,7 +97,7 @@ jobs:
             cargo-${{ runner.os }}-
 
       - name: Cargo Fetch with Verbose Retry & Diagnostics
-        shell: pwsh
+        shell: powershell
         env:
           CARGO_HOME: ${{ runner.temp }}\cargo
         run: |
@@ -351,7 +351,7 @@ jobs:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Configure CARGO_HOME (Early Setup)
-        shell: pwsh
+        shell: powershell
         run: |
           # Use runner temp to avoid permission/home issues on Windows
           $cargoHome = "${{ runner.temp }}\cargo"
@@ -379,7 +379,7 @@ jobs:
             cargo-${{ runner.os }}-
 
       - name: Cargo Fetch with Verbose Retry & Diagnostics
-        shell: pwsh
+        shell: powershell
         env:
           CARGO_HOME: ${{ runner.temp }}\cargo
         run: |
