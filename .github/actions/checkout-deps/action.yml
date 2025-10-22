@@ -1,5 +1,5 @@
 name: 'Checkout DataEngine Dependencies'
-description: 'Checks out all required dependency repositories for DataEngine'
+description: 'Checks out all required dependency repositories for DataEngine (expects DataEngine already checked out)'
 inputs:
   github-token:
     description: 'GitHub token with access to private repos'
@@ -7,12 +7,6 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Checkout DataEngine
-      uses: actions/checkout@v4
-      with:
-        path: DataEngine
-        fetch-depth: 0
-
     - name: Checkout databaseschema
       uses: actions/checkout@v4
       with:

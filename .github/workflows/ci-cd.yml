@@ -57,11 +57,14 @@ jobs:
       helm-valid: ${{ steps.helm-check.outputs.valid }}
       tests-passed: ${{ steps.test-check.outputs.passed }}
     steps:
-      - name: Checkout Code
+      - name: Checkout DataEngine
         uses: actions/checkout@v4
+        with:
+          path: DataEngine
+          fetch-depth: 0
         
       - name: Checkout Dependencies
-        uses: ./.github/actions/checkout-deps
+        uses: ./DataEngine/.github/actions/checkout-deps
         with:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
@@ -233,11 +236,14 @@ jobs:
       image-exists: ${{ steps.image-check.outputs.exists }}
       image-digest: ${{ steps.build-push.outputs.digest }}
     steps:
-      - name: Checkout Code
+      - name: Checkout DataEngine
         uses: actions/checkout@v4
+        with:
+          path: DataEngine
+          fetch-depth: 0
         
       - name: Checkout Dependencies
-        uses: ./.github/actions/checkout-deps
+        uses: ./DataEngine/.github/actions/checkout-deps
         with:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
