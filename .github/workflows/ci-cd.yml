@@ -62,56 +62,105 @@ jobs:
         with:
           path: DataEngine
           fetch-depth: 0
-        
-      - name: Checkout Dependencies
-        uses: ./DataEngine/.github/actions/checkout-deps
+
+      - name: Checkout MessageBrokerEngine
+        uses: actions/checkout@v4
         with:
-          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          repository: Nwagbara-Group-LLC/MessageBrokerEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: MessageBrokerEngine
+          fetch-depth: 0
 
-      - name: Configure CARGO_HOME (Early Setup)
-        shell: powershell
-        run: |
-          # Use runner temp to avoid permission/home issues on Windows
-          $cargoHome = "${{ runner.temp }}\cargo"
-          Write-Host "Setting CARGO_HOME=$cargoHome"
-          Write-Host "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          # Ensure directory exists
-          New-Item -ItemType Directory -Force -Path $cargoHome | Out-Null
-          Write-Host "[OK] CARGO_HOME configured and created"
+      - name: Checkout LoggingEngine
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/LoggingEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: LoggingEngine
+          fetch-depth: 0
 
-      - name: Cache Cargo Registry & Build Artifacts
+      - name: Checkout redisutils
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/redisutils
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: redisutils
+          fetch-depth: 0
+
+      - name: Checkout databaseschema
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/databaseschema
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: databaseschema
+          fetch-depth: 0
+
+      - name: Cache Cargo Dependencies
         uses: actions/cache@v4
         with:
           path: |
-            ${{ runner.temp }}\cargo\registry
-            ${{ runner.temp }}\cargo\git
+            ~/.cargo/registry
+            ~/.cargo/git
             DataEngine/target
             MessageBrokerEngine/target
             LoggingEngine/target
             redisutils/target
             databaseschema/target
-          key: cargo-${{ runner.os }}-lock-${{ hashFiles('**/Cargo.lock') }}-v3
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-v4
           restore-keys: |
-            cargo-${{ runner.os }}-lock-${{ hashFiles('**/Cargo.lock') }}-
-            cargo-${{ runner.os }}-lock-
+            cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
             cargo-${{ runner.os }}-
 
-      - name: Cargo Fetch with Verbose Retry & Diagnostics
+      - name: Force Clear Corrupted Cargo Cache
         shell: powershell
-        env:
-          CARGO_HOME: ${{ runner.temp }}\cargo
         run: |
-          Write-Host "=== Cargo Fetch Diagnostics ==="
-          Write-Host "CARGO_HOME: $env:CARGO_HOME"
-          Write-Host "cargo --version:"
-          cargo --version
-          Write-Host "git --version:"
-          git --version
-          Write-Host "rustc --version:"
-          rustc --version
-          Write-Host "==============================="
+          Write-Host "=== Forcefully clearing cargo cache (nuclear option) ==="
           
+          # Clear standard cargo cache locations
+          if (Test-Path "$env:USERPROFILE\.cargo\registry") {
+            Write-Host "Removing $env:USERPROFILE\.cargo\registry"
+            Remove-Item -Path "$env:USERPROFILE\.cargo\registry" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          
+          if (Test-Path "$env:USERPROFILE\.cargo\git") {
+            Write-Host "Removing $env:USERPROFILE\.cargo\git"
+            Remove-Item -Path "$env:USERPROFILE\.cargo\git" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          
+          Write-Host "[OK] Cargo cache cleared - will download fresh"
+
+      - name: Git & Network Diagnostics
+        shell: powershell
+        run: |
+          Write-Host "=== Git & Network Diagnostics ==="
+          Write-Host "Git version:"; git --version
+          Write-Host "`nGit HTTP config:"; git config --list | Select-String "http"
+          
+          Write-Host "`nTesting git access to crates.io-index:"
+          $result = git ls-remote https://github.com/rust-lang/crates.io-index 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] Can reach crates.io-index"
+          } else {
+            Write-Host "[ERROR] Cannot reach crates.io-index"
+            Write-Host $result
+          }
+          
+          Write-Host "`nTesting HTTPS to GitHub:"
+          try {
+            $resp = Invoke-WebRequest -Uri "https://github.com" -UseBasicParsing -TimeoutSec 10
+            Write-Host "[OK] HTTPS works (status: $($resp.StatusCode))"
+          } catch {
+            Write-Host "[ERROR] HTTPS failed: $_"
+          }
+
+      - name: Cargo Fetch with Retry
+        shell: powershell
+        run: |
+          Write-Host "=== Cargo Fetch with Retry ==="
           cd DataEngine
+          
+          Write-Host "cargo --version:"; cargo --version
+          Write-Host "rustc --version:"; rustc --version
           
           $maxAttempts = 5
           $attempt = 0
@@ -119,30 +168,20 @@ jobs:
           
           while ($attempt -lt $maxAttempts) {
             $attempt++
-            Write-Host ""
-            Write-Host "Attempt $attempt of $maxAttempts - cargo fetch --locked --verbose"
-            Write-Host "---------------------------------------------------"
+            Write-Host "`nAttempt $attempt of $maxAttempts - cargo fetch --locked"
             
-            $output = & cargo fetch --locked --verbose 2>&1
-            $exitCode = $LASTEXITCODE
+            cargo fetch --locked --verbose
             
-            Write-Host "--- Full Cargo Output ---"
-            Write-Host $output
-            Write-Host "-------------------------"
-            Write-Host "Exit code: $exitCode"
-            
-            if ($exitCode -eq 0) {
-              Write-Host "[OK] Cargo fetch succeeded on attempt $attempt"
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "[OK] Cargo fetch succeeded"
               break
             }
             
-            Write-Host "[WARN] Cargo fetch failed with exit code $exitCode"
+            Write-Host "[WARN] Cargo fetch failed with exit code $LASTEXITCODE"
             
             if ($attempt -ge $maxAttempts) {
               Write-Error "[FAIL] Cargo fetch failed after $maxAttempts attempts"
-              Write-Error "This indicates persistent network/cache/git issues."
-              Write-Error "Check runner network connectivity to crates.io and GitHub."
-              exit $exitCode
+              exit 1
             }
             
             Write-Host "Retrying in $sleepSeconds seconds..."
@@ -344,93 +383,38 @@ jobs:
         with:
           path: DataEngine
           fetch-depth: 0
-        
-      - name: Checkout Dependencies
-        uses: ./DataEngine/.github/actions/checkout-deps
+
+      - name: Checkout MessageBrokerEngine
+        uses: actions/checkout@v4
         with:
-          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          repository: Nwagbara-Group-LLC/MessageBrokerEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: MessageBrokerEngine
+          fetch-depth: 0
 
-      - name: Configure CARGO_HOME (Early Setup)
-        shell: powershell
-        run: |
-          # Use runner temp to avoid permission/home issues on Windows
-          $cargoHome = "${{ runner.temp }}\cargo"
-          Write-Host "Setting CARGO_HOME=$cargoHome"
-          Write-Host "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          # Ensure directory exists
-          New-Item -ItemType Directory -Force -Path $cargoHome | Out-Null
-          Write-Host "[OK] CARGO_HOME configured and created"
-
-      - name: Cache Cargo Registry & Build Artifacts
-        uses: actions/cache@v4
+      - name: Checkout LoggingEngine
+        uses: actions/checkout@v4
         with:
-          path: |
-            ${{ runner.temp }}\cargo\registry
-            ${{ runner.temp }}\cargo\git
-            DataEngine/target
-            MessageBrokerEngine/target
-            LoggingEngine/target
-            redisutils/target
-            databaseschema/target
-          key: cargo-${{ runner.os }}-lock-${{ hashFiles('**/Cargo.lock') }}-v3
-          restore-keys: |
-            cargo-${{ runner.os }}-lock-${{ hashFiles('**/Cargo.lock') }}-
-            cargo-${{ runner.os }}-lock-
-            cargo-${{ runner.os }}-
+          repository: Nwagbara-Group-LLC/LoggingEngine
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: LoggingEngine
+          fetch-depth: 0
 
-      - name: Cargo Fetch with Verbose Retry & Diagnostics
-        shell: powershell
-        env:
-          CARGO_HOME: ${{ runner.temp }}\cargo
-        run: |
-          Write-Host "=== Cargo Fetch Diagnostics ==="
-          Write-Host "CARGO_HOME: $env:CARGO_HOME"
-          Write-Host "cargo --version:"
-          cargo --version
-          Write-Host "git --version:"
-          git --version
-          Write-Host "rustc --version:"
-          rustc --version
-          Write-Host "==============================="
-          
-          cd DataEngine
-          
-          $maxAttempts = 5
-          $attempt = 0
-          $sleepSeconds = 5
-          
-          while ($attempt -lt $maxAttempts) {
-            $attempt++
-            Write-Host ""
-            Write-Host "Attempt $attempt of $maxAttempts - cargo fetch --locked --verbose"
-            Write-Host "---------------------------------------------------"
-            
-            $output = & cargo fetch --locked --verbose 2>&1
-            $exitCode = $LASTEXITCODE
-            
-            Write-Host "--- Full Cargo Output ---"
-            Write-Host $output
-            Write-Host "-------------------------"
-            Write-Host "Exit code: $exitCode"
-            
-            if ($exitCode -eq 0) {
-              Write-Host "[OK] Cargo fetch succeeded on attempt $attempt"
-              break
-            }
-            
-            Write-Host "[WARN] Cargo fetch failed with exit code $exitCode"
-            
-            if ($attempt -ge $maxAttempts) {
-              Write-Error "[FAIL] Cargo fetch failed after $maxAttempts attempts"
-              Write-Error "This indicates persistent network/cache/git issues."
-              Write-Error "Check runner network connectivity to crates.io and GitHub."
-              exit $exitCode
-            }
-            
-            Write-Host "Retrying in $sleepSeconds seconds..."
-            Start-Sleep -Seconds $sleepSeconds
-            $sleepSeconds = [math]::Min($sleepSeconds * 2, 60)
-          }
+      - name: Checkout redisutils
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/redisutils
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: redisutils
+          fetch-depth: 0
+
+      - name: Checkout databaseschema
+        uses: actions/checkout@v4
+        with:
+          repository: Nwagbara-Group-LLC/databaseschema
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          path: databaseschema
+          fetch-depth: 0
 
       - name: Login to GHCR
         uses: docker/login-action@v3
