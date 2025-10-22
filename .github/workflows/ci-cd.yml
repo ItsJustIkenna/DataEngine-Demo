@@ -52,7 +52,7 @@ jobs:
   # ===== VALIDATION & TESTING =====
   validate:
     name: Validate & Test
-    runs-on: [self-hosted, windows, x64]
+    runs-on: ubuntu-latest
     outputs:
       helm-valid: ${{ steps.helm-check.outputs.valid }}
       tests-passed: ${{ steps.test-check.outputs.passed }}
@@ -96,43 +96,80 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Rust Toolchain
-        shell: powershell
         run: |
-          Write-Host "=== Rust Toolchain Setup ==="
+          echo "=== Rust Toolchain Setup ==="
           rustup default stable
           rustup component add rust-src
-          Write-Host "`nRust version:"
+          echo ""
+          echo "Rust version:"
           rustc --version
-          Write-Host "`nCargo version:"
+          echo ""
+          echo "Cargo version:"
           cargo --version
-          Write-Host "`nToolchain ready."
+          echo ""
+          echo "Toolchain ready."
 
-      - name: Check Build Environment
-        shell: powershell
+      - name: Validate Helm Chart
+        id: helm-check
         run: |
-          Write-Host "=== Build Environment Check ==="
-          Write-Host "OS: $env:OS"
-          Write-Host "Processor: $env:PROCESSOR_ARCHITECTURE"
+          echo "=== Validating Helm Chart ==="
+          helm lint ${{ env.HELM_CHART_PATH }} --strict
           
-          # Check for MSVC cl.exe (required for native builds)
-          $cl = Get-Command cl.exe -ErrorAction SilentlyContinue
-          if ($cl) {
-            Write-Host "MSVC cl.exe: $($cl.Source)"
-          } else {
-            Write-Error "MSVC cl.exe not found. Install Visual Studio Build Tools with 'C++ build tools' workload on the self-hosted runner, or switch to ubuntu-latest runner for CI builds."
+          if [ $? -eq 0 ]; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+            echo "[OK] Helm validation passed"
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "[FAIL] Helm validation failed"
             exit 1
-          }
+          fi
+
+      - name: Build DataEngine
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          echo "=== Building DataEngine ==="
+          cd DataEngine
           
-          # Check for link.exe (required for linking)
-          $link = Get-Command link.exe -ErrorAction SilentlyContinue
-          if ($link) {
-            Write-Host "MSVC link.exe: $($link.Source)"
-          } else {
-            Write-Error "MSVC link.exe not found. Install Visual Studio Build Tools with 'C++ build tools' workload on the self-hosted runner."
+          echo ""
+          echo "Checking workspace structure..."
+          cargo metadata --no-deps --format-version=1 | jq -r '.workspace_members[]'
+          
+          echo ""
+          echo "Starting build (single-threaded for stability)..."
+          export RUST_BACKTRACE=1
+          
+          # Build without verbose first to see clean output
+          cargo build --workspace --jobs 1
+          
+          if [ $? -ne 0 ]; then
+            echo ""
+            echo "=== BUILD FAILED - Retrying with verbose output ==="
+            cargo build --workspace --jobs 1 --verbose 2>&1 | tee build-log.txt
+            echo ""
+            echo "Build log saved to build-log.txt"
             exit 1
-          }
+          fi
           
-          Write-Host "`nEnvironment check complete - all required tools found."
+          echo "[OK] Build successful"
+
+      - name: Run Tests
+        id: test-check
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          echo "=== Running Tests ==="
+          cd DataEngine
+          
+          export RUST_BACKTRACE=1
+          cargo test --workspace --jobs 1 2>&1 | tee test-results.txt
+          
+          if [ $? -eq 0 ]; then
+            echo "passed=true" >> $GITHUB_OUTPUT
+            echo "[OK] All tests passed"
+          else
+            echo "passed=false" >> $GITHUB_OUTPUT
+            echo "[FAIL] Tests failed"
+            exit 1
+          fi
 
       - name: Validate Helm Chart
         id: helm-check
