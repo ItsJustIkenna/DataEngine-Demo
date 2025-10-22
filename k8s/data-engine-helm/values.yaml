@@ -238,6 +238,7 @@ securityContext:
       - ALL
     add:
       - NET_BIND_SERVICE
+      - SYS_NICE  # Required for real-time scheduling (SCHED_FIFO)
 
 # Service account
 serviceAccount:
