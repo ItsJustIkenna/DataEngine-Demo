@@ -11,7 +11,7 @@ use diesel_async::AsyncPgConnection;
 use dotenv::dotenv;
 use mockall::automock;
 use redis_utils::create_redis_pool;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::{
     env,
     sync::Arc,
@@ -38,7 +38,7 @@ use crate::{
     },
     security::{SecurityConfig, SecurityManager},
     // Import logging macros (exported at crate root) and logger instance
-    log_info, log_error,
+    log_info, log_warn, log_error, log_debug,
     infrastructure::logging_facade::MAIN_LOGGER,
 };
 
