@@ -97,20 +97,44 @@ jobs:
           cargo --version
 
       - name: Build Workspace
-        id: test-result
         shell: powershell
         run: |
           Write-Host "Building DataEngine workspace..."
           cd DataEngine
           cargo build --workspace --jobs 1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Build failed!"
+            exit 1
+          }
+          Write-Host "Build passed!"
+
+      - name: Run Tests
+        id: test-result
+        shell: powershell
+        run: |
+          Write-Host "Running tests..."
+          cd DataEngine
+          cargo test --workspace --jobs 1
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Build passed!"
+            Write-Host "Tests passed!"
             echo "passed=true" >> $env:GITHUB_OUTPUT
           } else {
-            Write-Host "Build failed!"
+            Write-Host "Tests failed!"
             echo "passed=false" >> $env:GITHUB_OUTPUT
             exit 1
           }
+
+      - name: Validate Helm Chart
+        shell: powershell
+        run: |
+          Write-Host "Validating Helm chart..."
+          cd DataEngine
+          helm lint ${{ env.HELM_CHART_PATH }} --strict
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Helm validation failed!"
+            exit 1
+          }
+          Write-Host "Helm validation passed!"
 
   # ===== BUILD & SECURITY =====
   build:
