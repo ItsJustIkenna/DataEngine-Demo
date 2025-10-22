@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["config", "hostbuilder", "program", "performance", "tests"]
+members = ["config", "hostbuilder", "program", "performance"]
 
 [profile.release]
 opt-level = 3
