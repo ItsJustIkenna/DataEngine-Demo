@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use regex::Regex;
 use serde_json::Value;
 use thiserror::Error;
+use once_cell::sync::Lazy;
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
@@ -38,28 +39,27 @@ pub enum ValidationError {
 
 pub type ValidationResult<T> = Result<T, ValidationError>;
 
+// Compile regexes once at startup using Lazy static initialization
+static PATH_TRAVERSAL_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\.\.").unwrap());
+static WINDOWS_INVALID_CHARS_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r#"[<>:"|?*]"#).unwrap());
+static CONTROL_CHARS_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"[\x00-\x1f]").unwrap());
+static WINDOWS_RESERVED_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$").unwrap());
+static SYMBOL_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[A-Z0-9/_-]+$").unwrap());
+static API_KEY_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[A-Za-z0-9+/=_-]+$").unwrap());
+
 /// Secure path validator
 pub struct PathValidator {
     allowed_directories: Vec<PathBuf>,
-    blocked_patterns: Vec<Regex>,
 }
 
 impl PathValidator {
     pub fn new() -> Self {
-        let blocked_patterns = vec![
-            Regex::new(r"\.\.").unwrap(), // Directory traversal
-            Regex::new(r#"[<>:"|?*]"#).unwrap(), // Windows invalid chars
-            Regex::new(r"[\x00-\x1f]").unwrap(), // Control characters
-            Regex::new(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$").unwrap(), // Windows reserved
-        ];
-        
         Self {
             allowed_directories: vec![
                 PathBuf::from("config"),
                 PathBuf::from("data"),
                 PathBuf::from("logs"),
             ],
-            blocked_patterns,
         }
     }
     
@@ -71,13 +71,26 @@ impl PathValidator {
             ));
         }
         
-        // Check for blocked patterns
-        for pattern in &self.blocked_patterns {
-            if pattern.is_match(path) {
-                return Err(ValidationError::InvalidPath(
-                    "Path contains invalid characters".to_string()
-                ));
-            }
+        // Check for blocked patterns using static regexes
+        if PATH_TRAVERSAL_REGEX.is_match(path) {
+            return Err(ValidationError::InvalidPath(
+                "Path contains directory traversal".to_string()
+            ));
+        }
+        if WINDOWS_INVALID_CHARS_REGEX.is_match(path) {
+            return Err(ValidationError::InvalidPath(
+                "Path contains invalid characters".to_string()
+            ));
+        }
+        if CONTROL_CHARS_REGEX.is_match(path) {
+            return Err(ValidationError::InvalidPath(
+                "Path contains control characters".to_string()
+            ));
+        }
+        if WINDOWS_RESERVED_REGEX.is_match(path) {
+            return Err(ValidationError::InvalidPath(
+                "Path uses Windows reserved name".to_string()
+            ));
         }
         
         let path_buf = PathBuf::from(path);
@@ -251,9 +264,8 @@ impl MessageValidator {
             });
         }
         
-        // Only alphanumeric and specific separators
-        let symbol_regex = Regex::new(r"^[A-Z0-9/_-]+$").unwrap();
-        if !symbol_regex.is_match(symbol) {
+        // Only alphanumeric and specific separators (using pre-compiled regex)
+        if !SYMBOL_REGEX.is_match(symbol) {
             return Err(ValidationError::InvalidFieldValue {
                 field: "symbol".to_string(),
             });
@@ -378,9 +390,8 @@ impl ApiValidator {
             });
         }
         
-        // Check for valid characters (base64-like)
-        let api_key_regex = Regex::new(r"^[A-Za-z0-9+/=_-]+$").unwrap();
-        if !api_key_regex.is_match(api_key) {
+        // Check for valid characters (base64-like, using pre-compiled regex)
+        if !API_KEY_REGEX.is_match(api_key) {
             return Err(ValidationError::InvalidFieldValue {
                 field: "api_key".to_string(),
             });

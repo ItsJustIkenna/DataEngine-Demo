@@ -289,20 +289,21 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 }
                             },
                             Some(Ok(Message::Close(_))) => {
-                                log_info!(KRAKEN_LOGGER, "WebSocket connection closed");
+                                log_warn!(KRAKEN_LOGGER, "WebSocket connection closed by server, will attempt reconnection");
                                 
                                 // Log WebSocket disconnect
                                 let disconnect_event = WebSocketEvent {
                                     endpoint: "kraken-websocket".to_string(),
                                     action: "disconnect".to_string(),
                                     connection_id: None,
-                                    message: "WebSocket connection closed by server".to_string(),
-                                    level: LogLevel::Info,
+                                    message: "WebSocket connection closed by server, reconnecting...".to_string(),
+                                    level: LogLevel::Warn,
                                     latency_micros: None,
                                 };
                                 let _ = KRAKEN_WEBSOCKET_LOGGER.log_websocket_event(disconnect_event).await;
                                 
-                                break;
+                                // Return error to trigger reconnection in outer loop
+                                return Err(anyhow::anyhow!("WebSocket closed by server"));
                             },
                             Some(Ok(Message::Ping(data))) => {
                                 // Send pong response
@@ -315,11 +316,12 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 // Handle other message types silently
                             },
                             Some(Err(e)) => {
-                                log_error!(KRAKEN_LOGGER, "Error receiving message: {}", e);
+                                log_error!(KRAKEN_LOGGER, "Error receiving message: {}, will attempt reconnection", e);
+                                return Err(anyhow::anyhow!("WebSocket error: {}", e));
                             },
                             None => {
-                                log_info!(KRAKEN_LOGGER, "WebSocket connection closed");
-                                break;
+                                log_warn!(KRAKEN_LOGGER, "WebSocket connection closed unexpectedly, will attempt reconnection");
+                                return Err(anyhow::anyhow!("WebSocket connection closed"));
                             }
                         }
                     }

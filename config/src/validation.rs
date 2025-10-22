@@ -215,10 +215,13 @@ impl DataEngineConfig {
     }
     
     /// Load configuration from environment variables
+    /// Falls back to defaults if environment variables are not set
     pub fn load_from_env() -> Result<Self> {
-        // Implementation for environment variable loading
-        // This would map env vars to config fields
-        todo!("Implement environment variable loading")
+        let mut config = Self::default();
+        config.apply_env_overrides()?;
+        config.validate()
+            .map_err(|e| anyhow!("Environment configuration validation failed: {}", e))?;
+        Ok(config)
     }
     
     /// Merge configurations (file + env + defaults)

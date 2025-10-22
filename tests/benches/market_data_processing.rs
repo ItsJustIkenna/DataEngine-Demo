@@ -2,27 +2,36 @@
 //! Measures performance of critical market data processing paths
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use hostbuilder::data::caching::{MarketDataCache, CachedOrderBook, CachedTrade};
-use std::time::Duration;
+use hostbuilder::data::caching::{MarketDataCache, CachedOrderBook, CachedTrade, Symbol};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use fake::{Fake, Faker};
-use chrono::Utc;
 
 fn generate_test_orderbook() -> CachedOrderBook {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+        
     CachedOrderBook {
-        symbol: "BTC/USD".to_string(),
-        timestamp: Utc::now(),
+        symbol: Symbol::new("Kraken", "BTC", "USD"),
+        timestamp,
         bids: (0..100).map(|i| (45000.0 - i as f64, (i as f64) * 0.1)).collect(),
         asks: (0..100).map(|i| (45001.0 + i as f64, (i as f64) * 0.1)).collect(),
-        last_updated: Utc::now(),
+        sequence: timestamp,
     }
 }
 
 fn generate_test_trade() -> CachedTrade {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64;
+        
     CachedTrade {
-        symbol: "BTC/USD".to_string(),
-        timestamp: Utc::now(),
+        symbol: Symbol::new("Kraken", "BTC", "USD"),
+        timestamp,
         price: 45000.5,
-        volume: 1.5,
+        quantity: 1.5,
         side: "buy".to_string(),
         trade_id: Faker.fake::<String>(),
     }
@@ -36,12 +45,12 @@ fn bench_orderbook_processing(c: &mut Criterion) {
             BenchmarkId::new("update_orderbook", depth),
             depth,
             |b, &depth| {
-                let cache = MarketDataCache::new(1000);
+                let cache = MarketDataCache::new(1000, 1000);
                 let orderbook = generate_test_orderbook();
                 
                 b.iter(|| {
                     // Benchmark orderbook update performance
-                    black_box(cache.update_orderbook(black_box(orderbook.clone())));
+                    black_box(cache.cache_order_book(black_box(orderbook.clone()), Some(Duration::from_secs(60))));
                 });
             },
         );
@@ -58,14 +67,14 @@ fn bench_trade_processing(c: &mut Criterion) {
             BenchmarkId::new("process_trades", batch_size),
             batch_size,
             |b, &batch_size| {
-                let cache = MarketDataCache::new(10000);
+                let cache = MarketDataCache::new(10000, 10000);
                 let trades: Vec<CachedTrade> = (0..*batch_size)
                     .map(|_| generate_test_trade())
                     .collect();
                 
                 b.iter(|| {
                     for trade in &trades {
-                        black_box(cache.add_trade(black_box(trade.clone())));
+                        black_box(cache.add_trade(black_box(trade.clone()), 1000));
                     }
                 });
             },
@@ -79,21 +88,28 @@ fn bench_cache_lookup_performance(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_lookup");
     
     // Pre-populate cache
-    let cache = MarketDataCache::new(10000);
+    let cache = MarketDataCache::new(10000, 10000);
+    let symbol = Symbol::new("Kraken", "BTC", "USD");
+    
     for i in 0..1000 {
         let orderbook = generate_test_orderbook();
-        cache.update_orderbook(orderbook);
+        cache.cache_order_book(orderbook, Some(Duration::from_secs(60)));
+        
+        if i % 10 == 0 {
+            let trade = generate_test_trade();
+            cache.add_trade(trade, 100);
+        }
     }
     
-    group.bench_function("get_latest_orderbook", |b| {
+    group.bench_function("get_order_book", |b| {
         b.iter(|| {
-            black_box(cache.get_latest_orderbook(black_box("BTC/USD")));
+            black_box(cache.get_order_book(black_box(&symbol)));
         });
     });
     
     group.bench_function("get_recent_trades", |b| {
         b.iter(|| {
-            black_box(cache.get_recent_trades(black_box("BTC/USD"), black_box(100)));
+            black_box(cache.get_recent_trades(black_box(&symbol)));
         });
     });
     
@@ -108,7 +124,7 @@ fn bench_concurrent_access(c: &mut Criterion) {
         use tokio::runtime::Runtime;
         
         let rt = Runtime::new().unwrap();
-        let cache = Arc::new(MarketDataCache::new(10000));
+        let cache = Arc::new(MarketDataCache::new(10000, 10000));
         
         b.to_async(&rt).iter(|| {
             let cache = cache.clone();
@@ -117,7 +133,7 @@ fn bench_concurrent_access(c: &mut Criterion) {
                     let cache = cache.clone();
                     tokio::spawn(async move {
                         let orderbook = generate_test_orderbook();
-                        cache.update_orderbook(orderbook);
+                        cache.cache_order_book(orderbook, Some(Duration::from_secs(60)));
                     })
                 }).collect();
                 

@@ -1,6 +1,7 @@
 # =============================================================================
-# DataEngine Database and Cache Only Configuration
-# Deploys only PostgreSQL (TimescaleDB) and Redis - No DataEngine application
+# DataEngine Database-Only Mode Configuration
+# Deploys DataEngine application in database-only mode (no message broker)
+# External PostgreSQL (TimescaleDB) and Redis - Application runs with database only
 # =============================================================================
 
 # Global configuration
@@ -8,13 +9,13 @@ global:
   environment: development
 
 # =============================================================================
-# DataEngine Application - ENABLED for database-only mode
+# DataEngine Application - Database-Only Mode Enabled
 # =============================================================================
 
-# Enable the main DataEngine application in database-only mode
+# Enable the main DataEngine application (runs without message broker in database-only mode)
 enabled: true
 
-# Three replicas for high availability matching production
+# Three replicas for high availability
 replicaCount: 3
 image:
   repository: data-engine

@@ -40,7 +40,7 @@ impl HealthCheckResult {
             status: HealthStatus::Healthy,
             message: "All systems operational".to_string(),
             response_time_ms,
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
             details: HashMap::new(),
         }
     }
@@ -51,7 +51,7 @@ impl HealthCheckResult {
             status: HealthStatus::Unhealthy,
             message: message.to_string(),
             response_time_ms,
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
             details: HashMap::new(),
         }
     }
@@ -89,7 +89,7 @@ impl WebSocketHealthChecker {
     }
 
     pub fn record_message_received(&self) {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64;
         self.last_message_time.store(now, Ordering::Relaxed);
     }
 }
@@ -100,7 +100,7 @@ impl HealthCheck for WebSocketHealthChecker {
         let start = Instant::now();
         let is_connected = self.is_connected.load(Ordering::Relaxed);
         let last_message = self.last_message_time.load(Ordering::Relaxed);
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64;
         let time_since_last_message = now - last_message;
 
         let response_time = start.elapsed().as_millis() as u64;
@@ -206,7 +206,7 @@ impl HealthCheck for DatabaseHealthChecker {
                 status: HealthStatus::Healthy,
                 message: "All database connections healthy".to_string(),
                 response_time_ms: response_time,
-                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
                 details,
             }
         } else {
@@ -215,7 +215,7 @@ impl HealthCheck for DatabaseHealthChecker {
                 status: HealthStatus::Unhealthy,
                 message: issues.join(", "),
                 response_time_ms: response_time,
-                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
                 details,
             }
         }
@@ -296,9 +296,12 @@ impl HealthCheck for PerformanceHealthChecker {
             status,
             message,
             response_time_ms: response_time,
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
-            details: serde_json::to_value(&snapshot).unwrap().as_object().unwrap()
-                .iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
+            details: serde_json::to_value(&snapshot)
+                .ok()
+                .and_then(|v| v.as_object().cloned())
+                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                .unwrap_or_default(),
         }
     }
 
@@ -457,7 +460,7 @@ impl SystemHealthMonitor {
             overall_status,
             components: components.clone(),
             component_health,
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
             summary: self.generate_summary(&components),
             uptime,
         }
@@ -515,7 +518,7 @@ impl SystemHealthMonitor {
                         status: HealthStatus::Critical,
                         message: format!("Health check failed: {}", e),
                         response_time_ms: 0,
-                        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
                         details: HashMap::new(),
                     };
                     check_results.insert("unknown".to_string(), error_result);
@@ -542,7 +545,7 @@ impl SystemHealthMonitor {
             overall_status: worst_status,
             components: check_results.clone(),
             component_health,
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
             summary: self.generate_summary(&check_results),
             uptime: self.start_time.elapsed(),
         })
@@ -663,7 +666,7 @@ mod tests {
     async fn test_websocket_health_checker() {
         let is_connected = Arc::new(AtomicBool::new(true));
         let last_message_time = Arc::new(AtomicU64::new(
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64
         ));
         
         let checker = WebSocketHealthChecker::new(

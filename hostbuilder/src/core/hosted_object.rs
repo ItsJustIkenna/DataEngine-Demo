@@ -131,267 +131,75 @@ impl HostedObjectTrait for HostedObject {
         let mut handles = vec![];
         let config = self.config.clone();
 
+        // Process each configured exchange
         for exchange in config.exchanges.iter().cloned() {
-            if exchange.name == "Kraken" {
-                match get_exchange(
+            if exchange.name != "Kraken" {
+                log_info!(MAIN_LOGGER, "Skipping unsupported exchange: {}", exchange.name);
+                continue;
+            }
+
+            // Initialize exchange (fetch data, authenticate, load securities & orderbooks)
+            let (kraken_exchange, api_response, _securities, orderbooks) = match initialize_exchange(
+                Arc::clone(&self.redis_pool),
+                Arc::clone(&self.postgres_pool),
+                exchange.name.clone(),
+                exchange.websocket_token.clone(),
+                &exchange.symbols,
+            )
+            .await
+            {
+                Ok(data) => data,
+                Err(e) => {
+                    log_error!(MAIN_LOGGER, "Failed to initialize exchange {}: {}", exchange.name, e);
+                    continue;
+                }
+            };
+
+            log_info!(
+                MAIN_LOGGER,
+                "Successfully initialized exchange: {}",
+                kraken_exchange.exchange
+            );
+
+            // Spawn handlers for each configured WebSocket channel
+            for websocket in exchange.websockets.iter().cloned() {
+                let handle = spawn_websocket_handler(
+                    &websocket.channel,
+                    &websocket.endpoint,
+                    &exchange.symbols,
+                    &api_response.get_token(),
+                    Some(exchange.depth),
+                    orderbooks.clone(),
                     Arc::clone(&self.redis_pool),
                     Arc::clone(&self.postgres_pool),
-                    exchange.name,
-                )
-                .await
-                {
-                    Ok(kraken_exchange) => {
-                        log_info!(
-                            MAIN_LOGGER,
-                            "Successfully retrieved exchange: {}",
-                            kraken_exchange.exchange
-                        );
-                        let auth_endpoint = exchange.websocket_token.clone();
-                        let api_response = KrakenRestHandler::authenticate(&auth_endpoint).await?;
+                    shutdown_tx.subscribe(),
+                );
 
-                        for websocket in exchange.websockets.iter().cloned() {
-                            let api_response = api_response.clone();
-
-                            match get_securities(
-                                Arc::clone(&self.redis_pool),
-                                Arc::clone(&self.postgres_pool),
-                                &exchange.symbols,
-                            )
-                            .await
-                            {
-                                Ok(securities) => {
-                                    log_info!(
-                                        MAIN_LOGGER,
-                                        "Successfully retrieved securities: {:?}",
-                                        securities
-                                    );
-                                    match get_orderbooks(
-                                        Arc::clone(&self.redis_pool),
-                                        Arc::clone(&self.postgres_pool),
-                                        securities,
-                                        &kraken_exchange,
-                                    )
-                                    .await
-                                    {
-                                        Ok(orderbooks) => {
-                                            log_info!(MAIN_LOGGER, "Successfully retrieved orderbooks");
-                                            let orderbooks = orderbooks.clone();
-                                            let shutdown_tx = shutdown_tx.clone();
-                                            let redis_pool = Arc::clone(&self.redis_pool);
-                                            let postgres_pool = Arc::clone(&self.postgres_pool);
-                                            let symbols = exchange.symbols.clone();
-                                            let handle = tokio::spawn(async move {
-                                                log_info!(
-                                                    MAIN_LOGGER,
-                                                    "Connecting to {:?}",
-                                                    &websocket.endpoint
-                                                );
-
-                                                match websocket.channel.as_str() {
-                                                    "level3" => {
-                                                        let subscribe_message = json!({
-                                                            "method": "subscribe",
-                                                            "params": {
-                                                                "channel": &websocket.channel,
-                                                                "symbol": &symbols,
-                                                                "depth": &exchange.depth,
-                                                                "snapshot": true,
-                                                                "token": &api_response.get_token(),
-                                                            }
-                                                        });
-
-                                                        let unsubscribe_message = json!({
-                                                            "method": "unsubscribe",
-                                                            "params": {
-                                                                "channel": &websocket.channel,
-                                                                "symbol": &symbols,
-                                                                "token": &api_response.get_token(),
-                                                            }
-                                                        });
-
-                                                        match KrakenWebSocketHandler::new(
-                                                            &websocket.endpoint,
-                                                            orderbooks.clone(),
-                                                            &subscribe_message,
-                                                            &unsubscribe_message,
-                                                            redis_pool.clone(),
-                                                            postgres_pool.clone(),
-                                                        )
-                                                        .await
-                                                        {
-                                                            Ok(handler) => {
-                                                                let handler = Arc::new(handler);
-                                                                match handler
-                                                                    .listen(shutdown_tx.subscribe())
-                                                                    .await
-                                                                {
-                                                                    Ok(_) => {
-                                                                        log_info!(
-                                                                            MAIN_LOGGER,
-                                                                            "Listening to Kraken level 3"
-                                                                        );
-                                                                    }
-                                                                    Err(e) => log_error!(
-                                                                        MAIN_LOGGER,
-                                                                        "Failed to listen: {}",
-                                                                        e
-                                                                    ),
-                                                                }
-                                                            }
-                                                            Err(e) => log_error!(
-                                                                MAIN_LOGGER,
-                                                                "Failed to create handler: {}",
-                                                                e
-                                                            ),
-                                                        }
-                                                    }
-                                                    "trade" => {
-                                                        let subscribe_message = json!({
-                                                            "method": "subscribe",
-                                                            "params": {
-                                                                "channel": &websocket.channel,
-                                                                "symbol": &symbols,
-                                                                "snapshot": true
-                                                            }
-                                                        });
-
-                                                        let unsubscribe_message = json!({
-                                                            "method": "unsubscribe",
-                                                            "params": {
-                                                                "channel": &websocket.channel,
-                                                                "symbol": symbols,
-                                                                "snapshot": true
-                                                            }
-                                                        });
-
-                                                        match KrakenWebSocketHandler::new(
-                                                            &websocket.endpoint,
-                                                            orderbooks.clone(),
-                                                            &subscribe_message,
-                                                            &unsubscribe_message,
-                                                            redis_pool.clone(),
-                                                            postgres_pool.clone(),
-                                                        )
-                                                        .await
-                                                        {
-                                                            Ok(handler) => {
-                                                                let handler = Arc::new(handler);
-                                                                match handler
-                                                                    .listen(shutdown_tx.subscribe())
-                                                                    .await
-                                                                {
-                                                                    Ok(_) => {
-                                                                        println!(
-                                                                            "Listening to Kraken trade"
-                                                                        );
-                                                                    }
-                                                                    Err(e) => {
-                                                                        eprintln!("Failed to listen: {}", e)
-                                                                    }
-                                                                }
-                                                            }
-                                                            Err(e) => {
-                                                                eprintln!("Failed to create handler: {}", e)
-                                                            }
-                                                        }
-                                                    }
-                                                    "balances" => {
-                                                        let subscribe_message = json!({
-                                                            "method": "subscribe",
-                                                            "params": {
-                                                                "channel": &websocket.channel,
-                                                                "token": &api_response.get_token(),
-                                                            }
-                                                        });
-
-                                                        let unsubscribe_message = json!({
-                                                            "method": "unsubscribe",
-                                                            "params": {
-                                                                "channel": &websocket.channel,
-                                                                "token": &api_response.get_token(),
-                                                            }
-                                                        });
-
-                                                        match KrakenWebSocketHandler::new(
-                                                            &websocket.endpoint,
-                                                            orderbooks.clone(),
-                                                            &subscribe_message,
-                                                            &unsubscribe_message,
-                                                            redis_pool.clone(),
-                                                            postgres_pool.clone(),
-                                                        )
-                                                        .await
-                                                        {
-                                                            Ok(handler) => {
-                                                                let handler = Arc::new(handler);
-                                                                match handler
-                                                                    .listen(shutdown_tx.subscribe())
-                                                                    .await
-                                                                {
-                                                                    Ok(_) => {
-                                                                        println!(
-                                                                            "Listening to Kraken portfolio balances"
-                                                                        );
-                                                                    }
-                                                                    Err(e) => {
-                                                                        eprintln!("Failed to listen: {}", e)
-                                                                    }
-                                                                }
-                                                            }
-                                                            Err(e) => {
-                                                                eprintln!("Failed to create handler: {}", e)
-                                                            }
-                                                        }
-                                                    }
-                                                    _ => {
-                                                        println!(
-                                                            "Unknown websocket type: {}",
-                                                            websocket.channel.as_str()
-                                                        );
-                                                    }
-                                                };
-                                            });
-                                            handles.push(handle);
-                                        }
-                                        Err(e) => {
-                                            println!("Failed to retrieve orderbooks: {}", e);
-                                        }
-                                    };
-                                }
-                                Err(e) => {
-                                    println!("Failed to retrieve securities: {}", e);
-                                }
-                            };
-                        }
-                    }
-                    Err(e) => {
-                        println!("Failed to retrieve exchange: {}", e);
-                    }
-                }
-            } else {
-                println!("Unknown exchange: {}", exchange.name);
+                handles.push(handle);
             }
         }
 
+        // Spawn shutdown signal handler
         let shutdown_handle = tokio::spawn(async move {
-            println!("Shutdown handle spawned");
+            log_info!(MAIN_LOGGER, "Shutdown handler spawned and listening for signals");
+            
             #[cfg(unix)]
             {
                 // Use SIGTERM signal handler for Unix-based systems (Kubernetes)
                 match signal(SignalKind::terminate()) {
                     Ok(mut term_signal) => match term_signal.recv().await {
                         Some(_) => {
-                            println!("Received SIGTERM, initiating shutdown...");
+                            log_info!(MAIN_LOGGER, "Received SIGTERM, initiating graceful shutdown");
                             if let Err(e) = shutdown_tx.send(()) {
-                                eprintln!("Failed to send shutdown signal: {}", e);
+                                log_error!(MAIN_LOGGER, "Failed to send shutdown signal: {}", e);
                             }
                         }
                         None => {
-                            eprintln!("Failed to receive SIGTERM signal");
+                            log_error!(MAIN_LOGGER, "SIGTERM signal stream ended unexpectedly");
                         }
                     },
                     Err(e) => {
-                        eprintln!("Failed to listen for SIGTERM shutdown signal: {}", e);
+                        log_error!(MAIN_LOGGER, "Failed to register SIGTERM handler: {}", e);
                     }
                 }
             }
@@ -401,21 +209,366 @@ impl HostedObjectTrait for HostedObject {
                 // Use ctrl_c for non-Unix systems (Windows testing)
                 match signal::ctrl_c().await {
                     Ok(_) => {
-                        println!("Received Ctrl+C, initiating shutdown...");
+                        log_info!(MAIN_LOGGER, "Received Ctrl+C, initiating graceful shutdown");
                         if let Err(e) = shutdown_tx.send(()) {
-                            eprintln!("Failed to send shutdown signal: {}", e);
+                            log_error!(MAIN_LOGGER, "Failed to send shutdown signal: {}", e);
                         }
                     }
-                    Err(e) => eprintln!("Failed to listen for ctrl_c shutdown signal: {}", e),
+                    Err(e) => {
+                        log_error!(MAIN_LOGGER, "Failed to register Ctrl+C handler: {}", e);
+                    }
                 }
             }
         });
 
         handles.push(shutdown_handle);
 
+        // Wait for all handlers to complete
+        log_info!(MAIN_LOGGER, "Application running with {} active handlers", handles.len());
         for handle in handles {
             let _ = handle.await;
         }
+        
+        log_info!(MAIN_LOGGER, "All handlers completed, application shutting down");
         Ok(())
+    }
+}
+
+// =============================================================================
+// Helper Functions for Refactored Architecture
+// =============================================================================
+
+/// Builds a subscription message for Kraken WebSocket channels
+/// 
+/// # Arguments
+/// * `channel` - The channel name (level3, trade, balances)
+/// * `symbols` - List of trading symbols to subscribe to
+/// * `token` - Authentication token (required for authenticated channels)
+/// * `depth` - Order book depth (optional, used for level3)
+fn build_subscribe_message(
+    channel: &str,
+    symbols: &[String],
+    token: &str,
+    depth: Option<u32>,
+) -> Value {
+    match channel {
+        "level3" => json!({
+            "method": "subscribe",
+            "params": {
+                "channel": channel,
+                "symbol": symbols,
+                "depth": depth,
+                "snapshot": true,
+                "token": token,
+            }
+        }),
+        "trade" => json!({
+            "method": "subscribe",
+            "params": {
+                "channel": channel,
+                "symbol": symbols,
+                "snapshot": true
+            }
+        }),
+        "balances" => json!({
+            "method": "subscribe",
+            "params": {
+                "channel": channel,
+                "token": token,
+            }
+        }),
+        _ => {
+            log_warn!(MAIN_LOGGER, "Unknown channel type: {}, using default format", channel);
+            json!({
+                "method": "subscribe",
+                "params": {
+                    "channel": channel,
+                    "symbol": symbols,
+                    "token": token,
+                }
+            })
+        }
+    }
+}
+
+/// Builds an unsubscription message for Kraken WebSocket channels
+fn build_unsubscribe_message(
+    channel: &str,
+    symbols: &[String],
+    token: &str,
+    depth: Option<u32>,
+) -> Value {
+    match channel {
+        "level3" => json!({
+            "method": "unsubscribe",
+            "params": {
+                "channel": channel,
+                "symbol": symbols,
+                "depth": depth,
+                "token": token,
+            }
+        }),
+        "trade" => json!({
+            "method": "unsubscribe",
+            "params": {
+                "channel": channel,
+                "symbol": symbols,
+                "snapshot": true
+            }
+        }),
+        "balances" => json!({
+            "method": "unsubscribe",
+            "params": {
+                "channel": channel,
+                "token": token,
+            }
+        }),
+        _ => {
+            log_warn!(MAIN_LOGGER, "Unknown channel type: {}, using default format", channel);
+            json!({
+                "method": "unsubscribe",
+                "params": {
+                    "channel": channel,
+                    "symbol": symbols,
+                    "token": token,
+                }
+            })
+        }
+    }
+}
+
+/// Initialize an exchange by fetching exchange data, authenticating, and retrieving securities/orderbooks
+/// 
+/// This consolidates multiple database queries that were previously called once per websocket channel
+/// into a single call per exchange, reducing database load by ~67%.
+/// 
+/// # Arguments
+/// * `redis_pool` - Redis connection pool
+/// * `postgres_pool` - PostgreSQL connection pool
+/// * `exchange_name` - Name of the exchange (e.g., "Kraken")
+/// * `auth_endpoint` - Authentication endpoint URL
+/// * `symbols` - List of trading symbols to fetch
+/// 
+/// # Returns
+/// Tuple containing (Exchange, TokenResponse, Vec<Security>, HashMap<String, OrderBook>)
+async fn initialize_exchange(
+    redis_pool: Arc<deadpool::managed::Pool<deadpool_redis::Manager>>,
+    postgres_pool: Arc<deadpool::managed::Pool<diesel_async::pooled_connection::AsyncDieselConnectionManager<diesel_async::AsyncPgConnection>>>,
+    exchange_name: String,
+    auth_endpoint: String,
+    symbols: &[String],
+) -> Result<(
+    databaseschema::models::exchange::Exchange,
+    crate::network::handlers::models::kraken::token_response::TokenResponse,
+    Vec<databaseschema::models::security::Security>,
+    std::collections::HashMap<String, databaseschema::models::order_book::OrderBook>,
+)> {
+    // Get exchange information
+    let exchange = get_exchange(
+        Arc::clone(&redis_pool),
+        Arc::clone(&postgres_pool),
+        exchange_name.clone(),
+    )
+    .await?;
+
+    log_info!(
+        MAIN_LOGGER,
+        "Successfully retrieved exchange: {}",
+        exchange.exchange
+    );
+
+    // Authenticate with exchange
+    let api_response = tokio::time::timeout(
+        tokio::time::Duration::from_secs(30),
+        KrakenRestHandler::authenticate(&auth_endpoint)
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("Authentication timeout after 30 seconds"))??;
+
+    log_info!(MAIN_LOGGER, "Successfully authenticated with {}", exchange_name);
+
+    // Get securities (once per exchange, not per websocket)
+    let securities = get_securities(
+        Arc::clone(&redis_pool),
+        Arc::clone(&postgres_pool),
+        symbols,
+    )
+    .await?;
+
+    log_info!(
+        MAIN_LOGGER,
+        "Successfully retrieved {} securities for {}",
+        securities.len(),
+        exchange_name
+    );
+
+    // Get orderbooks (once per exchange, not per websocket)
+    let orderbooks = get_orderbooks(
+        Arc::clone(&redis_pool),
+        Arc::clone(&postgres_pool),
+        securities.clone(),
+        &exchange,
+    )
+    .await?;
+
+    log_info!(
+        MAIN_LOGGER,
+        "Successfully retrieved {} orderbooks for {}",
+        orderbooks.len(),
+        exchange_name
+    );
+
+    Ok((exchange, api_response, securities, orderbooks))
+}
+
+/// Spawn a WebSocket handler for a specific channel
+/// 
+/// Creates subscription/unsubscription messages, initializes the WebSocket handler,
+/// and spawns it as an async task. This function encapsulates all the channel-specific
+/// logic and error handling.
+/// 
+/// # Arguments
+/// * `channel` - Channel name ("level3", "trade", "balances")
+/// * `endpoint` - WebSocket endpoint URL
+/// * `symbols` - Trading symbols to subscribe to
+/// * `token` - Authentication token
+/// * `depth` - Order book depth (for level3 channel)
+/// * `orderbooks` - Order book data
+/// * `redis_pool` - Redis connection pool
+/// * `postgres_pool` - PostgreSQL connection pool
+/// * `shutdown_rx` - Shutdown signal receiver
+/// 
+/// # Returns
+/// JoinHandle for the spawned task
+fn spawn_websocket_handler(
+    channel: &str,
+    endpoint: &str,
+    symbols: &[String],
+    token: &str,
+    depth: Option<u32>,
+    orderbooks: std::collections::HashMap<String, databaseschema::models::order_book::OrderBook>,
+    redis_pool: Arc<deadpool::managed::Pool<deadpool_redis::Manager>>,
+    postgres_pool: Arc<deadpool::managed::Pool<diesel_async::pooled_connection::AsyncDieselConnectionManager<diesel_async::AsyncPgConnection>>>,
+    shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    let channel_name = channel.to_string();
+    let endpoint = endpoint.to_string();
+    let symbols = symbols.to_vec();
+    let token = token.to_string();
+    
+    tokio::spawn(async move {
+        log_info!(
+            MAIN_LOGGER,
+            "Connecting to {} channel at {}",
+            channel_name,
+            endpoint
+        );
+
+        // Build subscription and unsubscription messages
+        let subscribe_message = build_subscribe_message(
+            &channel_name,
+            &symbols,
+            &token,
+            depth,
+        );
+
+        let unsubscribe_message = build_unsubscribe_message(
+            &channel_name,
+            &symbols,
+            &token,
+            depth,
+        );
+
+        // Create and start WebSocket handler
+        match KrakenWebSocketHandler::new(
+            &endpoint,
+            orderbooks,
+            &subscribe_message,
+            &unsubscribe_message,
+            redis_pool,
+            postgres_pool,
+        )
+        .await
+        {
+            Ok(handler) => {
+                let handler = Arc::new(handler);
+                match handler.listen(shutdown_rx).await {
+                    Ok(_) => {
+                        log_info!(
+                            MAIN_LOGGER,
+                            "Successfully listening to {} channel",
+                            channel_name
+                        );
+                    }
+                    Err(e) => {
+                        log_error!(
+                            MAIN_LOGGER,
+                            "Failed to listen on {} channel: {}",
+                            channel_name,
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                log_error!(
+                    MAIN_LOGGER,
+                    "Failed to create handler for {} channel: {}",
+                    channel_name,
+                    e
+                );
+            }
+        }
+    })
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_subscribe_message_level3() {
+        let symbols = vec!["BTC/USD".to_string(), "ETH/USD".to_string()];
+        let msg = build_subscribe_message("level3", &symbols, "test_token", Some(100));
+        
+        assert_eq!(msg["method"], "subscribe");
+        assert_eq!(msg["params"]["channel"], "level3");
+        assert_eq!(msg["params"]["depth"], 100);
+        assert_eq!(msg["params"]["snapshot"], true);
+        assert_eq!(msg["params"]["token"], "test_token");
+        assert!(msg["params"]["symbol"].is_array());
+    }
+
+    #[test]
+    fn test_build_subscribe_message_trade() {
+        let symbols = vec!["BTC/USD".to_string()];
+        let msg = build_subscribe_message("trade", &symbols, "test_token", None);
+        
+        assert_eq!(msg["method"], "subscribe");
+        assert_eq!(msg["params"]["channel"], "trade");
+        assert_eq!(msg["params"]["snapshot"], true);
+    }
+
+    #[test]
+    fn test_build_subscribe_message_balances() {
+        let symbols = vec![];
+        let msg = build_subscribe_message("balances", &symbols, "test_token", None);
+        
+        assert_eq!(msg["method"], "subscribe");
+        assert_eq!(msg["params"]["channel"], "balances");
+        assert_eq!(msg["params"]["token"], "test_token");
+    }
+
+    #[test]
+    fn test_build_unsubscribe_message() {
+        let symbols = vec!["BTC/USD".to_string()];
+        let msg = build_unsubscribe_message("level3", &symbols, "test_token", Some(100));
+        
+        assert_eq!(msg["method"], "unsubscribe");
+        assert_eq!(msg["params"]["channel"], "level3");
     }
 }

@@ -353,7 +353,7 @@ impl SecurityManager {
                     event_type: SecurityEventType::InvalidApiKey,
                     source_ip: source_ip.map(|s| s.to_string()),
                     api_key: Some(api_key.to_string()),
-                    timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                    timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
                     details: HashMap::new(),
                     severity: SecuritySeverity::Medium,
                 });
@@ -374,7 +374,7 @@ impl SecurityManager {
                 event_type: SecurityEventType::RateLimitExceeded,
                 source_ip: source_ip.map(|s| s.to_string()),
                 api_key: Some(api_key.to_string()),
-                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
                 details: HashMap::new(),
                 severity: SecuritySeverity::High,
             });
@@ -399,7 +399,7 @@ impl SecurityManager {
                         event_type: SecurityEventType::InvalidSignature,
                         source_ip: source_ip.map(|s| s.to_string()),
                         api_key: Some(api_key.to_string()),
-                        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+                        timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
                         details: HashMap::new(),
                         severity: SecuritySeverity::High,
                     });
@@ -491,7 +491,7 @@ impl SecurityManager {
             event_type: SecurityEventType::ApiKeyRotated,
             source_ip: None,
             api_key: Some(old_key.to_string()),
-            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,
+            timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64,
             details: {
                 let mut details = HashMap::new();
                 details.insert("new_key".to_string(), serde_json::json!(new_credential.key));
@@ -568,7 +568,7 @@ impl SecurityManager {
     /// Get security statistics
     pub fn get_security_stats(&self) -> SecurityStats {
         let events = self.security_events.read();
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO).as_millis() as u64;
         let hour_ago = now - (60 * 60 * 1000); // 1 hour ago
 
         let recent_events: Vec<&SecurityEvent> = events
@@ -720,4 +720,5 @@ mod tests {
         assert!(!manager_no_sig.check_permission("test_key2", "write"));
     }
 }
+
 

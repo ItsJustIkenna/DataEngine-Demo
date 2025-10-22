@@ -40,7 +40,7 @@ tokio-tungstenite = { version = "0.23.1", features = ["native-tls"] }
 url = "2.5.2"
 
 # Enhanced security dependencies
-jsonwebtoken = "9.2"
+jsonwebtoken = "9.3"
 validator = { version = "0.18", features = ["derive"] }
 rand = "0.8"
 hex = "0.4"
