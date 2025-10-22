@@ -96,18 +96,18 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Test Build
+      - name: Build Workspace
         id: test-result
         shell: powershell
         run: |
-          Write-Host "Running simple cargo check..."
+          Write-Host "Building DataEngine workspace..."
           cd DataEngine
-          cargo check
+          cargo build --workspace --jobs 1
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Build check passed!"
+            Write-Host "Build passed!"
             echo "passed=true" >> $env:GITHUB_OUTPUT
           } else {
-            Write-Host "Build check failed!"
+            Write-Host "Build failed!"
             echo "passed=false" >> $env:GITHUB_OUTPUT
             exit 1
           }
