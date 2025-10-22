@@ -570,6 +570,27 @@ The `ring` cryptographic library requires a C compiler to build.
    where cl  # Should show MSVC compiler path
    ```
 
+#### **CI/CD Error: "can't find crate for `core`" (E0463)**
+The GitHub Actions workflow failed because the aarch64-pc-windows-msvc Rust target wasn't installed.
+
+**Root Cause:**
+- `.cargo/config.toml` sets default target to `aarch64-pc-windows-msvc`
+- Self-hosted runner didn't have that target's standard library installed
+
+**Solution (Already Fixed in Workflow):**
+The workflow now includes a "Prepare Rust toolchain & targets" step that:
+```powershell
+rustup target add aarch64-pc-windows-msvc
+rustup component add rust-src
+```
+
+**Manual Verification:**
+```powershell
+rustup show                      # Check active toolchain and targets
+rustup target list --installed   # List installed targets
+cargo test --no-run --verbose    # Test build without running
+```
+
 #### **High Memory Usage**
 ```bash
 # Check memory allocation patterns

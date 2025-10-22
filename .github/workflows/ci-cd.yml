@@ -111,12 +111,15 @@ jobs:
         run: |
           Write-Host "Ensuring Rust toolchain and required targets..."
           rustc -vV
-          # Ensure stable toolchain exists
           rustup toolchain install stable
           rustup default stable
-          # Install the aarch64 Windows MSVC stdlib (required by .cargo/config.toml)
-          rustup target add aarch64-pc-windows-msvc
-          # Optional but helpful: rust-src for some builds/tests and cargo tooling
+          # Only add the aarch64-pc-windows-msvc target if we're on an ARM64 runner.
+          if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
+            Write-Host "Runner is ARM64 — adding aarch64-pc-windows-msvc"
+            rustup target add aarch64-pc-windows-msvc
+          } else {
+            Write-Host "Runner is not ARM64 — skipping aarch64 target"
+          }
           rustup component add rust-src
           Write-Host "[OK] Rust toolchain prepared"
           rustup show
@@ -128,16 +131,23 @@ jobs:
         run: |
           Write-Host "Running Rust tests..."
           cd DataEngine
-          
-          # Parallel test execution with optimized flags
-          cargo test --workspace --all-features --jobs ${{ env.PARALLEL_JOBS }} --quiet
-          
+
+          # Detect host triple and use it to avoid building for an unsupported default target
+          $hostLine = (rustc -vV | Select-String '^host:')
+          $hostTriple = $hostLine.ToString().Split()[1]
+          Write-Host "Detected host triple: $hostTriple"
+
+          cargo test --workspace --all-features --jobs ${{ env.PARALLEL_JOBS }} --quiet --target $hostTriple
+
           if ($LASTEXITCODE -eq 0) {
             echo "passed=true" >> $env:GITHUB_OUTPUT
             Write-Host "[OK] All tests passed"
           } else {
             echo "passed=false" >> $env:GITHUB_OUTPUT
             Write-Error "[FAIL] Tests failed"
+            exit 1
+          }
+        shell: powershell
             exit 1
           }
 
