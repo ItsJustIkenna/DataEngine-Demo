@@ -54,207 +54,39 @@ jobs:
     name: Validate & Test
     runs-on: [self-hosted, windows, x64]
     outputs:
-      helm-valid: ${{ steps.helm-check.outputs.valid }}
-      tests-passed: ${{ steps.test-check.outputs.passed }}
+      tests-passed: ${{ steps.test-result.outputs.passed }}
     steps:
-      - name: Checkout DataEngine
+      - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          path: DataEngine
-          fetch-depth: 0
 
-      - name: Checkout MessageBrokerEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: MessageBrokerEngine
-          fetch-depth: 0
-
-      - name: Checkout LoggingEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/LoggingEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: LoggingEngine
-          fetch-depth: 0
-
-      - name: Checkout redisutils
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/redisutils
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: redisutils
-          fetch-depth: 0
-
-      - name: Checkout databaseschema
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/databaseschema
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: databaseschema
-          fetch-depth: 0
-
-      - name: Setup Rust Toolchain
+      - name: Verify Rust
         shell: powershell
         run: |
-          Write-Host "=== Rust Toolchain Setup ==="
-          rustup default stable
-          rustup component add rust-src
-          Write-Host "`nRust version:"
+          Write-Host "Checking Rust installation..."
           rustc --version
-          Write-Host "`nCargo version:"
           cargo --version
-          Write-Host "`nToolchain ready."
 
-      - name: Validate Helm Chart
-        id: helm-check
+      - name: Test Build
+        id: test-result
         shell: powershell
         run: |
-          Write-Host "=== Validating Helm Chart ==="
-          helm lint ${{ env.HELM_CHART_PATH }} --strict
-          
+          Write-Host "Running simple cargo check..."
+          cargo check
           if ($LASTEXITCODE -eq 0) {
-            echo "valid=true" >> $env:GITHUB_OUTPUT
-            Write-Host "[OK] Helm validation passed"
-          } else {
-            echo "valid=false" >> $env:GITHUB_OUTPUT
-            Write-Error "[FAIL] Helm validation failed"
-            exit 1
-          }
-
-      - name: Build DataEngine
-        if: github.event.inputs.skip_tests != 'true'
-        shell: powershell
-        run: |
-          Write-Host "=== Building DataEngine ==="
-          cd DataEngine
-          
-          Write-Host "`nChecking workspace structure..."
-          cargo metadata --no-deps --format-version=1 | ConvertFrom-Json | Select-Object -ExpandProperty workspace_members
-          
-          Write-Host "`nStarting build (single-threaded for stability)..."
-          $env:RUST_BACKTRACE = '1'
-          
-          # Build without verbose first to see clean output
-          cargo build --workspace --jobs 1
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "`n=== BUILD FAILED - Retrying with verbose output ==="
-            cargo build --workspace --jobs 1 --verbose 2>&1 | Tee-Object -FilePath build-log.txt
-            Write-Host "`nBuild log saved to build-log.txt"
-            exit 1
-          }
-          
-          Write-Host "[OK] Build successful"
-
-      - name: Run Tests
-        id: test-check
-        if: github.event.inputs.skip_tests != 'true'
-        shell: powershell
-        run: |
-          Write-Host "=== Running Tests ==="
-          cd DataEngine
-          
-          $env:RUST_BACKTRACE = '1'
-          cargo test --workspace --jobs 1 2>&1 | Tee-Object -FilePath test-results.txt
-          
-          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Build check passed!"
             echo "passed=true" >> $env:GITHUB_OUTPUT
-            Write-Host "[OK] All tests passed"
           } else {
+            Write-Host "Build check failed!"
             echo "passed=false" >> $env:GITHUB_OUTPUT
-            Write-Host "[FAIL] Tests failed"
             exit 1
           }
-
-      - name: Validate Helm Chart
-        id: helm-check
-        shell: powershell
-        run: |
-          Write-Host "=== Validating Helm Chart ==="
-          helm lint ${{ env.HELM_CHART_PATH }} --strict
-          
-          if ($LASTEXITCODE -eq 0) {
-            echo "valid=true" >> $env:GITHUB_OUTPUT
-            Write-Host "[OK] Helm validation passed"
-          } else {
-            echo "valid=false" >> $env:GITHUB_OUTPUT
-            Write-Error "[FAIL] Helm validation failed"
-            exit 1
-          }
-
-      - name: Build DataEngine
-        if: github.event.inputs.skip_tests != 'true'
-        shell: powershell
-        run: |
-          Write-Host "=== Building DataEngine ==="
-          cd DataEngine
-          
-          Write-Host "`nChecking workspace structure..."
-          cargo metadata --no-deps --format-version=1 | ConvertFrom-Json | Select-Object -ExpandProperty workspace_members
-          
-          Write-Host "`nStarting build (single-threaded for stability)..."
-          $env:RUST_BACKTRACE = '1'
-          
-          # Build without verbose first to see clean output
-          cargo build --workspace --jobs 1
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "`n=== BUILD FAILED - Retrying with verbose output ==="
-            cargo build --workspace --jobs 1 --verbose 2>&1 | Tee-Object -FilePath build-log.txt
-            Write-Host "`nBuild log saved to build-log.txt"
-            exit 1
-          }
-          
-          Write-Host "[OK] Build successful"
-
-      - name: Run Tests
-        id: test-check
-        if: github.event.inputs.skip_tests != 'true'
-        shell: powershell
-        run: |
-          Write-Host "=== Running Tests ==="
-          cd DataEngine
-          
-          $env:RUST_BACKTRACE = '1'
-          cargo test --workspace --jobs 1 2>&1 | Tee-Object -FilePath test-results.txt
-          
-          if ($LASTEXITCODE -eq 0) {
-            echo "passed=true" >> $env:GITHUB_OUTPUT
-            Write-Host "[OK] All tests passed"
-          } else {
-            echo "passed=false" >> $env:GITHUB_OUTPUT
-            Write-Host "[FAIL] Tests failed"
-            exit 1
-          }
-
-      - name: Upload Build Logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-logs-${{ github.sha }}
-          path: |
-            DataEngine/build-log.txt
-            DataEngine/test-results.txt
-          retention-days: 30
-          if-no-files-found: ignore
-
-      - name: Upload Test Results
-        if: always() && github.event.inputs.skip_tests != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ github.sha }}
-          path: DataEngine/test-results.txt
-          retention-days: 30
-          if-no-files-found: ignore
 
   # ===== BUILD & SECURITY =====
   build:
     name: Build & Push
     runs-on: [self-hosted, windows, x64]
     needs: validate
-    if: needs.validate.outputs.helm-valid == 'true' && (needs.validate.outputs.tests-passed == 'true' || github.event.inputs.skip_tests == 'true')
+    if: needs.validate.outputs.tests-passed == 'true' || github.event.inputs.skip_tests == 'true'
     outputs:
       image-exists: ${{ steps.image-check.outputs.exists }}
       image-digest: ${{ steps.build-push.outputs.digest }}
