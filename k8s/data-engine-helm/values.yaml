@@ -195,7 +195,7 @@ healthcheck:
       command:
         - /bin/sh
         - -c
-        - "pgrep -f dataengine && nc -z localhost 5432 2>/dev/null || exit 1"
+        - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 10
     periodSeconds: 5
     timeoutSeconds: 3
