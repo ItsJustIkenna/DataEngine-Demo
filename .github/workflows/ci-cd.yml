@@ -114,23 +114,25 @@ jobs:
           Write-Host "OS: $env:OS"
           Write-Host "Processor: $env:PROCESSOR_ARCHITECTURE"
           
-          # Check for MSVC
+          # Check for MSVC cl.exe (required for native builds)
           $cl = Get-Command cl.exe -ErrorAction SilentlyContinue
           if ($cl) {
             Write-Host "MSVC cl.exe: $($cl.Source)"
           } else {
-            Write-Warning "MSVC cl.exe not found - native builds may fail"
+            Write-Error "MSVC cl.exe not found. Install Visual Studio Build Tools with 'C++ build tools' workload on the self-hosted runner, or switch to ubuntu-latest runner for CI builds."
+            exit 1
           }
           
-          # Check for link.exe
+          # Check for link.exe (required for linking)
           $link = Get-Command link.exe -ErrorAction SilentlyContinue
           if ($link) {
             Write-Host "MSVC link.exe: $($link.Source)"
           } else {
-            Write-Warning "MSVC link.exe not found - linking may fail"
+            Write-Error "MSVC link.exe not found. Install Visual Studio Build Tools with 'C++ build tools' workload on the self-hosted runner."
+            exit 1
           }
           
-          Write-Host "`nEnvironment check complete."
+          Write-Host "`nEnvironment check complete - all required tools found."
 
       - name: Validate Helm Chart
         id: helm-check
@@ -141,10 +143,10 @@ jobs:
           
           if ($LASTEXITCODE -eq 0) {
             echo "valid=true" >> $env:GITHUB_OUTPUT
-            Write-Host "✓ Helm validation passed"
+            Write-Host "[OK] Helm validation passed"
           } else {
             echo "valid=false" >> $env:GITHUB_OUTPUT
-            Write-Error "✗ Helm validation failed"
+            Write-Error "[FAIL] Helm validation failed"
             exit 1
           }
 
@@ -171,7 +173,7 @@ jobs:
             exit 1
           }
           
-          Write-Host "✓ Build successful"
+          Write-Host "[OK] Build successful"
 
       - name: Run Tests
         id: test-check
@@ -186,10 +188,10 @@ jobs:
           
           if ($LASTEXITCODE -eq 0) {
             echo "passed=true" >> $env:GITHUB_OUTPUT
-            Write-Host "✓ All tests passed"
+            Write-Host "[OK] All tests passed"
           } else {
             echo "passed=false" >> $env:GITHUB_OUTPUT
-            Write-Host "✗ Tests failed"
+            Write-Host "[FAIL] Tests failed"
             exit 1
           }
 
