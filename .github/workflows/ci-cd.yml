@@ -230,6 +230,28 @@ jobs:
           Write-Host "[OK] RUSTFLAGS cleared"
         shell: powershell
 
+      - name: Build Workspace (before tests)
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          Write-Host "Building workspace..."
+          cd DataEngine
+          
+          # Detect host triple
+          $hostLine = (rustc -vV | Select-String '^host:')
+          $hostTriple = $hostLine.ToString().Split()[1]
+          Write-Host "Building for: $hostTriple"
+          
+          # Build with reduced parallelism to avoid resource exhaustion
+          cargo build --workspace --all-targets --target $hostTriple --jobs 1 --verbose
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] Build succeeded"
+          } else {
+            Write-Error "[FAIL] Build failed"
+            exit 1
+          }
+        shell: powershell
+
       - name: Run Rust Tests
         id: test-check
         if: github.event.inputs.skip_tests != 'true'
@@ -246,42 +268,21 @@ jobs:
           cargo --version
           Write-Host "=================="
 
-          # Detect host triple and use it to avoid building for an unsupported default target
+          # Detect host triple
           $hostLine = (rustc -vV | Select-String '^host:')
           $hostTriple = $hostLine.ToString().Split()[1]
           Write-Host "Detected host triple: $hostTriple"
 
-          # Run tests with retry logic (handle transient cargo/network issues)
-          $maxAttempts = 3
-          $attempt = 0
-          $sleepSeconds = 5
-          
-          while ($true) {
-            $attempt++
-            Write-Host "Test attempt $attempt of $maxAttempts"
-            
-            try {
-              cargo test --workspace --all-features --jobs ${{ env.PARALLEL_JOBS }} --target $hostTriple --verbose 2>&1 | Tee-Object -FilePath test-results.txt
-              
-              if ($LASTEXITCODE -eq 0) {
-                echo "passed=true" >> $env:GITHUB_OUTPUT
-                Write-Host "[OK] All tests passed"
-                break
-              } else {
-                throw "cargo test failed with exit code $LASTEXITCODE"
-              }
-            } catch {
-              if ($attempt -ge $maxAttempts) {
-                echo "passed=false" >> $env:GITHUB_OUTPUT
-                Write-Error "[FAIL] Tests failed after $maxAttempts attempts: $_"
-                exit 1
-              }
-              
-              Write-Host "[WARNING] Test attempt $attempt failed: $_"
-              Write-Host "Retrying in $sleepSeconds seconds..."
-              Start-Sleep -Seconds $sleepSeconds
-              $sleepSeconds = [math]::Min($sleepSeconds * 2, 60)
-            }
+          # Run tests (already compiled in previous step)
+          cargo test --workspace --all-features --target $hostTriple --jobs 1 --verbose 2>&1 | Tee-Object -FilePath test-results.txt
+
+          if ($LASTEXITCODE -eq 0) {
+            echo "passed=true" >> $env:GITHUB_OUTPUT
+            Write-Host "[OK] All tests passed"
+          } else {
+            echo "passed=false" >> $env:GITHUB_OUTPUT
+            Write-Error "[FAIL] Tests failed"
+            exit 1
           }
         shell: powershell
 
