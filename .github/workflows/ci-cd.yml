@@ -56,8 +56,10 @@ jobs:
     outputs:
       tests-passed: ${{ steps.test-result.outputs.passed }}
     steps:
-      - name: Checkout Code
+      - name: Checkout DataEngine
         uses: actions/checkout@v4
+        with:
+          path: DataEngine
 
       - name: Checkout MessageBrokerEngine
         uses: actions/checkout@v4
@@ -99,6 +101,7 @@ jobs:
         shell: powershell
         run: |
           Write-Host "Running simple cargo check..."
+          cd DataEngine
           cargo check
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Build check passed!"
