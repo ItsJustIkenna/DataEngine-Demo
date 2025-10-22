@@ -68,66 +68,87 @@ jobs:
         with:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
+      - name: Configure CARGO_HOME (Early Setup)
+        shell: pwsh
+        run: |
+          # Use runner temp to avoid permission/home issues on Windows
+          $cargoHome = "${{ runner.temp }}\cargo"
+          Write-Host "Setting CARGO_HOME=$cargoHome"
+          Write-Host "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # Ensure directory exists
+          New-Item -ItemType Directory -Force -Path $cargoHome | Out-Null
+          Write-Host "[OK] CARGO_HOME configured and created"
+
       - name: Cache Cargo Registry & Build Artifacts
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
+            ${{ runner.temp }}\cargo\registry
+            ${{ runner.temp }}\cargo\git
             DataEngine/target
             MessageBrokerEngine/target
             LoggingEngine/target
             redisutils/target
             databaseschema/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-v2
+          key: cargo-${{ runner.os }}-lock-${{ hashFiles('**/Cargo.lock') }}-v3
           restore-keys: |
-            cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+            cargo-${{ runner.os }}-lock-${{ hashFiles('**/Cargo.lock') }}-
+            cargo-${{ runner.os }}-lock-
             cargo-${{ runner.os }}-
 
-      - name: Set CARGO_HOME (avoid permission issues)
+      - name: Cargo Fetch with Verbose Retry & Diagnostics
+        shell: pwsh
+        env:
+          CARGO_HOME: ${{ runner.temp }}\cargo
         run: |
-          Write-Host "Setting CARGO_HOME to avoid runner permission issues..."
-          echo "CARGO_HOME=${{ runner.temp }}/cargo" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[OK] CARGO_HOME set to ${{ runner.temp }}/cargo"
-        shell: powershell
-
-      - name: Cargo Fetch with Retry (Handle Transient Network Failures)
-        run: |
-          Write-Host "Fetching cargo dependencies with retry logic..."
+          Write-Host "=== Cargo Fetch Diagnostics ==="
+          Write-Host "CARGO_HOME: $env:CARGO_HOME"
+          Write-Host "cargo --version:"
+          cargo --version
+          Write-Host "git --version:"
+          git --version
+          Write-Host "rustc --version:"
+          rustc --version
+          Write-Host "==============================="
+          
           cd DataEngine
           
-          $maxAttempts = 3
+          $maxAttempts = 5
           $attempt = 0
           $sleepSeconds = 5
           
-          while ($true) {
+          while ($attempt -lt $maxAttempts) {
             $attempt++
-            Write-Host "Attempt $attempt of $maxAttempts - cargo fetch"
+            Write-Host ""
+            Write-Host "Attempt $attempt of $maxAttempts - cargo fetch --locked --verbose"
+            Write-Host "---------------------------------------------------"
             
-            try {
-              cargo fetch --verbose 2>&1 | Tee-Object -Variable output
-              
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "[OK] Cargo fetch succeeded"
-                break
-              } else {
-                throw "cargo fetch failed with exit code $LASTEXITCODE"
-              }
-            } catch {
-              if ($attempt -ge $maxAttempts) {
-                Write-Error "[FAIL] Cargo fetch failed after $maxAttempts attempts"
-                Write-Error "Last error: $_"
-                Write-Error "Output: $output"
-                exit 1
-              }
-              
-              Write-Host "[WARNING] Attempt $attempt failed: $_"
-              Write-Host "Retrying in $sleepSeconds seconds..."
-              Start-Sleep -Seconds $sleepSeconds
-              $sleepSeconds = [math]::Min($sleepSeconds * 2, 60)
+            $output = & cargo fetch --locked --verbose 2>&1
+            $exitCode = $LASTEXITCODE
+            
+            Write-Host "--- Full Cargo Output ---"
+            Write-Host $output
+            Write-Host "-------------------------"
+            Write-Host "Exit code: $exitCode"
+            
+            if ($exitCode -eq 0) {
+              Write-Host "[OK] Cargo fetch succeeded on attempt $attempt"
+              break
             }
+            
+            Write-Host "[WARN] Cargo fetch failed with exit code $exitCode"
+            
+            if ($attempt -ge $maxAttempts) {
+              Write-Error "[FAIL] Cargo fetch failed after $maxAttempts attempts"
+              Write-Error "This indicates persistent network/cache/git issues."
+              Write-Error "Check runner network connectivity to crates.io and GitHub."
+              exit $exitCode
+            }
+            
+            Write-Host "Retrying in $sleepSeconds seconds..."
+            Start-Sleep -Seconds $sleepSeconds
+            $sleepSeconds = [math]::Min($sleepSeconds * 2, 60)
           }
-        shell: powershell
 
       - name: Validate Helm Chart
         id: helm-check
@@ -329,66 +350,87 @@ jobs:
         with:
           github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
+      - name: Configure CARGO_HOME (Early Setup)
+        shell: pwsh
+        run: |
+          # Use runner temp to avoid permission/home issues on Windows
+          $cargoHome = "${{ runner.temp }}\cargo"
+          Write-Host "Setting CARGO_HOME=$cargoHome"
+          Write-Host "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          # Ensure directory exists
+          New-Item -ItemType Directory -Force -Path $cargoHome | Out-Null
+          Write-Host "[OK] CARGO_HOME configured and created"
+
       - name: Cache Cargo Registry & Build Artifacts
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
+            ${{ runner.temp }}\cargo\registry
+            ${{ runner.temp }}\cargo\git
             DataEngine/target
             MessageBrokerEngine/target
             LoggingEngine/target
             redisutils/target
             databaseschema/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-v2
+          key: cargo-${{ runner.os }}-lock-${{ hashFiles('**/Cargo.lock') }}-v3
           restore-keys: |
-            cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-
+            cargo-${{ runner.os }}-lock-${{ hashFiles('**/Cargo.lock') }}-
+            cargo-${{ runner.os }}-lock-
             cargo-${{ runner.os }}-
 
-      - name: Set CARGO_HOME (avoid permission issues)
+      - name: Cargo Fetch with Verbose Retry & Diagnostics
+        shell: pwsh
+        env:
+          CARGO_HOME: ${{ runner.temp }}\cargo
         run: |
-          Write-Host "Setting CARGO_HOME to avoid runner permission issues..."
-          echo "CARGO_HOME=${{ runner.temp }}/cargo" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "[OK] CARGO_HOME set to ${{ runner.temp }}/cargo"
-        shell: powershell
-
-      - name: Cargo Fetch with Retry (Handle Transient Network Failures)
-        run: |
-          Write-Host "Fetching cargo dependencies with retry logic..."
+          Write-Host "=== Cargo Fetch Diagnostics ==="
+          Write-Host "CARGO_HOME: $env:CARGO_HOME"
+          Write-Host "cargo --version:"
+          cargo --version
+          Write-Host "git --version:"
+          git --version
+          Write-Host "rustc --version:"
+          rustc --version
+          Write-Host "==============================="
+          
           cd DataEngine
           
-          $maxAttempts = 3
+          $maxAttempts = 5
           $attempt = 0
           $sleepSeconds = 5
           
-          while ($true) {
+          while ($attempt -lt $maxAttempts) {
             $attempt++
-            Write-Host "Attempt $attempt of $maxAttempts - cargo fetch"
+            Write-Host ""
+            Write-Host "Attempt $attempt of $maxAttempts - cargo fetch --locked --verbose"
+            Write-Host "---------------------------------------------------"
             
-            try {
-              cargo fetch --verbose 2>&1 | Tee-Object -Variable output
-              
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "[OK] Cargo fetch succeeded"
-                break
-              } else {
-                throw "cargo fetch failed with exit code $LASTEXITCODE"
-              }
-            } catch {
-              if ($attempt -ge $maxAttempts) {
-                Write-Error "[FAIL] Cargo fetch failed after $maxAttempts attempts"
-                Write-Error "Last error: $_"
-                Write-Error "Output: $output"
-                exit 1
-              }
-              
-              Write-Host "[WARNING] Attempt $attempt failed: $_"
-              Write-Host "Retrying in $sleepSeconds seconds..."
-              Start-Sleep -Seconds $sleepSeconds
-              $sleepSeconds = [math]::Min($sleepSeconds * 2, 60)
+            $output = & cargo fetch --locked --verbose 2>&1
+            $exitCode = $LASTEXITCODE
+            
+            Write-Host "--- Full Cargo Output ---"
+            Write-Host $output
+            Write-Host "-------------------------"
+            Write-Host "Exit code: $exitCode"
+            
+            if ($exitCode -eq 0) {
+              Write-Host "[OK] Cargo fetch succeeded on attempt $attempt"
+              break
             }
+            
+            Write-Host "[WARN] Cargo fetch failed with exit code $exitCode"
+            
+            if ($attempt -ge $maxAttempts) {
+              Write-Error "[FAIL] Cargo fetch failed after $maxAttempts attempts"
+              Write-Error "This indicates persistent network/cache/git issues."
+              Write-Error "Check runner network connectivity to crates.io and GitHub."
+              exit $exitCode
+            }
+            
+            Write-Host "Retrying in $sleepSeconds seconds..."
+            Start-Sleep -Seconds $sleepSeconds
+            $sleepSeconds = [math]::Min($sleepSeconds * 2, 60)
           }
-        shell: powershell
 
       - name: Login to GHCR
         uses: docker/login-action@v3
