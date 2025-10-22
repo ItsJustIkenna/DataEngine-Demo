@@ -91,8 +91,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     chmod +x /bin/dataengine
 
 ################################################################################
-# Stage 3: Ultra-minimal distroless runtime
-FROM gcr.io/distroless/cc-debian11:nonroot AS runtime
+# Stage 3: Ultra-minimal distroless runtime (debug variant includes busybox shell for health probes)
+FROM gcr.io/distroless/cc-debian11:debug-nonroot AS runtime
 
 # Copy only the optimized binary
 COPY --from=build /bin/dataengine /usr/local/bin/dataengine
