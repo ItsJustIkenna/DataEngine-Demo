@@ -352,8 +352,8 @@ fn build_unsubscribe_message(
 /// # Returns
 /// Tuple containing (Exchange, TokenResponse, Vec<Security>, HashMap<String, OrderBook>)
 async fn initialize_exchange(
-    redis_pool: Arc<deadpool::managed::Pool<deadpool_redis::Manager>>,
-    postgres_pool: Arc<deadpool::managed::Pool<diesel_async::pooled_connection::AsyncDieselConnectionManager<diesel_async::AsyncPgConnection>>>,
+    redis_pool: Arc<deadpool_redis::Pool>,
+    postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
     exchange_name: String,
     auth_endpoint: String,
     symbols: &[String],
@@ -447,8 +447,8 @@ fn spawn_websocket_handler(
     token: &str,
     depth: Option<u32>,
     orderbooks: std::collections::HashMap<String, databaseschema::models::order_book::OrderBook>,
-    redis_pool: Arc<deadpool::managed::Pool<deadpool_redis::Manager>>,
-    postgres_pool: Arc<deadpool::managed::Pool<diesel_async::pooled_connection::AsyncDieselConnectionManager<diesel_async::AsyncPgConnection>>>,
+    redis_pool: Arc<deadpool_redis::Pool>,
+    postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
     shutdown_rx: tokio::sync::broadcast::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     let channel_name = channel.to_string();

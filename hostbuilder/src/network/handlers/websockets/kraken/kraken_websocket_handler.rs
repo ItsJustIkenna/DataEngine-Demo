@@ -302,8 +302,9 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 };
                                 let _ = KRAKEN_WEBSOCKET_LOGGER.log_websocket_event(disconnect_event).await;
                                 
-                                // Return error to trigger reconnection in outer loop
-                                return Err(anyhow::anyhow!("WebSocket closed by server"));
+                                // Exit loop to trigger reconnection in outer loop
+                                log_warn!(KRAKEN_LOGGER, "WebSocket closed by server, exiting listener loop");
+                                break;
                             },
                             Some(Ok(Message::Ping(data))) => {
                                 // Send pong response
@@ -316,21 +317,18 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 // Handle other message types silently
                             },
                             Some(Err(e)) => {
-                                log_error!(KRAKEN_LOGGER, "Error receiving message: {}, will attempt reconnection", e);
-                                return Err(anyhow::anyhow!("WebSocket error: {}", e));
+                                log_error!(KRAKEN_LOGGER, "Error receiving message: {}, exiting listener loop", e);
+                                break;
                             },
                             None => {
-                                log_warn!(KRAKEN_LOGGER, "WebSocket connection closed unexpectedly, will attempt reconnection");
-                                return Err(anyhow::anyhow!("WebSocket connection closed"));
+                                log_warn!(KRAKEN_LOGGER, "WebSocket connection closed unexpectedly, exiting listener loop");
+                                break;
                             }
                         }
                     }
                 } => {
-                    // Propagate errors from the WebSocket listener
-                    if let Err(e) = result {
-                        log_error!(KRAKEN_LOGGER, "WebSocket listener error: {}", e);
-                        return Err(e);
-                    }
+                    // WebSocket listener completed (loop exited via break)
+                    log_info!(KRAKEN_LOGGER, "WebSocket listener loop completed");
                 },
 
                 // Handling Shutdown
