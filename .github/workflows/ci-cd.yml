@@ -99,20 +99,36 @@ jobs:
           rustup show
         shell: powershell
 
+      - name: Clear RUSTFLAGS (ensure stable compatibility)
+        run: |
+          Write-Host "Clearing RUSTFLAGS to ensure no nightly-only flags..."
+          echo "RUSTFLAGS=" >> $env:GITHUB_ENV
+          Write-Host "[OK] RUSTFLAGS cleared"
+        shell: powershell
+
       - name: Run Rust Tests
         id: test-check
         if: github.event.inputs.skip_tests != 'true'
         run: |
           Write-Host "Running Rust tests..."
           cd DataEngine
+          
+          # Debug: Show current commit and environment
+          Write-Host "=== Debug Info ==="
+          Write-Host "Current commit: $(git rev-parse HEAD)"
+          Write-Host "Branch: $(git branch --show-current)"
+          Write-Host "RUSTFLAGS: $env:RUSTFLAGS"
+          rustc --version
+          cargo --version
+          Write-Host "=================="
 
           # Detect host triple and use it to avoid building for an unsupported default target
           $hostLine = (rustc -vV | Select-String '^host:')
           $hostTriple = $hostLine.ToString().Split()[1]
           Write-Host "Detected host triple: $hostTriple"
 
-          # Run tests (stable-compatible, no nightly flags)
-          cargo test --workspace --all-features --jobs ${{ env.PARALLEL_JOBS }} --target $hostTriple 2>&1 | Tee-Object -FilePath test-results.txt
+          # Run tests (stable-compatible, no nightly flags) with verbose output
+          cargo test --workspace --all-features --jobs ${{ env.PARALLEL_JOBS }} --target $hostTriple --verbose 2>&1 | Tee-Object -FilePath test-results.txt
 
           if ($LASTEXITCODE -eq 0) {
             echo "passed=true" >> $env:GITHUB_OUTPUT
