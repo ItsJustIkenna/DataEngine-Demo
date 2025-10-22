@@ -179,7 +179,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
 
             tokio::select! {
                 // Listening to WebSocket Messages
-                _ = async {
+                result = async {
                     loop {
                         let message = handler.reader.write().await.next().await;
 
@@ -325,7 +325,13 @@ impl EndpointHandler for KrakenWebSocketHandler {
                             }
                         }
                     }
-                } => {},
+                } => {
+                    // Propagate errors from the WebSocket listener
+                    if let Err(e) = result {
+                        log_error!(KRAKEN_LOGGER, "WebSocket listener error: {}", e);
+                        return Err(e);
+                    }
+                },
 
                 // Handling Shutdown
                 _ = shutdown_rx.recv() => {
