@@ -57,39 +57,13 @@ jobs:
       helm-valid: ${{ steps.helm-check.outputs.valid }}
       tests-passed: ${{ steps.test-check.outputs.passed }}
     steps:
-      - name: Checkout DataEngine
+      - name: Checkout Code
         uses: actions/checkout@v4
+        
+      - name: Checkout Dependencies
+        uses: ./.github/actions/checkout-deps
         with:
-          path: DataEngine
-          fetch-depth: 0  # Full history for better caching
-
-      - name: Checkout databaseschema
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/databaseschema
-          path: databaseschema
-          fetch-depth: 0  # Get full history to ensure all files are available
-
-      - name: Checkout redisutils
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/redisutils
-          path: redisutils
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      - name: Checkout LoggingEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/LoggingEngine
-          path: LoggingEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      - name: Checkout MessageBrokerEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          path: MessageBrokerEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Validate Helm Chart
         id: helm-check
@@ -137,7 +111,8 @@ jobs:
           $hostTriple = $hostLine.ToString().Split()[1]
           Write-Host "Detected host triple: $hostTriple"
 
-          cargo test --workspace --all-features --jobs ${{ env.PARALLEL_JOBS }} --quiet --target $hostTriple
+          # Run tests with JSON output for artifacts
+          cargo test --workspace --all-features --jobs ${{ env.PARALLEL_JOBS }} --target $hostTriple -- --format json -Z unstable-options --report-time | Tee-Object -FilePath test-results.json
 
           if ($LASTEXITCODE -eq 0) {
             echo "passed=true" >> $env:GITHUB_OUTPUT
@@ -149,6 +124,89 @@ jobs:
           }
         shell: powershell
 
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: DataEngine/test-results.json
+          retention-days: 30
+
+      - name: Generate Code Coverage
+        if: github.event.inputs.skip_tests != 'true'
+        run: |
+          Write-Host "Generating code coverage report..."
+          cd DataEngine
+          
+          # Install cargo-llvm-cov if not present
+          if (-not (cargo llvm-cov --version 2>$null)) {
+            Write-Host "Installing cargo-llvm-cov..."
+            cargo install cargo-llvm-cov
+          }
+          
+          # Detect host triple
+          $hostLine = (rustc -vV | Select-String '^host:')
+          $hostTriple = $hostLine.ToString().Split()[1]
+          
+          # Generate coverage report
+          cargo llvm-cov --workspace --target $hostTriple --lcov --output-path lcov.info
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] Code coverage generated successfully"
+          } else {
+            Write-Host "[WARNING] Code coverage generation failed (non-blocking)"
+          }
+        shell: powershell
+        continue-on-error: true
+
+      - name: Upload Coverage to Codecov
+        if: github.event.inputs.skip_tests != 'true'
+        uses: codecov/codecov-action@v4
+        with:
+          files: DataEngine/lcov.info
+          flags: unittests
+          name: dataengine-coverage
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+        continue-on-error: true
+
+      - name: Run Performance Benchmarks
+        if: github.event.inputs.skip_tests != 'true' && github.event_name != 'pull_request'
+        run: |
+          Write-Host "Running performance benchmarks..."
+          cd DataEngine
+          
+          # Detect host triple
+          $hostLine = (rustc -vV | Select-String '^host:')
+          $hostTriple = $hostLine.ToString().Split()[1]
+          
+          # Run benchmarks
+          cargo bench --workspace --target $hostTriple --no-fail-fast -- --output-format bencher | Tee-Object -FilePath benchmark-results.txt
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] Benchmarks completed successfully"
+            
+            # Parse and display key metrics
+            Write-Host ""
+            Write-Host "=== Benchmark Results ==="
+            Get-Content benchmark-results.txt | Select-String "test.*bench:" | ForEach-Object {
+              Write-Host $_
+            }
+          } else {
+            Write-Host "[WARNING] Some benchmarks failed (non-blocking)"
+          }
+        shell: powershell
+        continue-on-error: true
+
+      - name: Upload Benchmark Results
+        if: github.event.inputs.skip_tests != 'true' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: DataEngine/benchmark-results.txt
+          retention-days: 90
+        continue-on-error: true
+
   # ===== BUILD & SECURITY (Parallel) =====
   build:
     name: Build & Push
@@ -159,38 +217,13 @@ jobs:
       image-exists: ${{ steps.image-check.outputs.exists }}
       image-digest: ${{ steps.build-push.outputs.digest }}
     steps:
-      - name: Checkout DataEngine
+      - name: Checkout Code
         uses: actions/checkout@v4
+        
+      - name: Checkout Dependencies
+        uses: ./.github/actions/checkout-deps
         with:
-          fetch-depth: 0
-
-      - name: Checkout databaseschema
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/databaseschema
-          path: databaseschema
-          fetch-depth: 0  # Get full history to ensure all files are available
-
-      - name: Checkout redisutils
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/redisutils
-          path: redisutils
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      - name: Checkout LoggingEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/LoggingEngine
-          path: LoggingEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-      - name: Checkout MessageBrokerEngine
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/MessageBrokerEngine
-          path: MessageBrokerEngine
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -475,6 +508,54 @@ jobs:
           
           Write-Host "[SUCCESS] Kubernetes environment ready"
 
+      - name: Canary Deployment
+        id: canary-deploy
+        if: github.event.inputs.environment == 'production' && github.event_name != 'pull_request'
+        run: |
+          Write-Host "[CANARY] Deploying canary release..."
+          
+          $canaryRelease = "dataengine-canary"
+          
+          # Deploy canary with 10% traffic
+          helm upgrade --install $canaryRelease ${{ env.HELM_CHART_PATH }} `
+            --namespace ${{ env.NAMESPACE }} `
+            --create-namespace `
+            --atomic `
+            --wait `
+            --timeout 10m `
+            --values k8s/data-engine-helm/values-canary.yaml `
+            --set image.repository=${{ env.IMAGE_NAME }} `
+            --set image.tag=${{ github.sha }} `
+            --set image.pullPolicy=Always `
+            --set-string secrets.database.username=$($env:POSTGRES_USER) `
+            --set-string secrets.database.password=$($env:POSTGRES_PASSWORD) `
+            --set-string secrets.redis.password=$($env:REDIS_PASSWORD)
+          
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "[SUCCESS] Canary deployment completed"
+            
+            # Wait for canary to be healthy
+            Start-Sleep -Seconds 30
+            
+            # Check canary health
+            $canaryPod = kubectl get pods -n ${{ env.NAMESPACE }} -l deployment-type=canary -o jsonpath='{.items[0].metadata.name}'
+            if ($canaryPod) {
+              $healthCheck = kubectl exec -n ${{ env.NAMESPACE }} $canaryPod -- wget -q -O- http://localhost:8080/health --timeout=5
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "[SUCCESS] Canary health check passed"
+                echo "canary-healthy=true" >> $env:GITHUB_OUTPUT
+              } else {
+                Write-Host "[WARNING] Canary health check failed"
+                echo "canary-healthy=false" >> $env:GITHUB_OUTPUT
+              }
+            }
+          } else {
+            Write-Host "[FAIL] Canary deployment failed"
+            echo "canary-healthy=false" >> $env:GITHUB_OUTPUT
+          }
+        shell: powershell
+        continue-on-error: true
+
       - name: Deploy with Helm
         id: helm-deploy
         timeout-minutes: 65
@@ -669,6 +750,7 @@ jobs:
           }
 
       - name: Verify Deployment
+        id: verify-deployment
         timeout-minutes: 10
         run: |
           $environment = "${{ github.event.inputs.environment || 'database-only' }}"
@@ -722,6 +804,52 @@ jobs:
             
             Write-Host "[SUCCESS] Application deployment verification completed"
           }
+
+      - name: Record Deployment Metrics
+        if: always()
+        run: |
+          $environment = "${{ github.event.inputs.environment || 'database-only' }}"
+          $status = "${{ steps.helm-deploy.outcome }}"
+          $verifyStatus = "${{ steps.verify-deployment.outcome }}" 
+          
+          Write-Host "[METRICS] Recording deployment metrics..."
+          
+          # Calculate deployment duration
+          $workflowStart = [DateTime]::Parse("${{ github.event.head_commit.timestamp }}")
+          $duration = ((Get-Date) - $workflowStart).TotalSeconds
+          
+          # Create metrics payload
+          $metrics = @{
+            timestamp = (Get-Date).ToUniversalTime().ToString("o")
+            environment = $environment
+            commit_sha = "${{ github.sha }}"
+            branch = "${{ github.ref_name }}"
+            actor = "${{ github.actor }}"
+            deployment_duration_seconds = $duration
+            helm_deploy_status = $status
+            verification_status = $verifyStatus
+            workflow_run_id = "${{ github.run_id }}"
+            workflow_run_number = "${{ github.run_number }}"
+            image_tag = "${{ github.sha }}"
+          }
+          
+          # Save metrics to file
+          $metrics | ConvertTo-Json | Out-File -FilePath "deployment-metrics.json"
+          
+          Write-Host "[METRICS] Deployment metrics recorded:"
+          Write-Host "  Environment: $environment"
+          Write-Host "  Duration: $([math]::Round($duration, 2))s"
+          Write-Host "  Status: $status"
+          Write-Host "  Verification: $verifyStatus"
+        shell: powershell
+
+      - name: Upload Deployment Metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-metrics-${{ github.sha }}
+          path: deployment-metrics.json
+          retention-days: 90
 
   # ===== POST-DEPLOYMENT =====
   notify:

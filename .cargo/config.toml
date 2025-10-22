@@ -4,6 +4,7 @@ rustflags = ["-L", "C:\\Program Files\\PostgreSQL\\17\\lib"]
 [env]
 PQ_LIB_DIR = "C:\\Program Files\\PostgreSQL\\17\\lib"
 
-[build]
-# Use MSVC toolchain for ARM64 Windows builds
-target = "aarch64-pc-windows-msvc"
+# [build]
+# Commented out to allow builds on x64 runners and cross-platform builds
+# CI/CD will automatically detect and use the appropriate host target
+# target = "aarch64-pc-windows-msvc"

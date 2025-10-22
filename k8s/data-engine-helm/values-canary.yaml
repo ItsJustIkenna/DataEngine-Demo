@@ -1,0 +1,56 @@
+# DataEngine Canary Deployment Configuration
+# This is a minimal values override for canary deployments
+
+# Canary replica count (10% of production traffic)
+replicaCount: 1
+
+# Canary-specific labels
+podLabels:
+  deployment-type: canary
+  traffic-weight: "10"
+
+# Service configuration for canary
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations:
+    # Istio/Nginx traffic splitting annotations
+    traffic.sidecar.istio.io/includeInboundPorts: "8080"
+    nginx.ingress.kubernetes.io/canary: "true"
+    nginx.ingress.kubernetes.io/canary-weight: "10"
+
+# Resource limits (same as production)
+resources:
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+
+# Health checks with shorter intervals for faster feedback
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 3
+  timeoutSeconds: 2
+  failureThreshold: 1
+
+# Monitoring labels
+monitoring:
+  enabled: true
+  labels:
+    deployment: canary
+    version: "{{ .Chart.AppVersion }}"

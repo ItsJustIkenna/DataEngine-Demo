@@ -1,0 +1,65 @@
+name: 'Checkout DataEngine Dependencies'
+description: 'Checks out all required dependency repositories for DataEngine'
+inputs:
+  github-token:
+    description: 'GitHub token with access to private repos'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout DataEngine
+      uses: actions/checkout@v4
+      with:
+        path: DataEngine
+        fetch-depth: 0
+
+    - name: Checkout databaseschema
+      uses: actions/checkout@v4
+      with:
+        repository: Nwagbara-Group-LLC/databaseschema
+        path: databaseschema
+        fetch-depth: 0
+
+    - name: Checkout redisutils
+      uses: actions/checkout@v4
+      with:
+        repository: Nwagbara-Group-LLC/redisutils
+        path: redisutils
+        token: ${{ inputs.github-token }}
+
+    - name: Checkout LoggingEngine
+      uses: actions/checkout@v4
+      with:
+        repository: Nwagbara-Group-LLC/LoggingEngine
+        path: LoggingEngine
+        token: ${{ inputs.github-token }}
+
+    - name: Checkout MessageBrokerEngine
+      uses: actions/checkout@v4
+      with:
+        repository: Nwagbara-Group-LLC/MessageBrokerEngine
+        path: MessageBrokerEngine
+        token: ${{ inputs.github-token }}
+
+    - name: Cache Cargo Registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          cargo-${{ runner.os }}-
+
+    - name: Cache Cargo Build
+      uses: actions/cache@v4
+      with:
+        path: |
+          DataEngine/target
+          databaseschema/target
+          redisutils/target
+          LoggingEngine/target
+          MessageBrokerEngine/target
+        key: cargo-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          cargo-build-${{ runner.os }}-
