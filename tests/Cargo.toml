@@ -25,6 +25,9 @@ quickcheck = "1.0"
 
 # Benchmarking
 criterion = { version = "0.5", features = ["html_reports"] }
+
+# Profiling (Unix only - uses Linux-specific APIs)
+[target.'cfg(unix)'.dependencies]
 pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
 
 # Local dependencies
