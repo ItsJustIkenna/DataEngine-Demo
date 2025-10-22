@@ -182,7 +182,7 @@ healthcheck:
   livenessProbe:
     exec:
       command:
-        - /bin/sh
+        - /busybox/sh
         - -c
         - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 30
@@ -193,7 +193,7 @@ healthcheck:
   readinessProbe:
     exec:
       command:
-        - /bin/sh
+        - /busybox/sh
         - -c
         - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 10
@@ -204,7 +204,7 @@ healthcheck:
   startupProbe:
     exec:
       command:
-        - /bin/sh
+        - /busybox/sh
         - -c
         - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 10
