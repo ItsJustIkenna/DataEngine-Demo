@@ -11,13 +11,15 @@ ARG APP_NAME=program
 # Stage 1: Dependency builder with maximum caching efficiency
 FROM rust:${RUST_VERSION}-slim-bullseye AS deps
 
-# Install minimal essential dependencies in single layer
+# Install minimal essential dependencies including musl for Alpine compatibility
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     libssl-dev \
     libpq-dev \
     ca-certificates \
+    musl-tools \
+    musl-dev \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -69,6 +71,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM deps AS build
 ARG APP_NAME
 
+# Install musl target for Alpine compatibility
+RUN rustup target add x86_64-unknown-linux-musl
+
 COPY config/ ./config/
 COPY hostbuilder/ ./hostbuilder/
 COPY program/ ./program/
@@ -85,20 +90,28 @@ ENV RUSTFLAGS="-C opt-level=3 -C codegen-units=1 -C panic=abort -C target-cpu=na
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/DataEngine/target \
-    cargo build --release && \
-    cp target/release/$APP_NAME /bin/dataengine && \
+    cargo build --release --target x86_64-unknown-linux-musl && \
+    cp target/x86_64-unknown-linux-musl/release/$APP_NAME /bin/dataengine && \
     strip --strip-all /bin/dataengine && \
     chmod +x /bin/dataengine
 
 ################################################################################
-# Stage 3: Ultra-minimal distroless runtime (debug variant includes busybox shell for health probes)
-FROM gcr.io/distroless/cc-debian11:debug-nonroot AS runtime
+# Stage 3: Minimal Alpine runtime with built-in shell and process tools
+FROM alpine:3.19 AS runtime
+
+# Install only essential runtime dependencies (musl, ca-certs, libpq for postgres)
+RUN apk add --no-cache \
+    ca-certificates \
+    libgcc \
+    libssl3 \
+    libpq \
+    && adduser -D -u 65532 -g root nonroot
 
 # Copy only the optimized binary
 COPY --from=build /bin/dataengine /usr/local/bin/dataengine
 
 # Use non-root user for security
-USER nonroot:nonroot
+USER nonroot:root
 
 # Expose application ports
 EXPOSE 8080 9090

@@ -182,7 +182,7 @@ healthcheck:
   livenessProbe:
     exec:
       command:
-        - /busybox/sh
+        - /bin/sh
         - -c
         - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 30
@@ -193,7 +193,7 @@ healthcheck:
   readinessProbe:
     exec:
       command:
-        - /busybox/sh
+        - /bin/sh
         - -c
         - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 10
@@ -204,7 +204,7 @@ healthcheck:
   startupProbe:
     exec:
       command:
-        - /busybox/sh
+        - /bin/sh
         - -c
         - "pgrep -f dataengine || exit 1"
     initialDelaySeconds: 10
@@ -592,7 +592,7 @@ backup:
   schedule: "0 2 * * *"  # Daily at 2 AM UTC
   image:
     repository: postgres
-    tag: "15-alpine"
+    tag: "17-alpine"  # Match PostgreSQL server version
     pullPolicy: IfNotPresent
   
   # Backup retention
