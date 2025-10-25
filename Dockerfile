@@ -9,19 +9,17 @@ ARG APP_NAME=program
 
 ################################################################################
 # Stage 1: Dependency builder with maximum caching efficiency
-FROM rust:${RUST_VERSION}-slim-bullseye AS deps
+FROM rust:${RUST_VERSION}-alpine AS deps
 
-# Install minimal essential dependencies including musl for Alpine compatibility
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    pkg-config \
-    libssl-dev \
-    libpq-dev \
-    ca-certificates \
-    musl-tools \
+# Install build dependencies for Alpine/musl
+RUN apk add --no-cache \
+    build-base \
+    pkgconfig \
+    openssl-dev \
+    openssl-libs-static \
+    postgresql-dev \
     musl-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    ca-certificates
 
 # Optimize Cargo environment for speed and caching
 ENV CARGO_HOME=/usr/local/cargo \
@@ -71,9 +69,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM deps AS build
 ARG APP_NAME
 
-# Install musl target for Alpine compatibility
-RUN rustup target add x86_64-unknown-linux-musl
-
 COPY config/ ./config/
 COPY hostbuilder/ ./hostbuilder/
 COPY program/ ./program/
@@ -86,12 +81,15 @@ COPY LoggingEngine/ ./LoggingEngine/
 COPY MessageBrokerEngine/publisher/ ./MessageBrokerEngine/publisher/
 COPY MessageBrokerEngine/protocol/ ./MessageBrokerEngine/protocol/
 
-ENV RUSTFLAGS="-C opt-level=3 -C codegen-units=1 -C panic=abort -C target-cpu=native -C link-arg=-s"
+# Environment variables for Alpine musl build with system OpenSSL
+ENV RUSTFLAGS="-C opt-level=3 -C codegen-units=1 -C panic=abort -C target-cpu=native -C link-arg=-s" \
+    OPENSSL_DIR=/usr \
+    OPENSSL_STATIC=yes
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/DataEngine/target \
-    cargo build --release --target x86_64-unknown-linux-musl && \
-    cp target/x86_64-unknown-linux-musl/release/$APP_NAME /bin/dataengine && \
+    cargo build --release && \
+    cp target/release/$APP_NAME /bin/dataengine && \
     strip --strip-all /bin/dataengine && \
     chmod +x /bin/dataengine
 
