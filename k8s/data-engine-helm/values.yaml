@@ -184,7 +184,7 @@ healthcheck:
       command:
         - /bin/sh
         - -c
-        - "pgrep -f dataengine || exit 1"
+        - pgrep dataengine
     initialDelaySeconds: 30
     periodSeconds: 10
     timeoutSeconds: 5
@@ -195,7 +195,7 @@ healthcheck:
       command:
         - /bin/sh
         - -c
-        - "pgrep -f dataengine || exit 1"
+        - pgrep dataengine
     initialDelaySeconds: 10
     periodSeconds: 5
     timeoutSeconds: 3
@@ -206,7 +206,7 @@ healthcheck:
       command:
         - /bin/sh
         - -c
-        - "pgrep -f dataengine || exit 1"
+        - pgrep dataengine
     initialDelaySeconds: 10
     periodSeconds: 5
     timeoutSeconds: 3

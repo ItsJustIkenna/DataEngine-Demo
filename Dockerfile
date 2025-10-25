@@ -97,21 +97,20 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 ################################################################################
 # Stage 3: Minimal Alpine runtime with built-in shell and process tools
-FROM alpine:3.19 AS runtime
+FROM alpine:latest AS runtime
 
-# Install only essential runtime dependencies (musl, ca-certs, libpq for postgres)
+# Install essential runtime dependencies including procps for pgrep
 RUN apk add --no-cache \
     ca-certificates \
     libgcc \
-    libssl3 \
-    libpq \
-    && adduser -D -u 65532 -g root nonroot
+    procps \
+    && adduser -D -u 65532 nonroot
 
 # Copy only the optimized binary
 COPY --from=build /bin/dataengine /usr/local/bin/dataengine
 
 # Use non-root user for security
-USER nonroot:root
+USER nonroot
 
 # Expose application ports
 EXPOSE 8080 9090
