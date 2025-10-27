@@ -19,7 +19,8 @@ RUN apk add --no-cache \
     openssl-libs-static \
     postgresql-dev \
     musl-dev \
-    ca-certificates
+    ca-certificates \
+    perl
 
 # Optimize Cargo environment for speed and caching
 ENV CARGO_HOME=/usr/local/cargo \
@@ -28,7 +29,10 @@ ENV CARGO_HOME=/usr/local/cargo \
     CARGO_NET_RETRY=10 \
     RUST_BACKTRACE=1 \
     OPENSSL_DIR=/usr \
-    OPENSSL_STATIC=yes \
+    OPENSSL_STATIC=1 \
+    OPENSSL_LIB_DIR=/usr/lib \
+    OPENSSL_INCLUDE_DIR=/usr/include \
+    PKG_CONFIG_ALL_STATIC=1 \
     PKG_CONFIG_PATH=/usr/lib/pkgconfig
 
 # Set up complete workspace structure to match local development
