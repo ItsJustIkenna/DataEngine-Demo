@@ -26,7 +26,10 @@ ENV CARGO_HOME=/usr/local/cargo \
     CARGO_TARGET_DIR=/app/DataEngine/target \
     CARGO_INCREMENTAL=0 \
     CARGO_NET_RETRY=10 \
-    RUST_BACKTRACE=1
+    RUST_BACKTRACE=1 \
+    OPENSSL_DIR=/usr \
+    OPENSSL_STATIC=yes \
+    PKG_CONFIG_PATH=/usr/lib/pkgconfig
 
 # Set up complete workspace structure to match local development
 WORKDIR /app
@@ -81,10 +84,8 @@ COPY LoggingEngine/ ./LoggingEngine/
 COPY MessageBrokerEngine/publisher/ ./MessageBrokerEngine/publisher/
 COPY MessageBrokerEngine/protocol/ ./MessageBrokerEngine/protocol/
 
-# Environment variables for Alpine musl build with system OpenSSL
-ENV RUSTFLAGS="-C opt-level=3 -C codegen-units=1 -C panic=abort -C target-cpu=native -C link-arg=-s" \
-    OPENSSL_DIR=/usr \
-    OPENSSL_STATIC=yes
+# Set optimization flags for release build
+ENV RUSTFLAGS="-C opt-level=3 -C codegen-units=1 -C panic=abort -C target-cpu=native -C link-arg=-s"
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/DataEngine/target \
