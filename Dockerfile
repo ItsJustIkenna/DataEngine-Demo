@@ -11,7 +11,7 @@ ARG APP_NAME=program
 # Stage 1: Dependency builder with maximum caching efficiency
 FROM rust:${RUST_VERSION}-alpine AS deps
 
-# Install build dependencies for Alpine/musl
+# Install build dependencies for Alpine/musl including cross-compilation tools
 RUN apk add --no-cache \
     build-base \
     pkgconfig \
@@ -20,7 +20,9 @@ RUN apk add --no-cache \
     postgresql-dev \
     musl-dev \
     ca-certificates \
-    perl
+    perl \
+    gcc \
+    g++
 
 # Optimize Cargo environment for speed and caching
 ENV CARGO_HOME=/usr/local/cargo \
@@ -39,12 +41,12 @@ ENV CARGO_HOME=/usr/local/cargo \
 WORKDIR /app
 
 # Copy only Cargo manifests first for maximum caching
-COPY Cargo.toml Cargo.lock ./DataEngine/
-COPY config/Cargo.toml ./DataEngine/config/
-COPY hostbuilder/Cargo.toml ./DataEngine/hostbuilder/
-COPY program/Cargo.toml ./DataEngine/program/
-COPY performance/Cargo.toml ./DataEngine/performance/
-COPY tests/Cargo.toml ./DataEngine/tests/
+COPY DataEngine/Cargo.toml DataEngine/Cargo.lock ./DataEngine/
+COPY DataEngine/config/Cargo.toml ./DataEngine/config/
+COPY DataEngine/hostbuilder/Cargo.toml ./DataEngine/hostbuilder/
+COPY DataEngine/program/Cargo.toml ./DataEngine/program/
+COPY DataEngine/performance/Cargo.toml ./DataEngine/performance/
+COPY DataEngine/tests/Cargo.toml ./DataEngine/tests/
 
 # Copy external dependency manifests and sources (complete structure)
 COPY databaseschema/ ./databaseschema/
@@ -65,7 +67,7 @@ RUN mkdir -p config/src hostbuilder/src program/src performance/src tests/src &&
     echo "pub fn dummy() {}" > performance/src/lib.rs && \
     echo "pub fn dummy() {}" > tests/src/lib.rs
 
-# Pre-compile dependencies (this layer will be cached!)
+# Pre-compile dependencies for native musl (this layer will be cached!)
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/DataEngine/target \
     cargo build --release && \
@@ -76,11 +78,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM deps AS build
 ARG APP_NAME
 
-COPY config/ ./config/
-COPY hostbuilder/ ./hostbuilder/
-COPY program/ ./program/
-COPY performance/ ./performance/
-COPY tests/ ./tests/
+COPY DataEngine/config/ ./config/
+COPY DataEngine/hostbuilder/ ./hostbuilder/
+COPY DataEngine/program/ ./program/
+COPY DataEngine/performance/ ./performance/
+COPY DataEngine/tests/ ./tests/
 
 COPY databaseschema/ ./databaseschema/
 COPY redisutils/ ./redisutils/

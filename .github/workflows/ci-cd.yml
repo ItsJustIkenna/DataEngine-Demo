@@ -241,6 +241,7 @@ jobs:
           
           try {
             docker build `
+              --platform linux/amd64 `
               --tag ${{ env.IMAGE_NAME }}:latest `
               --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
               --file Dockerfile `
