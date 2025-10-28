@@ -122,9 +122,8 @@ pub fn set_high_priority() -> Result<(), Box<dyn std::error::Error>> {
     use libc::{sched_param, sched_setscheduler, SCHED_FIFO};
 
     unsafe {
-        let param = sched_param {
-            sched_priority: 99, // Highest real-time priority
-        };
+        let mut param: sched_param = std::mem::zeroed();
+        param.sched_priority = 99; // Highest real-time priority
 
         if sched_setscheduler(0, SCHED_FIFO, &param) != 0 {
             return Err("Failed to set SCHED_FIFO priority on Linux".into());
