@@ -245,7 +245,7 @@ jobs:
               --no-cache `
               --tag ${{ env.IMAGE_NAME }}:latest `
               --tag ${{ env.IMAGE_NAME }}:${{ github.sha }} `
-              --file Dockerfile `
+              --file DataEngine/Dockerfile `
               --build-arg BUILDKIT_INLINE_CACHE=1 `
               --progress=plain `
               .
