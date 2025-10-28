@@ -35,20 +35,8 @@
 # Exception: Keep essential Docker docs
 !**/DOCKER.md
 
-# Test infrastructure (exclude but be surgical)
-**/tests/
+# Benchmark infrastructure (not needed for production builds)
 **/benches/
-# EXCEPTION: Include DataEngine tests directory (part of workspace build)
-!tests/
-# Exclude test files but NOT files containing "test" in business logic
-**/*_test.rs
-**/test_*.rs
-**/integration_test*.rs
-**/unit_test*.rs
-**/*_unit_tests.rs
-**/integration_tests.rs
-# Explicitly protect backtest_result files (business logic, not tests)
-!**/backtest_result*.rs
 
 # Examples and demos (not needed for production)
 **/examples/
