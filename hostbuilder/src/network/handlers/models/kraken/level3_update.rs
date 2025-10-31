@@ -403,6 +403,12 @@ impl Level3Update {
                 log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
             }
 
+            // Capture counts before moving vectors into futures
+            let buy_count = buy_orders.len();
+            let modify_buy_count = modify_orders.len();
+            let delete_buy_count = delete_orders.len();
+            let historical_buy_count = historical_orders.len();
+
             // Process database operations concurrently
             let create_buy_orders_future = create_open_buy_orders(postgres_pool.clone(), buy_orders);
             let modify_buy_orders_future = modify_open_buy_orders(postgres_pool.clone(), modify_orders);
@@ -421,27 +427,27 @@ impl Level3Update {
                 log_error!(KRAKEN_LOGGER, "Failed to add open buy orders to postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "✅ Persisted {} buy orders to database - Symbol: {}, Exchange: {}", 
-                    buy_orders.len(), order_book.symbol, order_book.exchange);
+                    buy_count, order_book.symbol, order_book.exchange);
             }
             
             if let Err(e) = modify_result {
                 log_error!(KRAKEN_LOGGER, "Failed to modify open buy orders in postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "✏️ Modified {} buy orders in database - Symbol: {}", 
-                    modify_orders.len(), order_book.symbol);
+                    modify_buy_count, order_book.symbol);
             }
             
             if let Err(e) = delete_result {
                 log_error!(KRAKEN_LOGGER, "Failed to delete open buy orders from postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "🗑️ Deleted {} buy orders from database - Symbol: {}", 
-                    delete_orders.len(), order_book.symbol);
+                    delete_buy_count, order_book.symbol);
             }
             
             if let Err(e) = historical_result {
                 log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
             } else {
-                log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_orders.len());
+                log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_buy_count);
             }
 
             Ok::<(), Error>(())
@@ -676,6 +682,12 @@ impl Level3Update {
                 log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
             }
 
+            // Capture counts before moving vectors into futures
+            let sell_count = sell_orders.len();
+            let modify_sell_count = modify_orders.len();
+            let delete_sell_count = delete_orders.len();
+            let historical_sell_count = historical_orders.len();
+
             // Process database operations concurrently
             let create_sell_orders_future = create_open_sell_orders(postgres_pool.clone(), sell_orders);
             let modify_sell_orders_future = modify_open_sell_orders(postgres_pool.clone(), modify_orders);
@@ -694,27 +706,27 @@ impl Level3Update {
                 log_error!(KRAKEN_LOGGER, "Failed to add open sell orders to postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "✅ Persisted {} sell orders to database - Symbol: {}, Exchange: {}", 
-                    sell_orders.len(), order_book.symbol, order_book.exchange);
+                    sell_count, order_book.symbol, order_book.exchange);
             }
             
             if let Err(e) = modify_result {
                 log_error!(KRAKEN_LOGGER, "Failed to modify open sell orders in postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "✏️ Modified {} sell orders in database - Symbol: {}", 
-                    modify_orders.len(), order_book.symbol);
+                    modify_sell_count, order_book.symbol);
             }
             
             if let Err(e) = delete_result {
                 log_error!(KRAKEN_LOGGER, "Failed to delete open sell orders from postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "🗑️ Deleted {} sell orders from database - Symbol: {}", 
-                    delete_orders.len(), order_book.symbol);
+                    delete_sell_count, order_book.symbol);
             }
             
             if let Err(e) = historical_result {
                 log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
             } else {
-                log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_orders.len());
+                log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_sell_count);
             }
 
             Ok::<(), Error>(())
