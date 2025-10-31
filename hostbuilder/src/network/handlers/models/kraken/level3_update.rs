@@ -46,7 +46,7 @@ use tokio_retry::{
     Retry
 };
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
-use crate::{log_debug, log_warn, log_error};
+use crate::{log_debug, log_warn, log_error, log_info};
 use std::time::Instant;
 
 // Import the Kraken logger
