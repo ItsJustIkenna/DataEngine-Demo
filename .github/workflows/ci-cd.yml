@@ -235,6 +235,52 @@ jobs:
             }
           }
           
+          # Create .dockerignore in the build context root
+          Write-Host "[SETUP] Creating .dockerignore for build context..."
+          $dockerignoreContent = @"
+          # Git files
+          **/.git/
+          **/.gitignore
+          **/.github/
+          **/.gitattributes
+          
+          # Build artifacts
+          **/target/
+          
+          # IDE files
+          **/.vscode/
+          **/.idea/
+          **/*.swp
+          **/*.swo
+          **/*~
+          **/.DS_Store
+          
+          # Environment and secrets
+          **/.env
+          **/.env.*
+          
+          # Documentation
+          **/*.md
+          **/LICENSE
+          **/README.md
+          
+          # Docker files
+          **/Dockerfile
+          **/.dockerignore
+          **/docker-compose.yml
+          **/compose.yaml
+          
+          # CI/CD files
+          DataEngine/k8s/
+          
+          # Development tools
+          **/.cargo/
+          **/Makefile
+          "@
+          
+          Set-Content -Path ".dockerignore" -Value $dockerignoreContent
+          Write-Host "[OK] .dockerignore created successfully"
+          
           # Execute Docker build
           Write-Host "[BUILD] Starting Docker build..."
           $buildStartTime = Get-Date
