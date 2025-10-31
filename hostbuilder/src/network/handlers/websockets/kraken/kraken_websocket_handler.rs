@@ -267,6 +267,21 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                             }
                                         }
                                     },
+                                    Ok(Response::Level3SubscribeAck(ack)) => {
+                                        log_info!(KRAKEN_LOGGER, "✅ Level3 subscription acknowledged: {:?}", ack);
+                                    },
+                                    Ok(Response::Level3Subscribe(sub)) => {
+                                        log_info!(KRAKEN_LOGGER, "📡 Level3 subscription request: {:?}", sub);
+                                    },
+                                    Ok(Response::TradeSubscribeAck(ack)) => {
+                                        log_info!(KRAKEN_LOGGER, "✅ Trade subscription acknowledged: {:?}", ack);
+                                    },
+                                    Ok(Response::TradeSubscribe(sub)) => {
+                                        log_info!(KRAKEN_LOGGER, "📡 Trade subscription request: {:?}", sub);
+                                    },
+                                    Ok(Response::Status(status)) => {
+                                        log_info!(KRAKEN_LOGGER, "📊 Status message received: {:?}", status);
+                                    },
                                     Ok(Response::HeartBeat(_)) => {
                                         // Handle heartbeat silently
                                     },

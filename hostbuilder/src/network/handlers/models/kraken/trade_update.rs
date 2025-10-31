@@ -201,7 +201,8 @@ impl TradeUpdate {
 
         match trades_result {
             Ok(_) => {
-                log_debug!(KRAKEN_LOGGER, "Added trades to postgres");
+                log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} trades to database and Redis - Exchange: {}, OrderBook: {}, Processing: {}μs", 
+                    trade_count, order_book.exchange, order_book.order_book_id, processing_time);
                 
                 // Log successful trade processing for each trade
                 for trade in self.data.iter() {
@@ -218,7 +219,8 @@ impl TradeUpdate {
                 }
             }
             Err(e) => {
-                log_error!(KRAKEN_LOGGER, "Failed to add trades to postgres: {}", e);
+                log_error!(KRAKEN_LOGGER, "❌ Failed to persist {} trades to database - Exchange: {}, OrderBook: {}, Error: {}", 
+                    trade_count, order_book.exchange, order_book.order_book_id, e);
                 
                 // Log failed trade processing for each trade
                 for trade in self.data.iter() {

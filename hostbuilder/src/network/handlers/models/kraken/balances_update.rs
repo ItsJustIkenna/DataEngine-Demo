@@ -79,6 +79,8 @@ impl BalanceUpdate {
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook
     ) -> Result<()> {
+        let start_time = Instant::now();
+        
         // Reduce retry attempts for lower latency
         let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
 
@@ -96,11 +98,18 @@ impl BalanceUpdate {
         let mut balances = Vec::with_capacity(balances_count);
         let mut pipe = redis::pipe();
         pipe.atomic();
+        
+        // Log detailed balance update summary
+        let balance_summary: Vec<String> = self.data.iter()
+            .map(|b| format!("{}: {:.4}", b.asset, b.balance))
+            .collect();
+        
+        log_info!(KRAKEN_LOGGER, "💰 Processing {} balance updates: [{}]", 
+            balances_count, balance_summary.join(", "));
 
         // Process the balance snapshot data here
         // For example, you can log the balance data or perform any other operations needed
         for balance in self.data.iter() {
-            println!("Asset: {}, Balance: {}", balance.asset, balance.balance);
             let wallet = Wallet {
                 user_id: "default_user".to_string(),
                 symbol: balance.asset.clone(),
@@ -108,6 +117,11 @@ impl BalanceUpdate {
                 currency: balance.asset.clone(),
                 last_updated: chrono::Utc::now().timestamp(),
             };
+            
+            // Log individual balance for detailed tracking
+            log_info!(KRAKEN_LOGGER, "Balance update persisted to Redis - Asset: {}, Balance: {:.8}, Type: {}, Wallet: {}", 
+                balance.asset, balance.balance, balance.r#type, balance.wallet_type);
+            
             balances.push(wallet.clone());
         }
 
@@ -175,6 +189,18 @@ impl BalanceUpdate {
         } else {
             redis_future.await
         };
+
+        let processing_time = start_time.elapsed();
+        
+        match &redis_result {
+            Ok(_) => {
+                log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} balance updates to Redis in {:?}", 
+                    balances_count, processing_time);
+            }
+            Err(e) => {
+                log_error!(KRAKEN_LOGGER, "❌ Failed to persist balance updates to Redis after retries: {}", e);
+            }
+        }
 
         if let Err(e) = redis_result {
             log_error!(KRAKEN_LOGGER, "Failed to add trades to redis after retries: {}", e);

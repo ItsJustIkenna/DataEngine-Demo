@@ -83,7 +83,7 @@ impl KrakenLogger {
             metadata.insert("error".to_string(), error.clone());
         }
 
-        let level = if trade.error.is_some() { LogLevel::Error } else { LogLevel::Debug };
+        let level = if trade.error.is_some() { LogLevel::Error } else { LogLevel::Info };
         
         let mut entry = LogEntry::new(
             level,
