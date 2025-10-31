@@ -428,20 +428,20 @@ impl Level3Update {
                 log_error!(KRAKEN_LOGGER, "Failed to modify open buy orders in postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "✏️ Modified {} buy orders in database - Symbol: {}", 
-                    modified_buy_orders.len(), order_book.symbol);
+                    modify_orders.len(), order_book.symbol);
             }
             
             if let Err(e) = delete_result {
                 log_error!(KRAKEN_LOGGER, "Failed to delete open buy orders from postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "🗑️ Deleted {} buy orders from database - Symbol: {}", 
-                    deleted_buy_orders.len(), order_book.symbol);
+                    delete_orders.len(), order_book.symbol);
             }
             
             if let Err(e) = historical_result {
                 log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
             } else {
-                log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_buy_orders.len());
+                log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_orders.len());
             }
 
             Ok::<(), Error>(())
@@ -701,20 +701,20 @@ impl Level3Update {
                 log_error!(KRAKEN_LOGGER, "Failed to modify open sell orders in postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "✏️ Modified {} sell orders in database - Symbol: {}", 
-                    modified_sell_orders.len(), order_book.symbol);
+                    modify_orders.len(), order_book.symbol);
             }
             
             if let Err(e) = delete_result {
                 log_error!(KRAKEN_LOGGER, "Failed to delete open sell orders from postgres: {}", e);
             } else {
                 log_info!(KRAKEN_LOGGER, "🗑️ Deleted {} sell orders from database - Symbol: {}", 
-                    deleted_sell_orders.len(), order_book.symbol);
+                    delete_orders.len(), order_book.symbol);
             }
             
             if let Err(e) = historical_result {
                 log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
             } else {
-                log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_sell_orders.len());
+                log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_orders.len());
             }
 
             Ok::<(), Error>(())
