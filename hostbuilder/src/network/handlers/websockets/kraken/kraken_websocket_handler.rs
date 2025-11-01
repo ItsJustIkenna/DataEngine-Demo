@@ -285,8 +285,9 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                     Ok(Response::HeartBeat(_)) => {
                                         // Handle heartbeat silently
                                     },
-                                    Ok(_) => {
-                                        // Handle other message types silently
+                                    Ok(other) => {
+                                        // Log unhandled message types to see what we're missing
+                                        log_info!(KRAKEN_LOGGER, "📭 Unhandled message type: {:?}", other);
                                     },
                                     Err(e) => {
                                         log_error!(KRAKEN_LOGGER, "Failed to parse message: {}", e);
