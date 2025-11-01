@@ -103,6 +103,8 @@ impl KrakenWebSocketHandler {
 
         let (mut writer, reader) = ws_stream.split();
         
+        log_info!(KRAKEN_LOGGER, "📤 Sending subscription message to {}: {}", endpoint, subscribe_message);
+        
         writer
             .send(Message::Text(subscribe_message.to_string()))
             .await
@@ -185,6 +187,11 @@ impl EndpointHandler for KrakenWebSocketHandler {
 
                         match message {
                             Some(Ok(Message::Text(text))) => {
+                                // Log all incoming messages for debugging
+                                if text.contains("subscribe") || text.contains("status") || text.contains("error") {
+                                    log_info!(KRAKEN_LOGGER, "📨 Received message: {}", text);
+                                }
+                                
                                 // Use ultra-high performance SIMD-accelerated message parsing
                                 let message_bytes = text.as_bytes();
                                 
