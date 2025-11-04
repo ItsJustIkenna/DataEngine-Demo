@@ -394,17 +394,35 @@ jobs:
             }
             
             Write-Host "[DEBUG] Parsing Azure credentials JSON..."
-            $creds = $env:AZURE_CREDENTIALS | ConvertFrom-Json
+            Write-Host "[DEBUG] AZURE_CREDENTIALS length: $($env:AZURE_CREDENTIALS.Length) characters"
             
-            if (-not $creds.clientId -or -not $creds.clientSecret -or -not $creds.tenantId) {
-              throw "Invalid Azure credentials format. Missing required fields: clientId, clientSecret, or tenantId"
+            # Attempt to parse JSON with detailed error handling
+            try {
+              $creds = $env:AZURE_CREDENTIALS | ConvertFrom-Json -ErrorAction Stop
+            } catch {
+              Write-Error "JSON parsing failed: $($_.Exception.Message)"
+              Write-Error "Raw credential format (first 50 chars): $($env:AZURE_CREDENTIALS.Substring(0, [Math]::Min(50, $env:AZURE_CREDENTIALS.Length)))"
+              throw "Failed to parse AZURE_CREDENTIALS as valid JSON"
+            }
+            
+            # Validate required fields
+            $missingFields = @()
+            if (-not $creds.clientId) { $missingFields += "clientId" }
+            if (-not $creds.clientSecret) { $missingFields += "clientSecret" }
+            if (-not $creds.tenantId) { $missingFields += "tenantId" }
+            
+            if ($missingFields.Count -gt 0) {
+              throw "Invalid Azure credentials format. Missing required fields: $($missingFields -join ', ')"
             }
             
             Write-Host "[OK] Azure credentials parsed successfully"
           } catch {
             Write-Error "Failed to parse Azure credentials JSON: $($_.Exception.Message)"
+            Write-Error ""
             Write-Error "AZURE_CREDENTIALS must be valid JSON with format:"
             Write-Error '{"clientId":"xxx","clientSecret":"xxx","tenantId":"xxx"}'
+            Write-Error ""
+            Write-Error "Please check your GitHub repository secret 'AZURE_CREDENTIALS'"
             exit 1
           }
           
@@ -476,16 +494,52 @@ jobs:
         run: |
           Write-Host "[CLEANUP] Performing clean deployment..."
           
-          # Parallel cleanup operations
+          # Parallel cleanup operations with error handling
           $cleanupJobs = @()
-          $cleanupJobs += Start-Job { helm uninstall dataengine -n ${{ env.NAMESPACE }} --ignore-not-found --wait --timeout=${{ env.ROLLBACK_TIMEOUT }} }
-          $cleanupJobs += Start-Job { kubectl delete pvc --all -n ${{ env.NAMESPACE }} --ignore-not-found --timeout=60s }
-          $cleanupJobs += Start-Job { kubectl delete job -l app.kubernetes.io/component=migration -n ${{ env.NAMESPACE }} --ignore-not-found }
           
-          $cleanupJobs | Wait-Job | Receive-Job
-          $cleanupJobs | Remove-Job
+          # Helm uninstall
+          $cleanupJobs += Start-Job -Name "helm-uninstall" -ScriptBlock { 
+            helm uninstall dataengine -n $using:env:NAMESPACE --ignore-not-found --wait --timeout=$using:env:ROLLBACK_TIMEOUT 
+          }
           
-          Write-Host "[SUCCESS] Clean deployment completed"
+          # PVC deletion with reduced timeout (handles stuck PVCs gracefully)
+          $cleanupJobs += Start-Job -Name "pvc-delete" -ScriptBlock { 
+            kubectl delete pvc --all -n $using:env:NAMESPACE --ignore-not-found --timeout=30s 2>&1
+          }
+          
+          # Migration job cleanup
+          $cleanupJobs += Start-Job -Name "migration-cleanup" -ScriptBlock { 
+            kubectl delete job -l app.kubernetes.io/component=migration -n $using:env:NAMESPACE --ignore-not-found 
+          }
+          
+          # Wait for jobs with timeout
+          $completed = $cleanupJobs | Wait-Job -Timeout 90
+          
+          # Check results
+          foreach ($job in $cleanupJobs) {
+            $result = Receive-Job -Job $job
+            if ($job.State -eq 'Failed') {
+              Write-Warning "[CLEANUP] Job '$($job.Name)' failed, but continuing deployment"
+              Write-Warning "Error: $result"
+            } elseif ($job.State -eq 'Running') {
+              Write-Warning "[CLEANUP] Job '$($job.Name)' timed out after 90s, stopping and continuing"
+              Stop-Job -Job $job
+            } else {
+              Write-Host "[OK] Cleanup job '$($job.Name)' completed successfully"
+            }
+          }
+          
+          $cleanupJobs | Remove-Job -Force
+          
+          # Force delete stuck PVCs if any remain
+          $remainingPVCs = kubectl get pvc -n ${{ env.NAMESPACE }} --no-headers 2>$null
+          if ($remainingPVCs) {
+            Write-Warning "[CLEANUP] Some PVCs still exist, attempting force deletion..."
+            kubectl patch pvc -n ${{ env.NAMESPACE }} --all -p '{"metadata":{"finalizers":null}}' 2>$null
+            kubectl delete pvc --all -n ${{ env.NAMESPACE }} --force --grace-period=0 2>$null
+          }
+          
+          Write-Host "[SUCCESS] Clean deployment cleanup completed"
 
       - name: Setup Kubernetes Environment
         run: |
@@ -820,8 +874,19 @@ jobs:
           
           Write-Host "[METRICS] Recording deployment metrics..."
           
-          # Calculate deployment duration
-          $workflowStart = [DateTime]::Parse("${{ github.event.head_commit.timestamp }}")
+          # Calculate deployment duration with fallback for manual/workflow_dispatch runs
+          $workflowStartStr = "${{ github.event.head_commit.timestamp }}"
+          if ([string]::IsNullOrWhiteSpace($workflowStartStr)) {
+            Write-Host "[METRICS] No head_commit timestamp (manual run), using workflow start time"
+            $workflowStart = (Get-Date).AddMinutes(-5)  # Estimate 5 minutes ago
+          } else {
+            try {
+              $workflowStart = [DateTime]::Parse($workflowStartStr)
+            } catch {
+              Write-Warning "[METRICS] Failed to parse timestamp '$workflowStartStr', using current time"
+              $workflowStart = (Get-Date).AddMinutes(-5)
+            }
+          }
           $duration = ((Get-Date) - $workflowStart).TotalSeconds
           
           # Create metrics payload
