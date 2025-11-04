@@ -219,7 +219,10 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 // Fallback to standard parsing for non-critical messages
                                 match parse_message(&text) {
                                     Ok(Response::Level3Snapshot(snapshot)) => {
-                                        log_debug!(KRAKEN_LOGGER, "Received level 3 snapshot");
+                                        log_info!(KRAKEN_LOGGER, "📥 Received Level3 snapshot for {} with {} bids and {} asks", 
+                                            snapshot.data[0].symbol, 
+                                            snapshot.data[0].bids.as_ref().map_or(0, |b| b.len()),
+                                            snapshot.data[0].asks.as_ref().map_or(0, |a| a.len()));
                                         if let Some(order_book) = self.order_books.get(&snapshot.data[0].symbol) {
                                             if let Err(e) = snapshot.process_snapshot(
                                                 Arc::clone(&self.redis_pool), 
@@ -233,7 +236,10 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         }
                                     },
                                     Ok(Response::Level3Update(update)) => {
-                                        log_debug!(KRAKEN_LOGGER, "Received level 3 update");
+                                        log_info!(KRAKEN_LOGGER, "📥 Received Level3 update for {} - {} bids, {} asks changed", 
+                                            update.data[0].symbol,
+                                            update.data[0].bids.as_ref().map_or(0, |b| b.len()),
+                                            update.data[0].asks.as_ref().map_or(0, |a| a.len()));
                                         if let Some(order_book) = self.order_books.get(&update.data[0].symbol) {
                                             if let Err(e) = update.process_update(
                                                 Arc::clone(&self.redis_pool), 
