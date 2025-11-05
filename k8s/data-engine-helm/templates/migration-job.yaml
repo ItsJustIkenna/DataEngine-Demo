@@ -10,7 +10,7 @@ metadata:
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
     "helm.sh/hook-delete-policy": before-hook-creation
-    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-weight": "5"
 spec:
   backoffLimit: {{ .Values.migration.backoffLimit }}
   template:
@@ -28,6 +28,18 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
+        - name: wait-for-secrets
+          image: bitnami/kubectl:latest
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for secrets to be created..."
+              until kubectl get secret {{ include "data-engine.fullname" . }}-database -n {{ .Release.Namespace }} 2>/dev/null; do
+                echo "Secret not found, waiting..."
+                sleep 2
+              done
+              echo "Secrets are ready!"
         - name: wait-for-postgres
           image: {{ .Values.customPostgresql.image.registry }}/{{ .Values.customPostgresql.image.repository }}:{{ .Values.customPostgresql.image.tag }}
           command:
