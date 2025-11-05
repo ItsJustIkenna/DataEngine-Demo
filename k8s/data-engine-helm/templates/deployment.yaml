@@ -58,6 +58,68 @@ spec:
       runtimeClassName: performance
       {{- end }}
       initContainers:
+        {{- if .Values.migration.enabled }}
+        - name: run-migrations
+          image: "{{ .Values.migration.image.repository }}:{{ .Values.migration.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.migration.image.pullPolicy }}
+          env:
+            - name: POSTGRES_HOST
+              value: {{ include "data-engine.postgresql.host" . }}
+            - name: POSTGRES_PORT
+              {{- if .Values.customPostgresql.enabled }}
+              value: "5432"
+              {{- else }}
+              value: {{ .Values.externalDatabase.port | quote }}
+              {{- end }}
+            - name: POSTGRES_DB
+              {{- if .Values.customPostgresql.enabled }}
+              value: {{ .Values.customPostgresql.auth.database }}
+              {{- else }}
+              value: {{ .Values.externalDatabase.database }}
+              {{- end }}
+            - name: POSTGRES_USERNAME
+              {{- if .Values.customPostgresql.enabled }}
+              value: {{ .Values.customPostgresql.auth.username }}
+              {{- else }}
+              value: {{ .Values.externalDatabase.username }}
+              {{- end }}
+            - name: POSTGRES_PASSWORD
+              {{- if .Values.customPostgresql.enabled }}
+                {{- if .Values.customPostgresql.auth.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.customPostgresql.auth.existingSecret }}
+                  key: password
+                {{- else }}
+              value: {{ .Values.customPostgresql.auth.password | quote }}
+                {{- end }}
+              {{- else if .Values.externalDatabase.enabled }}
+                {{- if .Values.externalDatabase.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: password
+                {{- else }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}-database
+                  key: password
+                {{- end }}
+              {{- end }}
+            - name: DATABASE_URL
+              {{- if .Values.customPostgresql.enabled }}
+              value: "postgres://{{ .Values.customPostgresql.auth.username }}:{{ .Values.customPostgresql.auth.password }}@{{ include "data-engine.postgresql.host" . }}:5432/{{ .Values.customPostgresql.auth.database }}"
+              {{- else if .Values.externalDatabase.enabled }}
+              value: "postgres://{{ .Values.externalDatabase.username }}:{{ .Values.secrets.database.password }}@{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}"
+              {{- end }}
+            {{- with .Values.migration.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.migration.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
         - name: wait-for-dependencies
           image: busybox:1.35
           command: ['sh', '-c']

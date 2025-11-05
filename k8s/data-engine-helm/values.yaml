@@ -28,6 +28,7 @@ image:
 # Database Migration Configuration
 migration:
   enabled: true
+  runAsJob: false  # Set to true to run as standalone Job instead of initContainer
   image:
     repository: ghcr.io/nwagbara-group-llc/databaseschema
     tag: "latest"
