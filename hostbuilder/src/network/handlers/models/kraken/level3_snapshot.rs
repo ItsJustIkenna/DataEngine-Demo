@@ -27,7 +27,7 @@ use tokio_retry::{
     Retry
 };
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
-use crate::{log_debug, log_warn, log_error};
+use crate::{log_debug, log_info, log_warn, log_error};
 use std::time::Instant;
 
 use crate::network::handlers::logging::{KRAKEN_WEBSOCKET_LOGGER, KRAKEN_SNAPSHOT_LOGGER, Level3SnapshotLog, SnapshotProcessingLog};
