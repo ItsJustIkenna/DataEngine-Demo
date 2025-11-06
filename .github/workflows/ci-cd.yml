@@ -452,7 +452,8 @@ jobs:
           $secretNames = @(
             "POSTGRES-HOST","POSTGRES-PORT","POSTGRES-USER","POSTGRES-PASSWORD","POSTGRES-DB",
             "REDIS-HOST","REDIS-PORT","REDIS-PASSWORD", 
-            "KRAKEN-API-KEY","KRAKEN-SECRET-KEY"
+            "KRAKEN-API-KEY","KRAKEN-SECRET-KEY",
+            "ELASTIC-CLOUD-ENDPOINT","ELASTIC-CLOUD-USERNAME","ELASTIC-CLOUD-PASSWORD"
           )
           
           Write-Host "[INFO] Fetching $($secretNames.Count) secrets from Key Vault..."
@@ -728,6 +729,10 @@ jobs:
             "--set-string", "secrets.redis.url=redis://:$($env:REDIS_PASSWORD)@$($env:REDIS_HOST):$($env:REDIS_PORT)",
             "--set-string", "secrets.api_keys.kraken_api_key=$($env:KRAKEN_API_KEY)",
             "--set-string", "secrets.api_keys.kraken_secret_key=$($env:KRAKEN_SECRET_KEY)",
+            # Elasticsearch logging credentials
+            "--set-string", "secrets.elasticsearch.endpoint=$($env:ELASTIC_CLOUD_ENDPOINT)",
+            "--set-string", "secrets.elasticsearch.username=$($env:ELASTIC_CLOUD_USERNAME)",
+            "--set-string", "secrets.elasticsearch.password=$($env:ELASTIC_CLOUD_PASSWORD)",
             # External database settings using runtime variables
             "--set-string", "externalDatabase.host=$($env:POSTGRES_HOST)",
             "--set", "externalDatabase.port=$($env:POSTGRES_PORT)",

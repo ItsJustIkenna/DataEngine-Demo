@@ -130,6 +130,12 @@ secrets:
     kraken_api_key: ""  # Triggers secret lookup
     kraken_secret_key: ""  # Triggers secret lookup
     # Set via: --set secrets.api_keys.kraken_api_key="$KRAKEN_API_KEY" --set secrets.api_keys.kraken_secret_key="$KRAKEN_SECRET"
+  
+  # Elasticsearch logging configuration
+  elasticsearch:
+    endpoint: ""  # Set via: --set-string secrets.elasticsearch.endpoint="https://..."
+    username: ""  # Set via: --set-string secrets.elasticsearch.username="elastic"
+    password: ""  # Set via: --set-string secrets.elasticsearch.password="..."
 
 # Disable monitoring components for resource efficiency
 grafana:

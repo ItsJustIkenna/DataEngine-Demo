@@ -78,7 +78,7 @@ impl Level3Snapshot {
         let ask_connection = ask_connection_result.expect("Failed to create redis connection");
 
         if self.data.is_empty() {
-            log_debug!(KRAKEN_LOGGER, "Snapshot data is empty");
+            log_info!(KRAKEN_LOGGER, "⚠️  Level3 snapshot has NO data - empty snapshot received");
             
             // Log empty snapshot
             let log_entry = SnapshotProcessingLog {
@@ -100,7 +100,7 @@ impl Level3Snapshot {
         let snapshot_data = &self.data[0];
 
         if snapshot_data.bids.is_empty() && snapshot_data.asks.is_empty() {
-            log_debug!(KRAKEN_LOGGER, "Snapshot data has empty bids and asks");
+            log_info!(KRAKEN_LOGGER, "⚠️  Level3 snapshot for {} has EMPTY bids and asks - no orderbook data received", symbol);
             return Ok(());
         }
         
@@ -216,13 +216,13 @@ impl Level3Snapshot {
                 if let Err(e) = buy_result {
                     log_error!(KRAKEN_LOGGER, "Failed to add buy orders to postgres: {}", e);
                 } else {
-                    log_debug!(KRAKEN_LOGGER, "Added buy orders to postgres");
+                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} buy orders to database", buy_orders.len());
                 }
                 
                 if let Err(e) = historical_result {
                     log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
                 } else {
-                    log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
+                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} historical orders to database", historical_orders.len());
                 }
             }
         };
@@ -329,15 +329,15 @@ impl Level3Snapshot {
                 let (sell_result, historical_result) = tokio::join!(create_sell_orders_future, create_historical_future);
                 
                 if let Err(e) = sell_result {
-                    log_error!(KRAKEN_LOGGER, "Failed to add sell orders to postgres: {}", e);
+                    log_error!(KRAKEN_LOGGER, "Failed to add open sell orders to postgres: {}", e);
                 } else {
-                    log_debug!(KRAKEN_LOGGER, "Added sell orders to postgres");
+                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} sell orders to database", sell_orders.len());
                 }
                 
                 if let Err(e) = historical_result {
                     log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
                 } else {
-                    log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
+                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} historical orders to database", historical_orders.len());
                 }
             }
         };
@@ -447,7 +447,7 @@ impl Level3Snapshot {
                 processing_error = Some(format!("Postgres error: {}", e));
             }
         } else {
-            log_debug!(KRAKEN_LOGGER, "Updated order book in postgres");
+            log_info!(KRAKEN_LOGGER, "✅ Successfully updated orderbook in postgres for {}", symbol);
         }
 
         // Log snapshot processing completion
