@@ -62,6 +62,13 @@ spec:
         - name: run-migrations
           image: "{{ .Values.migration.image.repository }}:{{ .Values.migration.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.migration.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0  # Run as root to access files in the image
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: POSTGRES_HOST
               value: {{ include "data-engine.postgresql.host" . }}
