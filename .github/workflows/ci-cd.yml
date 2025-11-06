@@ -863,21 +863,19 @@ jobs:
           if ($environment -eq "database-only") {
             Write-Host "[VERIFY] Checking database-only deployment..."
             
-            # Check if migration job completed successfully
-            $migrationJob = kubectl get jobs -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o name 2>$null
+            # Migrations now run as initContainers, not separate jobs
+            # Verify pods are running (which means migrations succeeded)
+            Write-Host "[VERIFY] Waiting for pods to be ready (migrations run as initContainers)..."
             
-            if ($migrationJob) {
-              kubectl wait --for=condition=complete $migrationJob -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
-              Write-Host "[SUCCESS] Database migration completed"
+            kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
+            
+            $podCount = kubectl get pods -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --field-selector=status.phase=Running -o name 2>$null | Measure-Object | Select-Object -ExpandProperty Count
+            
+            if ($podCount -gt 0) {
+              Write-Host "[SUCCESS] $podCount pod(s) running (migrations completed successfully)"
             } else {
-              Write-Host "[INFO] No migration job found (may not be needed)"
-            }
-            
-            # Verify database connectivity (if migration pod exists)
-            $migrationPod = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[0].metadata.name}' --field-selector=status.phase=Succeeded 2>$null
-            
-            if ($migrationPod) {
-              Write-Host "[SUCCESS] Database migration pod found: $migrationPod"
+              Write-Host "[ERROR] No running pods found"
+              exit 1
             }
             
             Write-Host "[SUCCESS] Database-only deployment verification completed"
