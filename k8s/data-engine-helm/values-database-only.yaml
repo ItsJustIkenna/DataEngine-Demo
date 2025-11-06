@@ -67,7 +67,7 @@ config:
       enabled: true
       api_url: "https://api.kraken.com"
       websocket_url: "wss://ws.kraken.com"
-      require_auth: false
+      require_auth: true
       websocket_only: true
       websocket_token: 'https://api.kraken.com/0/private/GetWebSocketsToken'
       symbols:
