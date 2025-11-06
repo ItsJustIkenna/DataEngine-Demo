@@ -208,21 +208,25 @@ impl Level3Snapshot {
                 }                    
 
                 // Execute database operations concurrently
+                // Capture counts before moving ownership of the Vecs into the futures
+                let buy_count = buy_orders.len();
+                let historical_count = historical_orders.len();
+
                 let create_buy_orders_future = create_open_buy_orders(postgres_pool.clone(), buy_orders);
                 let create_historical_future = create_historical_orders(postgres_pool.clone(), historical_orders);
-                
+
                 let (buy_result, historical_result) = tokio::join!(create_buy_orders_future, create_historical_future);
-                
+
                 if let Err(e) = buy_result {
                     log_error!(KRAKEN_LOGGER, "Failed to add buy orders to postgres: {}", e);
                 } else {
-                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} buy orders to database", buy_orders.len());
+                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} buy orders to database", buy_count);
                 }
-                
+
                 if let Err(e) = historical_result {
                     log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
                 } else {
-                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} historical orders to database", historical_orders.len());
+                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} historical orders to database", historical_count);
                 }
             }
         };
@@ -323,21 +327,25 @@ impl Level3Snapshot {
                 }  
 
                 // Execute database operations concurrently
+                // Capture counts before moving ownership of the Vecs into the futures
+                let sell_count = sell_orders.len();
+                let historical_count = historical_orders.len();
+
                 let create_sell_orders_future = create_open_sell_orders(postgres_pool.clone(), sell_orders);
                 let create_historical_future = create_historical_orders(postgres_pool.clone(), historical_orders);
-                
+
                 let (sell_result, historical_result) = tokio::join!(create_sell_orders_future, create_historical_future);
-                
+
                 if let Err(e) = sell_result {
                     log_error!(KRAKEN_LOGGER, "Failed to add open sell orders to postgres: {}", e);
                 } else {
-                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} sell orders to database", sell_orders.len());
+                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} sell orders to database", sell_count);
                 }
-                
+
                 if let Err(e) = historical_result {
                     log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
                 } else {
-                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} historical orders to database", historical_orders.len());
+                    log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} historical orders to database", historical_count);
                 }
             }
         };
