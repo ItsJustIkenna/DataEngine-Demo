@@ -102,7 +102,7 @@ config:
 # Enable EXTERNAL database (TimescaleDB Cloud)
 externalDatabase:
   enabled: true
-  useCompleteUrl: false
+  useCompleteUrl: true  # Use DATABASE_URL from Secret (more secure than building in pod spec)
 
 # Enable EXTERNAL Redis
 externalRedis:
