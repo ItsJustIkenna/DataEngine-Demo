@@ -655,6 +655,41 @@ jobs:
           
           $deployStart = Get-Date
           
+          # Check for and clean up stuck Helm releases before deploying
+          Write-Host "[PRE-DEPLOY] Checking for stuck Helm releases..."
+          try {
+            $helmListJson = helm list -n ${{ env.NAMESPACE }} -a --output json 2>&1
+            if ($LASTEXITCODE -eq 0 -and $helmListJson) {
+              $helmReleases = $helmListJson | ConvertFrom-Json
+              $stuckRelease = $helmReleases | Where-Object { 
+                $_.name -eq $releaseName -and 
+                ($_.status -eq "pending-install" -or $_.status -eq "pending-upgrade" -or $_.status -eq "pending-rollback") 
+              }
+              
+              if ($stuckRelease) {
+                Write-Host "[WARNING] Found stuck release: $($stuckRelease.name)"
+                Write-Host "[WARNING] Status: $($stuckRelease.status)"
+                Write-Host "[WARNING] Last updated: $($stuckRelease.updated)"
+                Write-Host "[FIX] Uninstalling stuck release to allow fresh deployment..."
+                
+                helm uninstall $releaseName -n ${{ env.NAMESPACE }} --wait --timeout 3m 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                  Write-Host "[SUCCESS] Stuck release removed successfully"
+                  Start-Sleep -Seconds 5
+                } else {
+                  Write-Host "[WARNING] Uninstall had issues but continuing..."
+                }
+              } else {
+                Write-Host "[OK] No stuck releases found"
+              }
+            } else {
+              Write-Host "[INFO] No existing releases or namespace not found (will be created)"
+            }
+          } catch {
+            Write-Host "[INFO] Could not check for stuck releases: $_"
+            Write-Host "[INFO] Continuing with deployment..."
+          }
+          
           # Deploy using the appropriate values file with minimal runtime overrides
           Write-Host "[DEPLOY] Starting Helm deployment of $releaseName..."
           
