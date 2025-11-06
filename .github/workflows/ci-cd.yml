@@ -53,6 +53,7 @@ jobs:
   validate:
     name: Validate & Test
     runs-on: [self-hosted, windows, x64]
+    timeout-minutes: 60
     outputs:
       tests-passed: ${{ steps.test-result.outputs.passed }}
     steps:
@@ -685,7 +686,11 @@ jobs:
             # Use --set-string for secrets with runtime PowerShell variables to prevent placeholder issues
             "--set-string", "secrets.database.username=$($env:POSTGRES_USER)",
             "--set-string", "secrets.database.password=$($env:POSTGRES_PASSWORD)",
+            # Build complete DATABASE_URL for security (password not exposed in pod spec)
+            "--set-string", "secrets.database.url=postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)",
             "--set-string", "secrets.redis.password=$($env:REDIS_PASSWORD)",
+            # Build complete REDIS_URL for security
+            "--set-string", "secrets.redis.url=redis://:$($env:REDIS_PASSWORD)@$($env:REDIS_HOST):$($env:REDIS_PORT)",
             "--set-string", "secrets.api_keys.kraken_api_key=$($env:KRAKEN_API_KEY)",
             "--set-string", "secrets.api_keys.kraken_secret_key=$($env:KRAKEN_SECRET_KEY)",
             # External database settings using runtime variables

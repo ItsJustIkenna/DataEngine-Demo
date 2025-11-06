@@ -110,7 +110,10 @@ spec:
               {{- if .Values.customPostgresql.enabled }}
               value: "postgres://{{ .Values.customPostgresql.auth.username }}:{{ .Values.customPostgresql.auth.password }}@{{ include "data-engine.postgresql.host" . }}:5432/{{ .Values.customPostgresql.auth.database }}"
               {{- else if .Values.externalDatabase.enabled }}
-              value: "postgres://{{ .Values.externalDatabase.username }}:{{ .Values.secrets.database.password }}@{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}"
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}-database
+                  key: url
               {{- end }}
             {{- with .Values.migration.env }}
             {{- toYaml . | nindent 12 }}
@@ -216,9 +219,15 @@ spec:
                   name: {{ include "data-engine.fullname" . }}-database
                   key: url
             {{- else }}
-            # Build DATABASE_URL using Helm templating (not shell variable expansion)
-            - name: DATABASE_URL
-              value: "postgresql://{{ .Values.externalDatabase.username }}:{{ .Values.secrets.database.password }}@{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}"
+            # Individual database components - app builds DATABASE_URL internally for security
+            - name: POSTGRES_HOST
+              value: {{ .Values.externalDatabase.host | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.externalDatabase.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.externalDatabase.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.externalDatabase.username | quote }}
             - name: DATABASE_PASSWORD
               {{- if .Values.externalDatabase.existingSecret }}
               valueFrom:
@@ -237,18 +246,24 @@ spec:
             # Redis configuration
             {{- if .Values.customRedis.enabled }}
             {{- if .Values.customRedis.auth.enabled }}
-            - name: REDIS_URL
-              value: "redis://:{{ .Values.customRedis.auth.password }}@{{ include "data-engine.redis.fullname" . }}-master:6379"
+            - name: REDIS_HOST
+              value: {{ include "data-engine.redis.fullname" . }}-master
+            - name: REDIS_PORT
+              value: "6379"
             - name: REDIS_PASSWORD
               value: {{ .Values.customRedis.auth.password | quote }}
             {{- else }}
-            - name: REDIS_URL
-              value: "redis://{{ include "data-engine.redis.fullname" . }}-master:6379"
+            - name: REDIS_HOST
+              value: {{ include "data-engine.redis.fullname" . }}-master
+            - name: REDIS_PORT
+              value: "6379"
             {{- end }}
             {{- else if .Values.externalRedis.enabled }}
-            # Build REDIS_URL using Helm templating (not shell variable expansion)
-            - name: REDIS_URL
-              value: "redis://:{{ .Values.secrets.redis.password }}@{{ .Values.externalRedis.host }}:{{ .Values.externalRedis.port }}"
+            # Individual Redis components - app builds REDIS_URL internally for security
+            - name: REDIS_HOST
+              value: {{ .Values.externalRedis.host | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.externalRedis.port | quote }}
             - name: REDIS_PASSWORD
               {{- if .Values.externalRedis.existingSecret }}
               valueFrom:
@@ -261,6 +276,11 @@ spec:
                   name: {{ include "data-engine.fullname" . }}-redis
                   key: password
               {{- end }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "data-engine.fullname" . }}-redis
+                  key: url
             {{- end }}
             
             # API Keys - Support both values file and command line --set
