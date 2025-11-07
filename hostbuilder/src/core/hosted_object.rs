@@ -164,7 +164,7 @@ impl HostedObjectTrait for HostedObject {
                     log_error!(MAIN_LOGGER, "Failed to initialize exchange {}: {}", exchange.name, e);
                     continue;
                 }
-            };</anrintln>
+            };
 
             log_info!(
                 MAIN_LOGGER,
