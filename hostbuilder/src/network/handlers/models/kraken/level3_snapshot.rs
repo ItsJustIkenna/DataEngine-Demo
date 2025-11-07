@@ -54,32 +54,14 @@ impl Level3Snapshot {
 
     pub async fn process_snapshot(
         &self,
-        redis_pool: Arc<deadpool_redis::Pool>,
+        _redis_pool: Arc<deadpool_redis::Pool>, // Unused - Redis caching removed
         postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook,
     ) -> Result<()> {
-        eprintln!("DEBUG: process_snapshot - Entry point");
+        eprintln!("DEBUG: process_snapshot - Entry point (Redis caching disabled)");
         let start = Instant::now();
-        
-        // Reduce retry attempts for lower latency
-        let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
-        
-        eprintln!("DEBUG: process_snapshot - About to fetch 3 Redis connections concurrently");
-        // Fetch connections concurrently
-        let book_connection_future = get_redis_connection(&redis_pool);
-        let bid_connection_future = get_redis_connection(&redis_pool);
-        let ask_connection_future = get_redis_connection(&redis_pool);
-        
-        let (book_connection_result, bid_connection_result, ask_connection_result) = 
-            tokio::join!(book_connection_future, bid_connection_future, ask_connection_future);
-        
-        eprintln!("DEBUG: process_snapshot - Redis connections acquired");
-        let book_connection = book_connection_result.expect("Failed to create redis connection");
-        let bid_connection = bid_connection_result.expect("Failed to create redis connection");
-        let ask_connection = ask_connection_result.expect("Failed to create redis connection");
-        eprintln!("DEBUG: process_snapshot - All 3 Redis connections unwrapped successfully");
 
         if self.data.is_empty() {
             log_info!(KRAKEN_LOGGER, "⚠️  Level3 snapshot has NO data - empty snapshot received");
@@ -108,9 +90,7 @@ impl Level3Snapshot {
             return Ok(());
         }
         
-        // Pre-allocate orders collection with appropriate capacity
-        let total_order_count = snapshot_data.bids.len() + snapshot_data.asks.len();
-        let orders = Arc::new(Mutex::new(Vec::with_capacity(total_order_count)));
+        eprintln!("DEBUG: process_snapshot - Processing {} bids and {} asks", snapshot_data.bids.len(), snapshot_data.asks.len());
         
         let mut open_bid_volume = BigDecimal::zero();
         let mut open_ask_volume = BigDecimal::zero();
@@ -118,14 +98,12 @@ impl Level3Snapshot {
         // Process bids concurrently
         let bid_futures = async {
             if !snapshot_data.bids.is_empty() {
-                let orders = Arc::clone(&orders);
+                eprintln!("DEBUG: process_snapshot - Processing bids");
                 
                 // Pre-allocate all collections with appropriate capacity
                 let bid_count = snapshot_data.bids.len();
                 let mut buy_orders = Vec::with_capacity(bid_count);
                 let mut historical_orders = Vec::with_capacity(bid_count);
-                let mut pipe = redis::pipe();
-                pipe.atomic();
                 
                 // Process bids and collect them in pre-allocated vectors
                 for bid in snapshot_data.bids.iter() {
@@ -135,16 +113,6 @@ impl Level3Snapshot {
                     let timestamp = bid.timestamp;
 
                     open_bid_volume += buy_quantity;
-
-                    let message = Order {
-                        unique_id: unique_id.clone(),
-                        symbol: order_book.symbol.clone(),
-                        exchange: order_book.exchange.clone(),
-                        price_level: price_level.to_f32().unwrap_or(0.0),
-                        quantity: buy_quantity.to_f32().unwrap_or(0.0),
-                        side: SIDE_BUY.to_string(),
-                        event: EVENT_NEW.to_string(),
-                    };
 
                     let order = NewOpenBuyOrder::new(
                         timestamp.clone(),
@@ -174,45 +142,13 @@ impl Level3Snapshot {
                         order_book.security_id,
                     );
 
-                    // Prepare key once for reuse
-                    let key = format!("buy_order:{}", order.unique_id);
-                    
-                    pipe.cmd("HSET")
-                        .arg(key)
-                        .arg("symbol").arg(&order.symbol)
-                        .arg("exchange").arg(&order.exchange)
-                        .arg("security_id").arg(&order.security_id.to_string())
-                        .arg("exchange_id").arg(&order.exchange_id.to_string())
-                        .arg("buy_order_book_id").arg(&order.buy_order_book_id.to_string())
-                        .arg("unique_id").arg(&order.unique_id)
-                        .arg("price_level").arg(&order.price_level.to_string())
-                        .arg("buy_quantity").arg(&order.buy_quantity.to_string());
-
                     buy_orders.push(order);
-                    orders.lock().await.push(message);
                     historical_orders.push(historical_order);
                 }
 
-                // Execute Redis pipe
-                let result = Retry::spawn(retry_strategy.clone(), || async {
-                    match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
-                        Ok(_) => {
-                            log_debug!(KRAKEN_LOGGER, "Added buy orders to redis");
-                            Ok(())
-                        },
-                        Err(e) => {
-                            log_warn!(KRAKEN_LOGGER, "Failed to add buy orders to redis: {}", e);
-                            Err(e)
-                        },
-                    }
-                }).await;
-
-                if let Err(e) = result {
-                    log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
-                }                    
-
+                eprintln!("DEBUG: process_snapshot - About to persist {} buy orders to database", buy_orders.len());
+                
                 // Execute database operations concurrently
-                // Capture counts before moving ownership of the Vecs into the futures
                 let buy_count = buy_orders.len();
                 let historical_count = historical_orders.len();
 
@@ -238,14 +174,12 @@ impl Level3Snapshot {
         // Process asks concurrently
         let ask_futures = async {
             if !snapshot_data.asks.is_empty() {
-                let orders = Arc::clone(&orders);
+                eprintln!("DEBUG: process_snapshot - Processing asks");
                 
                 // Pre-allocate all collections with appropriate capacity
                 let ask_count = snapshot_data.asks.len();
                 let mut sell_orders = Vec::with_capacity(ask_count);
                 let mut historical_orders = Vec::with_capacity(ask_count);
-                let mut pipe = redis::pipe();
-                pipe.atomic();
                 
                 for ask in snapshot_data.asks.iter() {
                     let price_level = &ask.limit_price;
@@ -254,16 +188,6 @@ impl Level3Snapshot {
                     let timestamp = ask.timestamp;
 
                     open_ask_volume += sell_quantity;
-
-                    let message = Order {
-                        unique_id: ask.order_id.clone(),
-                        symbol: order_book.symbol.clone(),
-                        exchange: order_book.exchange.clone(),
-                        price_level: price_level.to_f32().unwrap_or(0.0),
-                        quantity: sell_quantity.to_f32().unwrap_or(0.0),
-                        side: SIDE_SELL.to_string(),
-                        event: EVENT_NEW.to_string(),
-                    };
 
                     let order = NewOpenSellOrder::new(
                         timestamp.clone(),
@@ -293,45 +217,13 @@ impl Level3Snapshot {
                         order_book.security_id,
                     );
 
-                    // Prepare key once for reuse
-                    let key = format!("sell_order:{}", order.unique_id);
-                    
-                    pipe.cmd("HSET")
-                        .arg(key)
-                        .arg("symbol").arg(&order.symbol)
-                        .arg("exchange").arg(&order.exchange)
-                        .arg("security_id").arg(&order.security_id.to_string())
-                        .arg("exchange_id").arg(&order.exchange_id.to_string())
-                        .arg("sell_order_book_id").arg(&order.sell_order_book_id.to_string())
-                        .arg("unique_id").arg(&order.unique_id)
-                        .arg("price_level").arg(&order.price_level.to_string())
-                        .arg("sell_quantity").arg(&order.sell_quantity.to_string());
-
                     sell_orders.push(order);
-                    orders.lock().await.push(message);
                     historical_orders.push(historical_order);
                 }
 
-                // Execute Redis pipe
-                let result = Retry::spawn(retry_strategy.clone(), || async {
-                    match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
-                        Ok(_) => {
-                            log_debug!(KRAKEN_LOGGER, "Added sell orders to redis");
-                            Ok(())
-                        },
-                        Err(e) => {
-                            log_warn!(KRAKEN_LOGGER, "Failed to add sell orders to redis: {}", e);
-                            Err(e)
-                        },
-                    }
-                }).await;
-
-                if let Err(e) = result {
-                    log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
-                }  
-
+                eprintln!("DEBUG: process_snapshot - About to persist {} sell orders to database", sell_orders.len());
+                
                 // Execute database operations concurrently
-                // Capture counts before moving ownership of the Vecs into the futures
                 let sell_count = sell_orders.len();
                 let historical_count = historical_orders.len();
 
@@ -406,59 +298,26 @@ impl Level3Snapshot {
         let total_volume = open_bid_volume.clone() + open_ask_volume.clone();
         log_debug!(KRAKEN_LOGGER, "Total volume: {}", total_volume);
 
-        // Update orderbook in Redis and Postgres concurrently with publishing
-        let orderbook_key = format!("order_book:{}", order_book.order_book_id);
+        eprintln!("DEBUG: process_snapshot - About to update orderbook in postgres");
         
-        let redis_future = Retry::spawn(retry_strategy.clone(), || async {
-            match cmd("HSET")
-                .arg(&orderbook_key)
-                .arg("created_at").arg(&order_book.created_at.to_string())
-                .arg("updated_at").arg(&order_book.updated_at.expect("").to_string())
-                .arg("symbol").arg(&order_book.symbol)
-                .arg("exchange").arg(&order_book.exchange)
-                .arg("security_id").arg(&order_book.security_id.to_string())
-                .arg("exchange_id").arg(&order_book.exchange_id.to_string())
-                .arg("buy_order_book_id").arg(&order_book.buy_order_book_id.to_string())
-                .arg("sell_order_book_id").arg(&order_book.sell_order_book_id.to_string())
-                .arg("total_volume").arg(&total_volume.to_string())
-                .query_async::<_, ()>(&mut book_connection.clone())
-                .await
-            {
-                Ok(_) => {
-                    log_debug!(KRAKEN_LOGGER, "Added order book to redis");
-                    Ok(())
-                }
-                Err(e) => {
-                    log_warn!(KRAKEN_LOGGER, "Failed to add order book to redis: {}", e);
-                    Err(e)
-                }
-            }
-        });
-        
+        // Update orderbook in Postgres (Redis caching removed)
         let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume.clone());
         
-        // Wait for all operations (conditionally including publish_future)
-        let (redis_result, postgres_result) = if let Some(pub_future) = publish_future {
-            let (_, redis_result, postgres_result) = 
-                tokio::join!(pub_future, redis_future, postgres_future);
-            (redis_result, postgres_result)
+        // Wait for database update (and optional publish)
+        let postgres_result = if let Some(pub_future) = publish_future {
+            let (_, postgres_result) = 
+                tokio::join!(pub_future, postgres_future);
+            postgres_result
         } else {
-            let (redis_result, postgres_result) = 
-                tokio::join!(redis_future, postgres_future);
-            (redis_result, postgres_result)
+            postgres_future.await
         };
         
-        if let Err(e) = redis_result {
-            log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
-            processing_error = Some(format!("Redis error: {}", e));
-        }
-        
         if let Err(e) = postgres_result {
+            eprintln!("DEBUG: process_snapshot - Failed to update orderbook: {}", e);
             log_error!(KRAKEN_LOGGER, "Failed to update order book in postgres: {}", e);
-            if processing_error.is_none() {
-                processing_error = Some(format!("Postgres error: {}", e));
-            }
+            processing_error = Some(format!("Postgres error: {}", e));
         } else {
+            eprintln!("DEBUG: process_snapshot - Successfully updated orderbook in postgres");
             log_info!(KRAKEN_LOGGER, "✅ Successfully updated orderbook in postgres for {}", symbol);
         }
 
