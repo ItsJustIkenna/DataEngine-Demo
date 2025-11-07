@@ -11,7 +11,7 @@ use databaseschema::{
 use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, PublishRequest, Trade, Trades};
 use publisher::Publisher;
-use redis_utils::get_redis_connection;
+// Redis imports removed - no longer using Redis for caching
 use serde::{
     Deserialize,
     Serialize
@@ -47,7 +47,6 @@ impl TradeUpdate {
 
     pub async fn process_update(
         &self,
-        redis_pool: Arc<deadpool_redis::Pool>,
         postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
@@ -57,10 +56,6 @@ impl TradeUpdate {
         
         // Reduce retry attempts for lower latency
         let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
-        
-        // Get Redis connection
-        let trade_connection_future = get_redis_connection(&redis_pool);
-        let trade_connection = trade_connection_future.await.expect("Failed to create redis connection");
 
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "Trade data is empty");
@@ -71,8 +66,6 @@ impl TradeUpdate {
         let trade_count = self.data.len();
         let mut trades = Vec::with_capacity(trade_count);
         let mut trade_messages = Vec::with_capacity(trade_count);
-        let mut pipe = redis::pipe();
-        pipe.atomic();
 
         // Process all data first before async operations
         for trade in self.data.iter() {
@@ -104,18 +97,6 @@ impl TradeUpdate {
                 &trade.price,
                 &trade.qty,
             );
-            // Format key once
-            let key = format!("trade:{}", trade.trade_id);
-            
-            pipe.cmd("HSET")
-                .arg(key)
-                .arg("symbol").arg(&trade.symbol)
-                .arg("side").arg(&trade.side)
-                .arg("price").arg(&trade.price.to_string())
-                .arg("qty").arg(&trade.qty.to_string())
-                .arg("ord_type").arg(&trade.ord_type)
-                .arg("trade_id").arg(&trade_id_str)
-                .arg("timestamp").arg(&timestamp_i64.to_string());
 
             trades.push(new_trade);
             trade_messages.push(trade_message);
@@ -134,20 +115,6 @@ impl TradeUpdate {
             topic: topics[0].clone(), // Use first topic as string
             payload: Some(publish_request::Payload::MarketPayload(market_message)),
         };
-        
-        // Execute Redis operations
-        let redis_future = Retry::spawn(retry_strategy, || async {
-            match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
-                Ok(_) => {
-                    log_debug!(KRAKEN_LOGGER, "Added trades to redis");
-                    Ok(())
-                }
-                Err(e) => {
-                    log_warn!(KRAKEN_LOGGER, "Failed to add trades to redis: {}", e);
-                    Err(e)
-                }
-            }
-        });
         
         // Only store in trades table - historical_orders is redundant for trades
         let create_trades_future = create_trades(postgres_pool.clone(), trades);
@@ -178,30 +145,21 @@ impl TradeUpdate {
         };
         
         // Execute operations concurrently - only trades table needed
-        let (redis_result, trades_result) = if let Some(pub_future) = publisher_future {
-            let (redis_result, trades_result, _) = tokio::join!(
-                redis_future,
+        let trades_result = if let Some(pub_future) = publisher_future {
+            let (trades_result, _) = tokio::join!(
                 create_trades_future,
                 pub_future
             );
-            (redis_result, trades_result)
+            trades_result
         } else {
-            let (redis_result, trades_result) = tokio::join!(
-                redis_future,
-                create_trades_future
-            );
-            (redis_result, trades_result)
+            create_trades_future.await
         };
 
         let processing_time = start_time.elapsed().as_micros() as u64;
 
-        if let Err(e) = redis_result {
-            log_error!(KRAKEN_LOGGER, "Failed to add trades to redis after retries: {}", e);
-        }
-
         match trades_result {
             Ok(_) => {
-                log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} trades to database and Redis - Exchange: {}, OrderBook: {}, Processing: {}μs", 
+                log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} trades to database - Exchange: {}, OrderBook: {}, Processing: {}μs", 
                     trade_count, order_book.exchange, order_book.order_book_id, processing_time);
                 
                 // Log successful trade processing for each trade

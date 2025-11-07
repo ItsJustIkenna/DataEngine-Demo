@@ -9,9 +9,9 @@ use databaseschema::{
     models::order_book::OrderBook
 };
 use diesel_async::AsyncPgConnection;
-use protocol::broker::messages::{portfolio_message, publish_request, PortfolioMessage, PublishRequest, Wallet, Wallets};
+use protocol::broker::messages::{portfolio_message, publish_request, PortfolioMessage, PublishRequest};
 use publisher::Publisher;
-use redis_utils::get_redis_connection;
+// Redis imports removed - no longer using Redis for caching
 use serde::{
     Deserialize,
     Serialize
@@ -73,7 +73,6 @@ impl BalanceUpdate {
 
     pub async fn process_update(
         &self,
-        redis_pool: Arc<deadpool_redis::Pool>,
         _postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
@@ -84,10 +83,6 @@ impl BalanceUpdate {
         // Reduce retry attempts for lower latency
         let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
 
-        // Get Redis connection
-        let balances_connection_future = get_redis_connection(&redis_pool);
-        let balances_connection = balances_connection_future.await.expect("Failed to create redis connection");
-
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "balances data is empty");
             return Ok(());
@@ -96,8 +91,6 @@ impl BalanceUpdate {
         // Pre-allocate arrays with capacity based on data size
         let balances_count = self.data.len();
         let mut balances = Vec::with_capacity(balances_count);
-        let mut pipe = redis::pipe();
-        pipe.atomic();
         
         // Log detailed balance update summary
         let balance_summary: Vec<String> = self.data.iter()
@@ -141,22 +134,8 @@ impl BalanceUpdate {
             payload: Some(publish_request::Payload::PortfolioPayload(portfolio_message)),
         };
 
-        // Execute Redis, Postgres and Publisher operations concurrently
-        let redis_future = Retry::spawn(retry_strategy, || async {
-            match pipe.query_async::<_, ()>(&mut balances_connection.clone()).await {
-                Ok(_) => {
-                    log_debug!(KRAKEN_LOGGER, "Added trades to redis");
-                    Ok(())
-                }
-                Err(e) => {
-                    log_warn!(KRAKEN_LOGGER, "Failed to add trades to redis: {}", e);
-                    Err(e)
-                }
-            }
-        });
-
         // Handle publisher conditionally for database-only mode
-        let publisher_future = if let Some(publisher_ref) = _publisher {
+        if let Some(publisher_ref) = _publisher {
             let publisher_clone = Arc::clone(&publisher_ref);
             let message_clone = message.clone();
             let topic_name = config.topic_routing
@@ -164,47 +143,22 @@ impl BalanceUpdate {
                 .cloned()
                 .unwrap_or_else(|| "portfolio.updates.balances".to_string());
                 
-            Some(async move {
-                match publisher_clone.lock().await.publish(message_clone, &topic_name) {
-                    Ok(_) => {
-                        log_debug!(KRAKEN_LOGGER, "Successfully published portfolio message");
-                    },
-                    Err(e) => {
-                        log_error!(KRAKEN_LOGGER, "Failed to publish portfolio message: {:?}", e);
-                    }
+            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+                Ok(_) => {
+                    log_debug!(KRAKEN_LOGGER, "Successfully published portfolio message");
+                },
+                Err(e) => {
+                    log_error!(KRAKEN_LOGGER, "Failed to publish portfolio message: {:?}", e);
                 }
-            })
+            }
         } else {
             log_debug!(KRAKEN_LOGGER, "🔒 DATABASE-ONLY MODE: Skipping message broker publishing for balances update");
-            None
-        };
-
-        // Wait for all futures to complete
-        let redis_result = if let Some(pub_future) = publisher_future {
-            let (redis_result, _) = tokio::join!(
-                redis_future,
-                pub_future
-            );
-            redis_result
-        } else {
-            redis_future.await
-        };
+        }
 
         let processing_time = start_time.elapsed();
-        
-        match &redis_result {
-            Ok(_) => {
-                log_info!(KRAKEN_LOGGER, "✅ Successfully persisted {} balance updates to Redis in {:?}", 
-                    balances_count, processing_time);
-            }
-            Err(e) => {
-                log_error!(KRAKEN_LOGGER, "❌ Failed to persist balance updates to Redis after retries: {}", e);
-            }
-        }
+        log_info!(KRAKEN_LOGGER, "✅ Successfully processed {} balance updates in {:?}", 
+            balances_count, processing_time);
 
-        if let Err(e) = redis_result {
-            log_error!(KRAKEN_LOGGER, "Failed to add trades to redis after retries: {}", e);
-        }
         Ok(())
     }
 }

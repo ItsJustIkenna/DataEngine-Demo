@@ -51,7 +51,6 @@ graph TD
 ### **Prerequisites**
 - Rust 1.82.0+
 - PostgreSQL 14+
-- Redis 6.2+
 - Docker & Docker Compose
 - **Windows ARM64**: Visual Studio Build Tools 2022 (for local builds) OR Docker (recommended)
 
@@ -95,7 +94,6 @@ docker run -d \
   --name dataengine \
   -e CONFIG_PATH=/app/config/production.toml \
   -e DATABASE_URL=postgresql://user:pass@db:5432/trading \
-  -e REDIS_URL=redis://redis:6379 \
   -p 8080:8080 \
   dataengine:latest
 ```

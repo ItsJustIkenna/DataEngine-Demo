@@ -52,13 +52,13 @@ pub struct KrakenWebSocketHandler {
     publisher: Option<Arc<tokio::sync::Mutex<Publisher>>>, // Optional for database-only mode
     unsubscribe_message: Value,
     order_books: DashMap<String, OrderBook>, // Use DashMap for concurrent access
-    redis_pool: Arc<deadpool_redis::Pool>,
+    // redis_pool removed - no Redis caching
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
     fast_parser: FastMessageParser, // SIMD-accelerated message parsing
 }
 
 impl KrakenWebSocketHandler {
-    pub async fn new(endpoint: &str, order_books: HashMap<String, OrderBook>, subscribe_message: &Value, unsubscribe_message: &Value, redis_pool: Arc<deadpool_redis::Pool>, postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>) -> Result<Self> {
+    pub async fn new(endpoint: &str, order_books: HashMap<String, OrderBook>, subscribe_message: &Value, unsubscribe_message: &Value, postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>) -> Result<Self> {
         // Use default config for now, optimize later
         let connection_start = Instant::now();
         let (ws_stream, _) = match connect_async(endpoint).await {
@@ -156,7 +156,7 @@ impl KrakenWebSocketHandler {
             publisher,
             unsubscribe_message: unsubscribe_message.clone(),
             order_books: order_books_map,
-            redis_pool,
+            // redis_pool removed
             postgres_pool,
             fast_parser: FastMessageParser::new(),
         })
@@ -217,7 +217,6 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         if let Some(symbol) = self.fast_parser.extract_symbol_fast(message_bytes) {
                                             if let Some(order_book) = self.order_books.get(&symbol) {
                                                 if let Err(e) = update.process_update(
-                                                    Arc::clone(&self.redis_pool), 
                                                     Arc::clone(&self.postgres_pool), 
                                                     &self.config, 
                                                     self.publisher.as_ref().map(|p| Arc::clone(p)), 
@@ -242,7 +241,6 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         if let Some(order_book) = self.order_books.get(&snapshot.data[0].symbol) {
                                             eprintln!("DEBUG: Found order_book, about to call process_snapshot");
                                             if let Err(e) = snapshot.process_snapshot(
-                                                Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
@@ -261,7 +259,6 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         log_info!(KRAKEN_LOGGER, "📥 Received Level3 update for {}", update.data[0].symbol);
                                         if let Some(order_book) = self.order_books.get(&update.data[0].symbol) {
                                             if let Err(e) = update.process_update(
-                                                Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
@@ -275,7 +272,6 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         log_debug!(KRAKEN_LOGGER, "Received trade snapshot");
                                         if let Some(order_book) = self.order_books.get(&snapshot.data[0].symbol) {
                                             if let Err(e) = snapshot.process_snapshot(
-                                                Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
@@ -289,7 +285,6 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         log_debug!(KRAKEN_LOGGER, "Received trade update");
                                         if let Some(order_book) = self.order_books.get(&update.data[0].symbol) {
                                             if let Err(e) = update.process_update(
-                                                Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 

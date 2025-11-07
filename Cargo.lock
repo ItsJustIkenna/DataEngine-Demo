@@ -288,20 +288,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "combine"
-version = "4.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
-dependencies = [
- "bytes",
- "futures-core",
- "memchr",
- "pin-project-lite",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "config"
 version = "0.1.0"
 dependencies = [
@@ -504,19 +490,7 @@ dependencies = [
  "deadpool-runtime",
  "lazy_static",
  "num_cpus",
- "serde",
  "tokio",
-]
-
-[[package]]
-name = "deadpool-redis"
-version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ff315fab2a7a42132352909afc81140d06b8bbfd1414b098ce278e3f95dd1b9"
-dependencies = [
- "deadpool",
- "redis",
- "serde",
 ]
 
 [[package]]
@@ -524,9 +498,6 @@ name = "deadpool-runtime"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "092966b41edc516079bdf31ec78a2e0588d1d0c08f78b91d8307215928642b2b"
-dependencies = [
- "tokio",
-]
 
 [[package]]
 name = "deranged"
@@ -997,7 +968,6 @@ dependencies = [
  "dashmap",
  "databaseschema",
  "deadpool",
- "deadpool-redis",
  "diesel",
  "diesel-async",
  "dotenv",
@@ -1019,8 +989,6 @@ dependencies = [
  "protocol",
  "publisher",
  "rand 0.8.5",
- "redis",
- "redis_utils",
  "regex",
  "reqwest 0.12.24",
  "rkyv",
@@ -2317,41 +2285,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redis"
-version = "0.25.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0d7a6955c7511f60f3ba9e86c6d02b3c3f144f8c24b288d1f4e18074ab8bbec"
-dependencies = [
- "async-trait",
- "bytes",
- "combine",
- "futures-util",
- "itoa",
- "native-tls",
- "percent-encoding",
- "pin-project-lite",
- "ryu",
- "sha1_smol",
- "socket2 0.5.10",
- "tokio",
- "tokio-native-tls",
- "tokio-util",
- "url",
-]
-
-[[package]]
-name = "redis_utils"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "deadpool",
- "deadpool-redis",
- "dotenv",
- "tokio-retry",
- "ultra-logger",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2768,12 +2701,6 @@ dependencies = [
  "cpufeatures",
  "digest",
 ]
-
-[[package]]
-name = "sha1_smol"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
 
 [[package]]
 name = "sha2"

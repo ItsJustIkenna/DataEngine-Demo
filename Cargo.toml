@@ -47,5 +47,4 @@ opt-level = 3
 [profile.release.package.tokio]
 opt-level = 3
 
-[profile.release.package.redis]
-opt-level = 3
+# Redis package removed - no longer using Redis

@@ -10,7 +10,7 @@ use databaseschema::{
 use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, PublishRequest, Trade, Trades};
 use publisher::Publisher;
-use redis_utils::get_redis_connection;
+// Redis imports removed - no longer using Redis for caching
 use serde::{
     Deserialize,
     Serialize
@@ -51,7 +51,6 @@ impl TradeSnapshot {
 
     pub async fn process_snapshot(
         &self,
-        redis_pool: Arc<deadpool_redis::Pool>,
         postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
@@ -61,10 +60,6 @@ impl TradeSnapshot {
         
         // Reduce retry attempts for lower latency
         let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
-        
-        // Get Redis connection
-        let trade_connection_future = get_redis_connection(&redis_pool);
-        let trade_connection = trade_connection_future.await.expect("Failed to create redis connection");
 
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "Trade data is empty");
@@ -90,8 +85,6 @@ impl TradeSnapshot {
         let trade_count = self.data.len();
         let mut trades = Vec::with_capacity(trade_count);
         let mut trade_messages = Vec::with_capacity(trade_count);
-        let mut pipe = redis::pipe();
-        pipe.atomic();
 
         // Prepare all data first before any async operations
         for trade in self.data.iter() {
@@ -129,19 +122,6 @@ impl TradeSnapshot {
                 order_book.security_id,
             );
 
-            // Use key once
-            let key = format!("trade:{}", trade.trade_id);
-            
-            pipe.cmd("HSET")
-                .arg(key)
-                .arg("symbol").arg(&trade.symbol)
-                .arg("side").arg(&trade.side)
-                .arg("price").arg(&trade.price.to_string())
-                .arg("qty").arg(&trade.qty.to_string())
-                .arg("ord_type").arg(&trade.ord_type)
-                .arg("trade_id").arg(&trade_id_str)
-                .arg("timestamp").arg(&timestamp_i64.to_string());
-
             trades.push(historical_trade);
             trade_messages.push(trade_message);
         }
@@ -161,20 +141,6 @@ impl TradeSnapshot {
             topic: topics[0].clone(), // Use first topic as string
             payload: Some(publish_request::Payload::MarketPayload(market_message)),
         };
-        
-        // Execute Redis, Postgres and Publisher operations concurrently
-        let redis_future = Retry::spawn(retry_strategy, || async {
-            match pipe.query_async::<_, ()>(&mut trade_connection.clone()).await {
-                Ok(_) => {
-                    log_debug!(KRAKEN_LOGGER, "Added trades to redis");
-                    Ok(())
-                }
-                Err(e) => {
-                    log_warn!(KRAKEN_LOGGER, "Failed to add trades to redis: {}", e);
-                    Err(e)
-                }
-            }
-        });
         
         // Only store trade data in historical_orders for snapshots (not real-time trades)
         let postgres_future = create_historical_orders(postgres_pool.clone(), trades);
@@ -204,31 +170,19 @@ impl TradeSnapshot {
         };
         
         // Wait for all futures to complete
-        let (redis_result, postgres_result) = if let Some(pub_future) = publisher_future {
-            let (redis_result, postgres_result, _) = tokio::join!(
-                redis_future,
+        let postgres_result = if let Some(pub_future) = publisher_future {
+            let (postgres_result, _) = tokio::join!(
                 postgres_future,
                 pub_future
             );
-            (redis_result, postgres_result)
+            postgres_result
         } else {
-            let (redis_result, postgres_result) = tokio::join!(
-                redis_future,
-                postgres_future
-            );
-            (redis_result, postgres_result)
+            postgres_future.await
         };
-
-        if let Err(e) = redis_result {
-            log_error!(KRAKEN_LOGGER, "Failed to add trades to redis after retries: {}", e);
-            processing_error = Some(format!("Redis error: {}", e));
-        }
 
         if let Err(e) = postgres_result {
             log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
-            if processing_error.is_none() {
-                processing_error = Some(format!("Postgres error: {}", e));
-            }
+            processing_error = Some(format!("Postgres error: {}", e));
         } else {
             log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
         }

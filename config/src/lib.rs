@@ -27,7 +27,6 @@ pub struct Config {
     pub environment: Environment,
     pub message_broker: MessageBrokerConfig,
     pub database: DatabaseConfig,
-    pub redis: RedisConfig,
     pub exchanges: Vec<ExchangeConfig>,
     pub performance: PerformanceConfig,
     pub security: SecurityConfig,
@@ -65,17 +64,8 @@ pub struct MessageBrokerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub postgres_url: String,
-    pub redis_url: String,
     pub max_connections: u32,
     pub connection_timeout_secs: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RedisConfig {
-    pub cluster_mode: bool,
-    pub cluster_nodes: Vec<String>,
-    pub db_index: u32,
-    pub key_prefix: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,15 +102,8 @@ impl Default for Config {
             },
             database: DatabaseConfig {
                 postgres_url: "postgresql://localhost:5432/dataengine".to_string(),
-                redis_url: "redis://localhost:6379".to_string(),
                 max_connections: 20,
                 connection_timeout_secs: 30,
-            },
-            redis: RedisConfig {
-                cluster_mode: false,
-                cluster_nodes: vec!["localhost:6379".to_string()],
-                db_index: 0,
-                key_prefix: "dataengine:".to_string(),
             },
             exchanges: vec![
                 ExchangeConfig {
@@ -185,9 +168,7 @@ impl Config {
         if let Ok(url) = std::env::var("DATABASE_URL") {
             self.database.postgres_url = url;
         }
-        if let Ok(url) = std::env::var("REDIS_URL") {
-            self.database.redis_url = url;
-        }
+        // REDIS_URL environment variable ignored - Redis removed from system
         if let Ok(addr) = std::env::var("MESSAGE_BROKER_ADDRESS") {
             self.message_broker.address = addr;
         }
@@ -241,7 +222,7 @@ impl Config {
     pub fn to_json(&self) -> Result<String> {
         let mut sanitized = self.clone();
         sanitized.database.postgres_url = "***REDACTED***".to_string();
-        sanitized.database.redis_url = "***REDACTED***".to_string();
+        // redis_url removed - no longer part of DatabaseConfig
         
         serde_json::to_string_pretty(&sanitized)
             .map_err(|e| anyhow::anyhow!("Failed to serialize config to JSON: {}", e))

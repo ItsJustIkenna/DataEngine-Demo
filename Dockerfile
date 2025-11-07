@@ -2,7 +2,7 @@
 # ENTERPRISE BUILD STRATEGY: Always build from workspace root containing all dependencies
 # Local:  docker build -f DataEngine/Dockerfile -t dataengine:latest .
 # CI/CD:  docker build -f DataEngine/Dockerfile -t dataengine:latest .
-# Build context MUST contain: DataEngine/, databaseschema/, redisutils/, LoggingEngine/, MessageBrokerEngine/
+# Build context MUST contain: DataEngine/, databaseschema/, LoggingEngine/, MessageBrokerEngine/
 
 ARG RUST_VERSION=1.82.0
 ARG APP_NAME=program
@@ -50,7 +50,7 @@ COPY DataEngine/tests/Cargo.toml ./DataEngine/tests/
 
 # Copy external dependency manifests and sources (complete structure)
 COPY databaseschema/ ./databaseschema/
-COPY redisutils/ ./redisutils/
+# redisutils removed - no longer using Redis
 COPY LoggingEngine/ ./LoggingEngine/
 COPY MessageBrokerEngine/publisher/ ./MessageBrokerEngine/publisher/
 COPY MessageBrokerEngine/protocol/ ./MessageBrokerEngine/protocol/
@@ -85,7 +85,7 @@ COPY DataEngine/performance/ ./performance/
 COPY DataEngine/tests/ ./tests/
 
 COPY databaseschema/ ./databaseschema/
-COPY redisutils/ ./redisutils/
+# redisutils removed - no longer using Redis
 COPY LoggingEngine/ ./LoggingEngine/
 COPY MessageBrokerEngine/publisher/ ./MessageBrokerEngine/publisher/
 COPY MessageBrokerEngine/protocol/ ./MessageBrokerEngine/protocol/

@@ -133,17 +133,14 @@ impl HealthCheck for WebSocketHealthChecker {
 
 /// Database connection health checker
 pub struct DatabaseHealthChecker {
-    redis_pool: Arc<deadpool::managed::Pool<deadpool_redis::Manager, deadpool_redis::Connection>>,
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
 }
 
 impl DatabaseHealthChecker {
     pub fn new(
-        redis_pool: Arc<deadpool::managed::Pool<deadpool_redis::Manager, deadpool_redis::Connection>>,
         postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
     ) -> Self {
         Self {
-            redis_pool,
             postgres_pool,
         }
     }
@@ -155,25 +152,6 @@ impl HealthCheck for DatabaseHealthChecker {
         let start = Instant::now();
         let mut details = HashMap::new();
         let mut issues = Vec::new();
-
-        // Check Redis
-        match timeout(Duration::from_secs(5), self.redis_pool.get()).await {
-            Ok(Ok(mut conn)) => {
-                match redis::cmd("PING").query_async::<_, String>(&mut *conn).await {
-                    Ok(response) if response == "PONG" => {
-                        details.insert("redis_status".to_string(), serde_json::json!("healthy"));
-                    }
-                    Ok(_) | Err(_) => {
-                        issues.push("Redis ping failed");
-                        details.insert("redis_status".to_string(), serde_json::json!("unhealthy"));
-                    }
-                }
-            }
-            _ => {
-                issues.push("Redis connection failed");
-                details.insert("redis_status".to_string(), serde_json::json!("connection_failed"));
-            }
-        }
 
         // Check PostgreSQL
         match timeout(Duration::from_secs(5), self.postgres_pool.get()).await {

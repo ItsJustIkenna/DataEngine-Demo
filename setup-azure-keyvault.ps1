@@ -119,14 +119,7 @@ $secrets["POSTGRES-PASSWORD"] = [Runtime.InteropServices.Marshal]::PtrToStringAu
 $secrets["POSTGRES-DB"] = Read-Host "  POSTGRES-DB (database name)"
 Write-Host ""
 
-# Redis secrets
-Write-Host "Redis Cache:" -ForegroundColor Cyan
-$secrets["REDIS-HOST"] = Read-Host "  REDIS-HOST (e.g., mycache.redis.cache.windows.net)"
-$secrets["REDIS-PORT"] = Read-Host "  REDIS-PORT (default: 6380)"
-if ([string]::IsNullOrWhiteSpace($secrets["REDIS-PORT"])) { $secrets["REDIS-PORT"] = "6380" }
-$secrets["REDIS-PASSWORD"] = Read-Host "  REDIS-PASSWORD" -AsSecureString
-$secrets["REDIS-PASSWORD"] = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secrets["REDIS-PASSWORD"]))
-Write-Host ""
+# Redis secrets removed - no longer using Redis
 
 # Kraken API secrets
 Write-Host "Kraken API:" -ForegroundColor Cyan

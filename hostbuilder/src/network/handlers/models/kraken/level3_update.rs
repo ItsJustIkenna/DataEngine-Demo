@@ -31,8 +31,7 @@ use databaseschema::{
 use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
 use publisher::Publisher;
-use redis::cmd;
-use redis_utils::get_redis_connection;
+// Redis imports removed - no longer using Redis for caching
 use serde::{
     Deserialize,
     Serialize
@@ -81,7 +80,6 @@ impl Level3Update {
 
     pub async fn process_update(
         &self,
-        redis_pool: Arc<deadpool_redis::Pool>,
         postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<tokio::sync::Mutex<Publisher>>>, // Optional for database-only mode
@@ -91,20 +89,6 @@ impl Level3Update {
         
         // Reduced retry attempts for ultra-low latency - only 1 retry
         let retry_strategy = ExponentialBackoff::from_millis(2).map(jitter).take(1);
-
-        // Pre-fetch connections concurrently
-        let connection_futures = (
-            get_redis_connection(&redis_pool),
-            get_redis_connection(&redis_pool), 
-            get_redis_connection(&redis_pool)
-        );
-        
-        let (book_connection, bid_connection, ask_connection) = 
-            tokio::join!(connection_futures.0, connection_futures.1, connection_futures.2);
-            
-        let book_connection = book_connection?;
-        let bid_connection = bid_connection?;
-        let ask_connection = ask_connection?;
 
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "Data is empty");
@@ -145,25 +129,6 @@ impl Level3Update {
 
         // Use a pre-allocated Vec with larger capacity
         let orders = Arc::new(Mutex::new(Vec::with_capacity(INITIAL_ORDERS_CAPACITY)));
-        
-        // Fetch total volume concurrently while other work is being done
-        let total_volume_future = Retry::spawn(retry_strategy.clone(), || async {    
-            match cmd("HGET")
-                .arg(format!("order_book:{}", order_book.order_book_id))
-                .arg("total_volume")
-                .query_async::<_, String>(&mut book_connection.clone())
-                .await 
-            {
-                Ok(volume) => {
-                    log_debug!(KRAKEN_LOGGER, "Successfully retrieved total volume");
-                    Ok(volume)
-                },
-                Err(e) => {
-                    log_warn!(KRAKEN_LOGGER, "Failed to get total volume: {}", e);
-                    Err(e)
-                },
-            }
-        });
 
         let mut bid_volume = BigDecimal::zero();
         let mut ask_volume = BigDecimal::zero();
@@ -178,10 +143,7 @@ impl Level3Update {
             let mut modify_orders = Vec::with_capacity(bid_capacity);
             let mut delete_orders: Vec<String> = Vec::with_capacity(bid_capacity);
             
-            // Pre-allocate Redis pipeline
-            let mut pipe = redis::pipe();
-            pipe.atomic();
-
+            // Process bids
             for bid in update_data.bids.iter() {
                 match bid.event.as_str() {
                     EVENT_ADD => {
@@ -231,20 +193,6 @@ impl Level3Update {
                             order_book.security_id,
                         );
 
-                        // Format key once, reuse in args
-                        let key = format!("buy_order:{}", order.unique_id);
-                        pipe
-                            .cmd("HSET")
-                            .arg(key)
-                            .arg("symbol").arg(&order.symbol)
-                            .arg("exchange").arg(&order.exchange)
-                            .arg("security_id").arg(&order.security_id.to_string())
-                            .arg("exchange_id").arg(&order.exchange_id.to_string())
-                            .arg("buy_order_book_id").arg(&order.buy_order_book_id.to_string())
-                            .arg("unique_id").arg(&order.unique_id)
-                            .arg("price_level").arg(&order.price_level.to_string())
-                            .arg("buy_quantity").arg(&order.buy_quantity.to_string());
-
                         buy_orders.push(order);
                         orders.lock().await.push(message);
                         historical_orders.push(historical_order);
@@ -255,38 +203,9 @@ impl Level3Update {
                         let unique_id = &bid.order_id;
                         let timestamp = bid.timestamp;
 
-                        // Query Redis for current quantity
-                        let buy_quantity = Retry::spawn(retry_strategy.clone(), || async {    
-                            match cmd("HGET")
-                                .arg(format!("buy_order:{}", unique_id))
-                                .arg("buy_quantity")
-                                .query_async::<_, String>(&mut bid_connection.clone()).await 
-                            {
-                                Ok(volume) => {
-                                    log_debug!(KRAKEN_LOGGER, "Successfully retrieved buy quantity");
-                                    Ok(volume)
-                                },
-                                Err(e) => {
-                                    log_warn!(KRAKEN_LOGGER, "Failed to get buy quantity: {}", e);
-                                    Err(e)
-                                }
-                            }
-                        }).await;
-
-                        let buy_quantity = match buy_quantity {
-                            Ok(volume) => volume,
-                            Err(e) => {
-                                log_warn!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
-                                ZERO_STR.to_string()
-                            }
-                        };
-
-                        let buy_quantity = BigDecimal::from_str(&buy_quantity)
-                            .unwrap_or_else(|_| BigDecimal::zero());
-
-                        bid_volume -= buy_quantity.clone();
-                        let buy_quantity_diff = (new_buy_quantity - buy_quantity).abs();
-                        bid_volume += buy_quantity_diff.clone();
+                        // Note: Without Redis cache, we don't have previous quantity for diff calculation
+                        // The modify operation will update the database record with the new quantity
+                        bid_volume += new_buy_quantity;
 
                         let message = Order {
                             unique_id: unique_id.clone(),
@@ -306,27 +225,13 @@ impl Level3Update {
                             price_level,
                             new_buy_quantity,
                             Some(price_level),
-                            Some(&buy_quantity_diff),
+                            None, // Without Redis, we don't track quantity diff
                             STATUS_PARTIALLY_FILLED,
                             &order_book.exchange,
                             &order_book.symbol,
                             order_book.exchange_id,
                             order_book.security_id,
                         );
-
-                        // Format key once, reuse in args
-                        let key = format!("buy_order:{}", unique_id);
-                        pipe
-                            .cmd("HSET")
-                            .arg(key)
-                            .arg("symbol").arg(&order_book.symbol)
-                            .arg("exchange").arg(&order_book.exchange)
-                            .arg("security_id").arg(&order_book.security_id.to_string())
-                            .arg("exchange_id").arg(&order_book.exchange_id.to_string())
-                            .arg("buy_order_book_id").arg(&order_book.buy_order_book_id.to_string())
-                            .arg("unique_id").arg(unique_id)
-                            .arg("price_level").arg(&bid.limit_price.to_string())
-                            .arg("buy_quantity").arg(&bid.order_qty.to_string());
 
                         modify_orders.push((unique_id, price_level, new_buy_quantity));
                         orders.lock().await.push(message);
@@ -361,20 +266,6 @@ impl Level3Update {
                             order_book.security_id,
                         );
 
-                        // Format key once, reuse in args
-                        let key = format!("buy_order:{}", bid.order_id);
-                        pipe
-                            .cmd("HDEL")
-                            .arg(key)
-                            .arg("symbol")
-                            .arg("exchange")
-                            .arg("security_id")
-                            .arg("exchange_id")
-                            .arg("buy_order_book_id")
-                            .arg("unique_id")
-                            .arg("price_level")
-                            .arg("buy_quantity");
-
                         bid_volume -= &bid.order_qty;
 
                         delete_orders.push(bid.order_id.clone());
@@ -383,24 +274,6 @@ impl Level3Update {
                     },
                     _ => {}
                 }
-            }
-            
-            // Execute Redis pipeline
-            let result = Retry::spawn(retry_strategy.clone(), || async {
-                match pipe.query_async::<_, ()>(&mut bid_connection.clone()).await {
-                    Ok(_) => {
-                        log_debug!(KRAKEN_LOGGER, "Batch added, modified, and deleted buy orders to/from redis");
-                        Ok(())
-                    }
-                    Err(e) => {
-                        log_warn!(KRAKEN_LOGGER, "Failed to batch add, modify, and delete buy orders to/from redis: {}", e);
-                        Err(e)
-                    }
-                }
-            }).await;
-
-            if let Err(e) = result {
-                log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
             }
 
             // Capture counts before moving vectors into futures
@@ -461,10 +334,6 @@ impl Level3Update {
             let mut sell_orders = Vec::with_capacity(ask_capacity);
             let mut modify_orders = Vec::with_capacity(ask_capacity);
             let mut delete_orders: Vec<String> = Vec::with_capacity(ask_capacity);
-            
-            // Pre-allocate Redis pipeline
-            let mut pipe = redis::pipe();
-            pipe.atomic();
 
             for ask in update_data.asks.iter() {
                 match ask.event.as_str() {
@@ -514,20 +383,6 @@ impl Level3Update {
                             order_book.security_id,
                         );
 
-                        // Format key once, reuse in args
-                        let key = format!("sell_order:{}", order.unique_id);
-                        pipe
-                            .cmd("HSET")
-                            .arg(key)
-                            .arg("symbol").arg(&order.symbol)
-                            .arg("exchange").arg(&order.exchange)
-                            .arg("security_id").arg(&order.security_id.to_string())
-                            .arg("exchange_id").arg(&order.exchange_id.to_string())
-                            .arg("sell_order_book_id").arg(&order.sell_order_book_id.to_string())
-                            .arg("unique_id").arg(&order.unique_id)
-                            .arg("price_level").arg(&order.price_level.to_string())
-                            .arg("sell_quantity").arg(&order.sell_quantity.to_string());
-
                         sell_orders.push(order);
                         orders.lock().await.push(message);
                         historical_orders.push(historical_order);
@@ -538,37 +393,8 @@ impl Level3Update {
                         let unique_id = &ask.order_id;
                         let timestamp = ask.timestamp;
 
-                        let ask_quantity = Retry::spawn(retry_strategy.clone(), || async {    
-                            match cmd("HGET")
-                                .arg(format!("sell_order:{}", unique_id))
-                                .arg("sell_quantity")
-                                .query_async::<_, String>(&mut ask_connection.clone()).await 
-                            {
-                                Ok(volume) => {
-                                    log_debug!(KRAKEN_LOGGER, "Successfully retrieved sell quantity");
-                                    Ok(volume)
-                                },
-                                Err(e) => {
-                                    log_warn!(KRAKEN_LOGGER, "Failed to get sell quantity: {}", e);
-                                    Err(e)
-                                },
-                            }
-                        }).await;
-
-                        let ask_quantity = match ask_quantity {
-                            Ok(volume) => volume,
-                            Err(e) => {
-                                log_warn!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
-                                ZERO_STR.to_string()
-                            }
-                        };
-
-                        let ask_quantity = BigDecimal::from_str(&ask_quantity)
-                            .unwrap_or_else(|_| BigDecimal::zero());
-
-                        ask_volume -= ask_quantity.clone();
-                        let ask_quantity_diff = (new_sell_quantity - ask_quantity).abs();
-                        ask_volume += ask_quantity_diff.clone();
+                        // Note: Without Redis cache, we don't have previous quantity for diff calculation
+                        ask_volume += new_sell_quantity;
 
                         let message = Order {
                             unique_id: ask.order_id.clone(),
@@ -588,26 +414,13 @@ impl Level3Update {
                             price_level,
                             new_sell_quantity,
                             Some(price_level),
-                            Some(&ask_quantity_diff),
+                            None, // Without Redis, we don't track quantity diff
                             STATUS_PARTIALLY_FILLED,
                             &order_book.exchange,
                             &order_book.symbol,
                             order_book.exchange_id,
                             order_book.security_id,
                         );
-
-                        let key = format!("sell_order:{}", unique_id);
-                        pipe
-                            .cmd("HSET")
-                            .arg(key)
-                            .arg("symbol").arg(&order_book.symbol)
-                            .arg("exchange").arg(&order_book.exchange)
-                            .arg("security_id").arg(&order_book.security_id.to_string())
-                            .arg("exchange_id").arg(&order_book.exchange_id.to_string())
-                            .arg("sell_order_book_id").arg(&order_book.sell_order_book_id.to_string())
-                            .arg("unique_id").arg(unique_id)
-                            .arg("price_level").arg(&ask.limit_price.to_string())
-                            .arg("sell_quantity").arg(&ask.order_qty.to_string());
 
                         modify_orders.push((unique_id, price_level, new_sell_quantity));
                         orders.lock().await.push(message);
@@ -642,19 +455,6 @@ impl Level3Update {
                             order_book.security_id,
                         );
 
-                        let key = format!("sell_order:{}", ask.order_id);
-                        pipe
-                            .cmd("HDEL")
-                            .arg(key)
-                            .arg("symbol")
-                            .arg("exchange")
-                            .arg("security_id")
-                            .arg("exchange_id")
-                            .arg("sell_order_book_id")
-                            .arg("unique_id")
-                            .arg("price_level")
-                            .arg("sell_quantity");
-
                         ask_volume -= &ask.order_qty;
 
                         delete_orders.push(ask.order_id.clone());
@@ -663,23 +463,6 @@ impl Level3Update {
                     },
                     _ => {}
                 }
-            }
-            
-            let result = Retry::spawn(retry_strategy.clone(), || async {
-                match pipe.query_async::<_, ()>(&mut ask_connection.clone()).await {
-                    Ok(_) => {
-                        log_debug!(KRAKEN_LOGGER, "Batch added, modified, and deleted sell orders to/from redis");
-                        Ok(())
-                    }
-                    Err(e) => {
-                        log_warn!(KRAKEN_LOGGER, "Failed to batch add, modify, and delete sell orders to/from redis: {}", e);
-                        Err(e)
-                    }
-                }
-            }).await;
-
-            if let Err(e) = result {
-                log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
             }
 
             // Capture counts before moving vectors into futures
@@ -732,17 +515,8 @@ impl Level3Update {
             Ok::<(), Error>(())
         };
         
-        // Wait for total volume result
-        let total_volume_result = total_volume_future.await;
-        let total_volume_str = match total_volume_result {
-            Ok(volume) => volume,
-            Err(e) => {
-                log_warn!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
-                ZERO_STR.to_string()
-            }
-        };
-        
-        let mut total_volume = BigDecimal::from_str(&total_volume_str)
+        // Initialize total volume from orderbook
+        let mut total_volume = BigDecimal::from_str(&order_book.total_volume.to_string())
             .unwrap_or_else(|_| BigDecimal::zero());
 
         // Execute bid and ask futures concurrently
@@ -800,40 +574,6 @@ impl Level3Update {
 
         // Update total volume
         total_volume += bid_volume + ask_volume;
-        
-        // Prepare orderbook key once
-        let orderbook_key = format!("order_book:{}", order_book.order_book_id);
-        
-        // Update Redis with new total volume
-        let result = Retry::spawn(retry_strategy.clone(), || async {
-            match cmd("HSET")
-                .arg(&orderbook_key)
-                .arg("created_at").arg(&order_book.created_at.to_string())
-                .arg("updated_at").arg(&order_book.updated_at.expect("").to_string())
-                .arg("symbol").arg(&order_book.symbol)
-                .arg("exchange").arg(&order_book.exchange)
-                .arg("security_id").arg(&order_book.security_id.to_string())
-                .arg("exchange_id").arg(&order_book.exchange_id.to_string())
-                .arg("buy_order_book_id").arg(&order_book.buy_order_book_id.to_string())
-                .arg("sell_order_book_id").arg(&order_book.sell_order_book_id.to_string())
-                .arg("total_volume").arg(&total_volume.to_string())
-                .query_async::<_, ()>(&mut book_connection.clone())
-                .await
-            {
-                Ok(_) => {
-                    log_debug!(KRAKEN_LOGGER, "Updated order book in redis");
-                    Ok(())
-                }
-                Err(e) => {
-                    log_warn!(KRAKEN_LOGGER, "Failed to update order book in redis: {}", e);
-                    Err(e)
-                }
-            }
-        }).await;
-
-        if let Err(e) = result {
-            log_error!(KRAKEN_LOGGER, "All retries failed for redis commands: {}", e);
-        }
         
         // Update Postgres and publish message in parallel
         let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume.clone());

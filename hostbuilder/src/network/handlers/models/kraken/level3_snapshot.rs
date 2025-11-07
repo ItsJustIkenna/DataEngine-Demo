@@ -13,18 +13,10 @@ use databaseschema::{
 use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
 use publisher::Publisher;
-use redis::cmd;
-use redis_utils::get_redis_connection;
+// Redis imports removed - no longer using Redis for caching
 use serde::{
     Deserialize,
     Serialize
-};
-use tokio_retry::{
-    strategy::{
-        jitter,
-        ExponentialBackoff
-    },
-    Retry
 };
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
 use crate::{log_debug, log_info, log_warn, log_error};
@@ -54,7 +46,6 @@ impl Level3Snapshot {
 
     pub async fn process_snapshot(
         &self,
-        _redis_pool: Arc<deadpool_redis::Pool>, // Unused - Redis caching removed
         postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode

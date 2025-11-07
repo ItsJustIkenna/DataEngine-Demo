@@ -76,12 +76,7 @@ jobs:
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
           path: LoggingEngine
 
-      - name: Checkout redisutils
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/redisutils
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: redisutils
+      # redisutils checkout removed - no longer using Redis
 
       - name: Checkout databaseschema
         uses: actions/checkout@v4
@@ -169,13 +164,7 @@ jobs:
           path: LoggingEngine
           fetch-depth: 0
 
-      - name: Checkout redisutils
-        uses: actions/checkout@v4
-        with:
-          repository: Nwagbara-Group-LLC/redisutils
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-          path: redisutils
-          fetch-depth: 0
+      # redisutils checkout removed - no longer using Redis
 
       - name: Checkout databaseschema
         uses: actions/checkout@v4
@@ -225,8 +214,8 @@ jobs:
           # Optimized Docker build with BuildKit
           $env:DOCKER_BUILDKIT = 1
           
-          # Verify all required dependencies are present
-          $requiredDeps = @("databaseschema", "redisutils", "LoggingEngine", "MessageBrokerEngine")
+          # Verify all required dependencies are present (redisutils removed - no longer using Redis)
+          $requiredDeps = @("databaseschema", "LoggingEngine", "MessageBrokerEngine")
           foreach ($dep in $requiredDeps) {
             if (Test-Path $dep) {
               Write-Host "[OK] Dependency found: $dep"
@@ -448,10 +437,9 @@ jobs:
             exit 1
           }
           
-          # Names of secrets to fetch
+          # Names of secrets to fetch (Redis secrets removed - no longer using Redis)
           $secretNames = @(
             "POSTGRES-HOST","POSTGRES-PORT","POSTGRES-USER","POSTGRES-PASSWORD","POSTGRES-DB",
-            "REDIS-HOST","REDIS-PORT","REDIS-PASSWORD", 
             "KRAKEN-API-KEY","KRAKEN-SECRET-KEY",
             "ELASTIC-CLOUD-ENDPOINT","ELASTIC-CLOUD-USERNAME","ELASTIC-CLOUD-PASSWORD"
           )
@@ -590,8 +578,8 @@ jobs:
             --set image.tag=${{ github.sha }} `
             --set image.pullPolicy=Always `
             --set-string secrets.database.username=$($env:POSTGRES_USER) `
-            --set-string secrets.database.password=$($env:POSTGRES_PASSWORD) `
-            --set-string secrets.redis.password=$($env:REDIS_PASSWORD)
+            --set-string secrets.database.password=$($env:POSTGRES_PASSWORD)
+            # Redis secrets removed - no longer using Redis
           
           if ($LASTEXITCODE -eq 0) {
             Write-Host "[SUCCESS] Canary deployment completed"
@@ -696,7 +684,8 @@ jobs:
           
           # Validate runtime secrets are available (fetched from Key Vault in previous step)
           Write-Host "[VALIDATION] Checking runtime secrets availability..."
-          $requiredSecrets = @("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD")
+          $requiredSecrets = @("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB")
+          # Redis secrets removed - no longer using Redis
           foreach ($secret in $requiredSecrets) {
             $value = [Environment]::GetEnvironmentVariable($secret)
             if ([string]::IsNullOrWhiteSpace($value)) {
@@ -724,9 +713,7 @@ jobs:
             "--set-string", "secrets.database.password=$($env:POSTGRES_PASSWORD)",
             # Build complete DATABASE_URL for security (password not exposed in pod spec)
             "--set-string", "secrets.database.url=postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)",
-            "--set-string", "secrets.redis.password=$($env:REDIS_PASSWORD)",
-            # Build complete REDIS_URL for security
-            "--set-string", "secrets.redis.url=redis://:$($env:REDIS_PASSWORD)@$($env:REDIS_HOST):$($env:REDIS_PORT)",
+            # Redis configuration removed - no longer using Redis
             "--set-string", "secrets.api_keys.kraken_api_key=$($env:KRAKEN_API_KEY)",
             "--set-string", "secrets.api_keys.kraken_secret_key=$($env:KRAKEN_SECRET_KEY)",
             # Elasticsearch logging credentials
@@ -737,10 +724,8 @@ jobs:
             "--set-string", "externalDatabase.host=$($env:POSTGRES_HOST)",
             "--set", "externalDatabase.port=$($env:POSTGRES_PORT)",
             "--set-string", "externalDatabase.database=$($env:POSTGRES_DB)",
-            "--set-string", "externalDatabase.username=$($env:POSTGRES_USER)",
-            # External Redis settings using runtime variables
-            "--set-string", "externalRedis.host=$($env:REDIS_HOST)",
-            "--set", "externalRedis.port=$($env:REDIS_PORT)"
+            "--set-string", "externalDatabase.username=$($env:POSTGRES_USER)"
+            # External Redis configuration removed - no longer using Redis
           )
           
           # For database-only environment, explicitly disable cert-manager and ingress to avoid CRD dependencies

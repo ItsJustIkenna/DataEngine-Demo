@@ -143,13 +143,7 @@ spec:
               done
               echo "PostgreSQL is ready!"
               {{- end }}
-              {{- if .Values.customRedis.enabled }}
-              until nc -z {{ include "data-engine.redis.fullname" . }}-master 6379; do
-                echo "Waiting for Redis at {{ include "data-engine.redis.fullname" . }}-master:6379..."
-                sleep 2
-              done
-              echo "Redis is ready!"
-              {{- end }}
+              {{- /* Redis init container removed - no longer using Redis */ -}}
               echo "All dependencies are ready!"
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
@@ -274,45 +268,7 @@ spec:
             {{- end }}
             {{- end }}
             
-            # Redis configuration
-            {{- if .Values.customRedis.enabled }}
-            {{- if .Values.customRedis.auth.enabled }}
-            - name: REDIS_HOST
-              value: {{ include "data-engine.redis.fullname" . }}-master
-            - name: REDIS_PORT
-              value: "6379"
-            - name: REDIS_PASSWORD
-              value: {{ .Values.customRedis.auth.password | quote }}
-            {{- else }}
-            - name: REDIS_HOST
-              value: {{ include "data-engine.redis.fullname" . }}-master
-            - name: REDIS_PORT
-              value: "6379"
-            {{- end }}
-            {{- else if .Values.externalRedis.enabled }}
-            # Individual Redis components - app builds REDIS_URL internally for security
-            - name: REDIS_HOST
-              value: {{ .Values.externalRedis.host | quote }}
-            - name: REDIS_PORT
-              value: {{ .Values.externalRedis.port | quote }}
-            - name: REDIS_PASSWORD
-              {{- if .Values.externalRedis.existingSecret }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalRedis.existingSecret }}
-                  key: password
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}-redis
-                  key: password
-              {{- end }}
-            - name: REDIS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}-redis
-                  key: url
-            {{- end }}
+            {{- /* Redis configuration removed - no longer using Redis */ -}}
             
             # API Keys - Support both values file and command line --set
             {{- if or .Values.kraken_api_key (and .Values.secrets.api_keys .Values.secrets.api_keys.enabled) }}

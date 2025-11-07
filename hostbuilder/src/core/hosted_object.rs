@@ -10,7 +10,7 @@ use databaseschema::create_timescale_connection_pool;
 use diesel_async::AsyncPgConnection;
 use dotenv::dotenv;
 use mockall::automock;
-use redis_utils::create_redis_pool;
+// Redis pool creation removed - system now database-only
 use serde_json::{json, Value};
 use std::{
     env,
@@ -50,7 +50,7 @@ pub trait HostedObjectTrait {
 
 pub struct HostedObject {
     config: Config,
-    redis_pool: Arc<deadpool_redis::Pool>,
+    // Redis pool removed - no longer using Redis for caching
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
     health_monitor: Arc<SystemHealthMonitor>,
     security_manager: Arc<SecurityManager>,
@@ -63,9 +63,7 @@ impl HostedObject {
         let config_path = env::var("CONFIG_PATH")
             .map_err(|_| anyhow::anyhow!("CONFIG_PATH environment variable must be set"))?;
         let config = Config::new(&config_path)?;
-        let redis_pool = Arc::new(
-            create_redis_pool().map_err(|e| anyhow::anyhow!("Failed to create Redis pool: {}", e))?,
-        );
+        // Redis pool creation removed - system now database-only
         let postgres_pool = Arc::new(create_timescale_connection_pool());
 
         // Initialize performance monitoring
@@ -95,8 +93,8 @@ impl HostedObject {
         ));
         health_monitor.add_health_checker(ws_health_checker);
 
+        // Database health checker now only checks PostgreSQL (Redis removed)
         let db_health_checker = Arc::new(DatabaseHealthChecker::new(
-            Arc::clone(&redis_pool),
             Arc::clone(&postgres_pool),
         ));
         health_monitor.add_health_checker(db_health_checker);
@@ -110,12 +108,11 @@ impl HostedObject {
         // Start background services
         health_monitor.start().await?;
 
-        let cache_service = CacheMaintenanceService::new(Duration::from_secs(300)); // 5 minutes
-        cache_service.start().await;
+        // Cache maintenance service removed (no Redis caching)
 
         Ok(Self {
             config,
-            redis_pool,
+            // redis_pool removed
             postgres_pool,
             health_monitor,
             security_manager,
@@ -147,7 +144,6 @@ impl HostedObjectTrait for HostedObject {
             
             // Initialize exchange (fetch data, authenticate, load securities & orderbooks)
             let (kraken_exchange, api_response, _securities, orderbooks) = match initialize_exchange(
-                Arc::clone(&self.redis_pool),
                 Arc::clone(&self.postgres_pool),
                 exchange.name.clone(),
                 exchange.websocket_token.clone(),
@@ -185,7 +181,6 @@ impl HostedObjectTrait for HostedObject {
                     &api_response.get_token(),
                     Some(exchange.depth),
                     orderbooks.clone(),
-                    Arc::clone(&self.redis_pool),
                     Arc::clone(&self.postgres_pool),
                     shutdown_tx.subscribe(),
                 );
@@ -368,7 +363,6 @@ fn build_unsubscribe_message(
 /// # Returns
 /// Tuple containing (Exchange, TokenResponse, Vec<Security>, HashMap<String, OrderBook>)
 async fn initialize_exchange(
-    redis_pool: Arc<deadpool_redis::Pool>,
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
     exchange_name: String,
     auth_endpoint: String,
@@ -381,7 +375,6 @@ async fn initialize_exchange(
 )> {
     // Get exchange information
     let exchange = get_exchange(
-        Arc::clone(&redis_pool),
         Arc::clone(&postgres_pool),
         exchange_name.clone(),
     )
@@ -405,7 +398,6 @@ async fn initialize_exchange(
 
     // Get securities (once per exchange, not per websocket)
     let securities = get_securities(
-        Arc::clone(&redis_pool),
         Arc::clone(&postgres_pool),
         symbols,
     )
@@ -420,7 +412,6 @@ async fn initialize_exchange(
 
     // Get orderbooks (once per exchange, not per websocket)
     let orderbooks = get_orderbooks(
-        Arc::clone(&redis_pool),
         Arc::clone(&postgres_pool),
         securities.clone(),
         &exchange,
@@ -463,7 +454,6 @@ fn spawn_websocket_handler(
     token: &str,
     depth: Option<u32>,
     orderbooks: std::collections::HashMap<String, databaseschema::models::order_book::OrderBook>,
-    redis_pool: Arc<deadpool_redis::Pool>,
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
     shutdown_rx: tokio::sync::broadcast::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
@@ -501,7 +491,6 @@ fn spawn_websocket_handler(
             orderbooks,
             &subscribe_message,
             &unsubscribe_message,
-            redis_pool,
             postgres_pool,
         )
         .await

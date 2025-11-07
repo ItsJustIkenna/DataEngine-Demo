@@ -1,7 +1,7 @@
 # =============================================================================
 # DataEngine Database-Only Mode Configuration
 # Deploys DataEngine application in database-only mode (no message broker)
-# External PostgreSQL (TimescaleDB) and Redis - Application runs with database only
+# External PostgreSQL (TimescaleDB) - Application runs with database only
 # =============================================================================
 
 # Global configuration
@@ -104,9 +104,7 @@ externalDatabase:
   enabled: true
   useCompleteUrl: true  # Use DATABASE_URL from Secret (more secure than building in pod spec)
 
-# Enable EXTERNAL Redis
-externalRedis:
-  enabled: true
+# Redis configuration removed - no longer using Redis
 
 # =============================================================================
 # Secrets Configuration
@@ -119,10 +117,7 @@ secrets:
     # Password should be set via --set flag, never stored in YAML
     # Set via: --set secrets.database.password="$DB_PASSWORD" for production
   
-  # External Redis configuration  
-  redis:
-    enabled: true
-    # Set via: --set secrets.redis.url="$REDIS_URL" --set secrets.redis.password="$REDIS_PASSWORD"
+  # Redis configuration removed - no longer using Redis
   
   # API keys  
   api_keys:
@@ -201,8 +196,7 @@ networkPolicy:
       ports:
         - protocol: TCP
           port: 5432  # PostgreSQL
-        - protocol: TCP
-          port: 6379  # Redis
+        # Redis port removed - no longer using Redis
 
 # =============================================================================
 # Security Context (Minimal)
@@ -261,7 +255,7 @@ healthcheck:
 # =============================================================================
 
 # No application resource limits since no application pods are deployed
-# Resources are allocated to PostgreSQL and Redis components only
+# Resources are allocated to PostgreSQL only (Redis removed)
 
 # =============================================================================
 # Database Backup Configuration
