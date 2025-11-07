@@ -192,9 +192,13 @@ impl EndpointHandler for KrakenWebSocketHandler {
                 _result = async {
                     loop {
                         let message = handler.reader.write().await.next().await;
+                        eprintln!("DEBUG: Received WebSocket message");
 
                         match message {
                             Some(Ok(Message::Text(text))) => {
+                                eprintln!("DEBUG: Message is Text, length: {} bytes", text.len());
+                                eprintln!("DEBUG: First 500 chars: {}", &text.chars().take(500).collect::<String>());
+                                
                                 // Log all incoming messages for debugging
                                 if text.contains("subscribe") || text.contains("status") || text.contains("error") {
                                     log_info!(KRAKEN_LOGGER, "📨 Received message: {}", text);
