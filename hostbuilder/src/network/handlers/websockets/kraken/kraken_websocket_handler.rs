@@ -238,7 +238,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         eprintln!("DEBUG: Successfully parsed Level3Snapshot for symbol: {}", snapshot.data[0].symbol);
                                         log_info!(KRAKEN_LOGGER, "📥 Received Level3 snapshot for {}", snapshot.data[0].symbol);
                                         eprintln!("DEBUG: Looking for order_book in self.order_books with key: {}", snapshot.data[0].symbol);
-                                        eprintln!("DEBUG: Available order_book keys: {:?}", self.order_books.keys().collect::<Vec<_>>());
+                                        eprintln!("DEBUG: Available order_book keys: {:?}", self.order_books.iter().map(|entry| entry.key().clone()).collect::<Vec<_>>());
                                         if let Some(order_book) = self.order_books.get(&snapshot.data[0].symbol) {
                                             eprintln!("DEBUG: Found order_book, about to call process_snapshot");
                                             if let Err(e) = snapshot.process_snapshot(
