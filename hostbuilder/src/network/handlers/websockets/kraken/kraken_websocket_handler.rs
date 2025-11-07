@@ -208,7 +208,10 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 let message_bytes = text.as_bytes();
                                 
                                 // Fast path: use SIMD to identify message type before expensive parsing
-                                if self.fast_parser.is_level3_update(message_bytes) {
+                                let is_fast_path = self.fast_parser.is_level3_update(message_bytes);
+                                eprintln!("DEBUG: is_level3_update returned: {}", is_fast_path);
+                                
+                                if is_fast_path {
                                     // Critical path optimization: parse Level3 updates with minimal allocations
                                     if let Ok(update) = self.fast_parser.parse_level3_update_fast(&text) {
                                         if let Some(symbol) = self.fast_parser.extract_symbol_fast(message_bytes) {
@@ -229,10 +232,15 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 }
                                 
                                 // Fallback to standard parsing for non-critical messages
+                                eprintln!("DEBUG: About to call parse_message for non-fast-path message");
                                 match parse_message(&text) {
                                     Ok(Response::Level3Snapshot(snapshot)) => {
+                                        eprintln!("DEBUG: Successfully parsed Level3Snapshot for symbol: {}", snapshot.data[0].symbol);
                                         log_info!(KRAKEN_LOGGER, "📥 Received Level3 snapshot for {}", snapshot.data[0].symbol);
+                                        eprintln!("DEBUG: Looking for order_book in self.order_books with key: {}", snapshot.data[0].symbol);
+                                        eprintln!("DEBUG: Available order_book keys: {:?}", self.order_books.keys().collect::<Vec<_>>());
                                         if let Some(order_book) = self.order_books.get(&snapshot.data[0].symbol) {
+                                            eprintln!("DEBUG: Found order_book, about to call process_snapshot");
                                             if let Err(e) = snapshot.process_snapshot(
                                                 Arc::clone(&self.redis_pool), 
                                                 Arc::clone(&self.postgres_pool), 
@@ -240,8 +248,13 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
+                                                eprintln!("DEBUG: process_snapshot returned error: {}", e);
                                                 log_error!(KRAKEN_LOGGER, "Failed to process order book snapshot: {}", e);
+                                            } else {
+                                                eprintln!("DEBUG: process_snapshot completed successfully!");
                                             }
+                                        } else {
+                                            eprintln!("DEBUG: No order_book found for symbol: {}", snapshot.data[0].symbol);
                                         }
                                     },
                                     Ok(Response::Level3Update(update)) => {
@@ -309,6 +322,8 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         log_info!(KRAKEN_LOGGER, "📭 Unhandled message type: {:?}", other);
                                     },
                                     Err(e) => {
+                                        eprintln!("DEBUG: parse_message returned error: {}", e);
+                                        eprintln!("DEBUG: Failed message (first 1000 chars): {}", &text.chars().take(1000).collect::<String>());
                                         log_error!(KRAKEN_LOGGER, "Failed to parse message: {}", e);
                                         
                                         // Log critical parsing error
