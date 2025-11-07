@@ -4,8 +4,13 @@ use hostbuilder::{HostedObject, HostedObjectTrait, infrastructure::logging_facad
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Debug: Print to stdout BEFORE any logger initialization
+    eprintln!("DEBUG: main() function started");
+    
     // Initialize Data Engine with logging
+    eprintln!("DEBUG: About to use MAIN_LOGGER");
     log_info!(MAIN_LOGGER, "🚀 Starting Data Engine...");
+    eprintln!("DEBUG: MAIN_LOGGER used successfully");
 
     // Get configuration path from environment or use default
     let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| {
