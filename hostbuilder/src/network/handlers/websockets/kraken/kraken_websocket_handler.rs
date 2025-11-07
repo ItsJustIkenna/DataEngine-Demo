@@ -97,18 +97,26 @@ impl KrakenWebSocketHandler {
             }
         };
 
+        eprintln!("DEBUG: KrakenWebSocketHandler::new() - About to load CONFIG_PATH");
         let config_path = env::var("CONFIG_PATH")
             .map_err(|_| anyhow::anyhow!("CONFIG_PATH environment variable must be set"))?;
+        eprintln!("DEBUG: KrakenWebSocketHandler::new() - CONFIG_PATH loaded: {}", config_path);
+        
         let config = Config::new(&config_path)?;
+        eprintln!("DEBUG: KrakenWebSocketHandler::new() - Config loaded successfully");
 
         let (mut writer, reader) = ws_stream.split();
+        eprintln!("DEBUG: KrakenWebSocketHandler::new() - Stream split, about to send subscription for endpoint: {}", endpoint);
+        eprintln!("DEBUG: Subscription message: {}", subscribe_message);
         
         log_info!(KRAKEN_LOGGER, "📤 Sending subscription message to {}: {}", endpoint, subscribe_message);
         
+        eprintln!("DEBUG: About to call writer.send()");
         writer
             .send(Message::Text(subscribe_message.to_string()))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send subscription message: {}", e))?;
+        eprintln!("DEBUG: writer.send() completed successfully");
 
         let reader = RwLock::new(reader);
         let writer = RwLock::new(writer);
