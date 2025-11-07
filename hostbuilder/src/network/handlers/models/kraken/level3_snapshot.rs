@@ -249,50 +249,9 @@ impl Level3Snapshot {
         // Execute bid and ask processing concurrently
         tokio::join!(bid_futures, ask_futures);
         
-        // Prepare orders message
-        let orders_data = {
-            let locked_orders = orders.lock().await;
-            locked_orders.clone()
-        };
-        
-        let message_orders = Orders {
-            orders: orders_data
-        };
-        
-        let market_message = MarketMessage {
-            market_id: "kraken_level3_snapshot".to_string(),
-            payload: Some(market_message::Payload::OrdersPayload(message_orders)),
-        };
-        
-        let topics = &config.topics;
-        let message = PublishRequest {
-            topic: topics[0].clone(), // Use first topic as string
-            payload: Some(publish_request::Payload::MarketPayload(market_message)),
-        };
-        
-        // Connect to publisher and send message in parallel with other work (if enabled)
-        let publish_future = if let Some(publisher_ref) = _publisher {
-            let publisher_clone = Arc::clone(&publisher_ref);
-            let message_clone = message.clone();
-            let topic_name = config.topic_routing
-                .get("level3_snapshot")
-                .cloned()
-                .unwrap_or_else(|| "market.data.kraken.snapshots".to_string());
-                
-            Some(async move {
-                match publisher_clone.lock().await.publish(message_clone, &topic_name) {
-                    Ok(_) => {
-                        log_debug!(KRAKEN_LOGGER, "Successfully published level3 snapshot message");
-                    },
-                    Err(e) => {
-                        log_error!(KRAKEN_LOGGER, "Failed to publish level3 snapshot message: {:?}", e);
-                    }
-                }
-            })
-        } else {
-            log_debug!(KRAKEN_LOGGER, "🔒 DATABASE-ONLY MODE: Skipping message broker publishing for level3 snapshot");
-            None
-        };
+        // Skip message broker publishing in DATABASE-ONLY mode (orders collection removed with Redis)
+        log_debug!(KRAKEN_LOGGER, "🔒 DATABASE-ONLY MODE: Skipping message broker publishing for level3 snapshot");
+        let publish_future: Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>> = None;
 
         // Calculate total volume
         let total_volume = open_bid_volume.clone() + open_ask_volume.clone();
