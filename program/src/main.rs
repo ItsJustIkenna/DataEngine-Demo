@@ -25,31 +25,38 @@ async fn main() -> Result<()> {
 
     // Create the hosted object
     log_info!(MAIN_LOGGER, "🏗️  Initializing Data Engine components...");
+    eprintln!("DEBUG: About to call HostedObject::new()");
     
     let mut engine = match HostedObject::new().await {
         Ok(engine) => {
+            eprintln!("DEBUG: HostedObject::new() completed successfully");
             log_info!(MAIN_LOGGER, "✅ Data Engine initialized successfully");
             engine
         }
         Err(e) => {
+            eprintln!("DEBUG: HostedObject::new() failed with error: {}", e);
             log_error!(MAIN_LOGGER, "❌ Failed to initialize Data Engine: {}", e);
             return Err(e);
         }
     };
 
     // Run the hosted object and handle any errors
+    eprintln!("DEBUG: About to call engine.run()");
     log_info!(MAIN_LOGGER, "🎯 Starting Data Engine main loop...");
     
     match engine.run().await {
         Ok(_) => {
+            eprintln!("DEBUG: engine.run() completed successfully");
             log_info!(MAIN_LOGGER, "✅ Data Engine completed successfully");
         }
         Err(e) => {
+            eprintln!("DEBUG: engine.run() failed with error: {}", e);
             log_error!(MAIN_LOGGER, "❌ Data Engine error: {}", e);
             return Err(e);
         }
     }
 
+    eprintln!("DEBUG: About to shutdown");
     log_info!(MAIN_LOGGER, "🛑 Data Engine shutdown complete");
     Ok(())
 }
