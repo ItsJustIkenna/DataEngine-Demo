@@ -124,6 +124,5 @@ EXPOSE 8080 9090
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD ["/usr/local/bin/dataengine", "--health-check"] || exit 1
 
-# Set optimal entrypoint
+# Set optimal entrypoint (no args - main.rs doesn't parse command line arguments)
 ENTRYPOINT ["/usr/local/bin/dataengine"]
-CMD ["--production"]
