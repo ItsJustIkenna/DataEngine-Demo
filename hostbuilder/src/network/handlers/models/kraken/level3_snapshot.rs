@@ -60,11 +60,13 @@ impl Level3Snapshot {
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook,
     ) -> Result<()> {
+        eprintln!("DEBUG: process_snapshot - Entry point");
         let start = Instant::now();
         
         // Reduce retry attempts for lower latency
         let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
         
+        eprintln!("DEBUG: process_snapshot - About to fetch 3 Redis connections concurrently");
         // Fetch connections concurrently
         let book_connection_future = get_redis_connection(&redis_pool);
         let bid_connection_future = get_redis_connection(&redis_pool);
@@ -72,10 +74,12 @@ impl Level3Snapshot {
         
         let (book_connection_result, bid_connection_result, ask_connection_result) = 
             tokio::join!(book_connection_future, bid_connection_future, ask_connection_future);
-            
+        
+        eprintln!("DEBUG: process_snapshot - Redis connections acquired");
         let book_connection = book_connection_result.expect("Failed to create redis connection");
         let bid_connection = bid_connection_result.expect("Failed to create redis connection");
         let ask_connection = ask_connection_result.expect("Failed to create redis connection");
+        eprintln!("DEBUG: process_snapshot - All 3 Redis connections unwrapped successfully");
 
         if self.data.is_empty() {
             log_info!(KRAKEN_LOGGER, "⚠️  Level3 snapshot has NO data - empty snapshot received");
