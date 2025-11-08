@@ -1000,7 +1000,8 @@ jobs:
           }
           
           # Check for empty secretKeyRef.name in rendered manifest
-          if ($renderOutput -match "secretKeyRef:\s*\n\s*name:\s*[`"']?\s*[`"']?") {
+          # Match: secretKeyRef: followed by name: with empty/whitespace-only value
+          if ($renderOutput -match "secretKeyRef:\s*\n\s*name:\s*(`"`"|''|\s*\n)") {
             Write-Host "=== FAILURE: EMPTY secretKeyRef.name DETECTED ==="
             Write-Host ""
             Write-Host "=== ALL OVERRIDES APPLIED ==="
