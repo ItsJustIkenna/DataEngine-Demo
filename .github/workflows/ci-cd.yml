@@ -923,8 +923,21 @@ jobs:
           # Check for empty secretKeyRef.name in rendered manifest
           if ($renderOutput -match "secretKeyRef:\s*\n\s*name:\s*[`"']?\s*[`"']?") {
             Write-Error "[FAIL] Rendered manifest contains empty secretKeyRef.name - would cause deployment failure"
-            Write-Host "=== RENDERED MANIFEST (first 200 lines) ==="
-            $renderOutput -split "`n" | Select-Object -First 200 | ForEach-Object { Write-Host $_ }
+            Write-Host "=== RENDERED MANIFEST (first 300 lines) ==="
+            $renderOutput -split "`n" | Select-Object -First 300 | ForEach-Object { Write-Host $_ }
+            Write-Host "=== SECRET OVERRIDES APPLIED ==="
+            Write-Host "externalDatabase.existingSecret=$dbSecretName"
+            Write-Host "secrets.database.secretName=$dbSecretName"
+            Write-Host "=== CHECKING FOR EMPTY secretKeyRef BLOCKS ==="
+            $lines = $renderOutput -split "`n"
+            for ($i=0; $i -lt $lines.Length; $i++) {
+              if ($lines[$i] -match 'secretKeyRef:') {
+                $contextStart = [Math]::Max(0, $i-2)
+                $contextEnd = [Math]::Min($lines.Length-1, $i+3)
+                Write-Host "--- Found at line $($i+1) ---"
+                $lines[$contextStart..$contextEnd] | ForEach-Object { Write-Host $_ }
+              }
+            }
             exit 1
           }
           Write-Host "[OK] Manifest validation passed"
