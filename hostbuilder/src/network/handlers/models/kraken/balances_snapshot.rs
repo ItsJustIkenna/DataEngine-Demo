@@ -117,16 +117,14 @@ impl BalanceSnapshot {
 
         // Handle publisher conditionally for database-only mode
         if let Some(publisher_ref) = _publisher {
-            let publisher_clone = Arc::clone(&publisher_ref);
-            let message_clone = message.clone();
             let topic_name = config.topic_routing
                 .get("balances_snapshot")
                 .cloned()
                 .unwrap_or_else(|| "portfolio.updates.snapshots".to_string());
             
-            // Acquire the lock into a named binding to ensure Arc and guard lifetimes are correct
-            let mut publisher_guard = publisher_clone.lock().await;
-            match publisher_guard.publish(message_clone, &topic_name) {
+            // Acquire the lock and publish immediately (minimize lock hold time)
+            let mut publisher_guard = publisher_ref.lock().await;
+            match publisher_guard.publish(message, &topic_name) {
                 Ok(_) => {
                     log_debug!(KRAKEN_LOGGER, "Successfully published balances snapshot message");
                 },
