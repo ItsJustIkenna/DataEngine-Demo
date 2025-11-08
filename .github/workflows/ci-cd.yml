@@ -705,6 +705,31 @@ jobs:
             Write-Host "[OK] Secret $secret is present (length: $($value.Length))"
           }
           
+          # Create Kubernetes Secret for database credentials
+          Write-Host "[SETUP] Creating database credentials secret..."
+          $dbSecretName = "dataengine-db-credentials"
+          
+          # Check if secret exists
+          $existingSecret = kubectl get secret $dbSecretName -n ${{ env.NAMESPACE }} --ignore-not-found -o name 2>&1
+          if ($existingSecret) {
+            Write-Host "[SETUP] Secret $dbSecretName exists - deleting to recreate with latest values"
+            kubectl delete secret $dbSecretName -n ${{ env.NAMESPACE }} --ignore-not-found
+          }
+          
+          # Create secret with database credentials
+          Write-Host "[SETUP] Creating secret $dbSecretName with DB credentials"
+          kubectl create secret generic $dbSecretName -n ${{ env.NAMESPACE }} `
+            --from-literal=username="$($env:POSTGRES_USER)" `
+            --from-literal=password="$($env:POSTGRES_PASSWORD)" `
+            --from-literal=url="postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)"
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "[FAIL] Failed to create database credentials secret"
+            exit 1
+          }
+          
+          Write-Host "[OK] Database secret created: $dbSecretName"
+          
           # Build base helm command
           $helmCmd = @(
             "upgrade", "--install", $releaseName, "${{ env.HELM_CHART_PATH }}",
@@ -723,7 +748,11 @@ jobs:
           Write-Host "[HELM] Building runtime secret overrides (only non-empty values)..."
           $setOverrides = @()
           
-          # Database secrets
+          # Point chart to the Kubernetes Secret we created
+          $setOverrides += @("--set-string", "externalDatabase.existingSecret=$dbSecretName")
+          Write-Host "[HELM] Using existing DB secret: $dbSecretName"
+          
+          # Database secrets (kept for compatibility with chart's main secret)
           if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_USER)) {
             $setOverrides += @("--set-string", "secrets.database.username=$($env:POSTGRES_USER)")
             $setOverrides += @("--set-string", "externalDatabase.username=$($env:POSTGRES_USER)")
