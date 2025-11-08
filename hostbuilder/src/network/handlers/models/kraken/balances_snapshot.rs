@@ -9,6 +9,7 @@ use databaseschema::{
 };
 use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{portfolio_message, publish_request, PortfolioMessage, PublishRequest};
+use protocol::generated::Wallet;
 use publisher::Publisher;
 // Redis imports removed - no longer using Redis for caching
 use serde::{
@@ -86,7 +87,7 @@ impl BalanceSnapshot {
             for wallet in &balance.wallets {
                 println!("Wallet Type: {}, ID: {}, Balance: {}", wallet.r#type, wallet.id, wallet.balance);
                 
-                let wallet = Wallet {
+                let w = Wallet {
                     user_id: "default_user".to_string(),
                     symbol: balance.asset.clone(),
                     balance: wallet.balance.to_f32().unwrap_or(0.0),
@@ -94,13 +95,13 @@ impl BalanceSnapshot {
                     last_updated: chrono::Utc::now().timestamp(),
                 };
 
-                balances.push(wallet.clone());
+                balances.push(w);
             }
         }
 
         let wallets_payload = protocol::generated::WalletData {
             exchange: order_book.exchange.clone(),
-            wallets: balances.clone(),
+            wallets: balances,
         };
 
         let portfolio_message = PortfolioMessage {

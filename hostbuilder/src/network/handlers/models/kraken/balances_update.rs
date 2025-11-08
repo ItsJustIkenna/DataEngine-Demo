@@ -10,6 +10,7 @@ use databaseschema::{
 };
 use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{portfolio_message, publish_request, PortfolioMessage, PublishRequest};
+use protocol::generated::Wallet;
 use publisher::Publisher;
 // Redis imports removed - no longer using Redis for caching
 use serde::{
@@ -103,7 +104,7 @@ impl BalanceUpdate {
         // Process the balance snapshot data here
         // For example, you can log the balance data or perform any other operations needed
         for balance in self.data.iter() {
-            let wallet = Wallet {
+            let w = Wallet {
                 user_id: "default_user".to_string(),
                 symbol: balance.asset.clone(),
                 balance: balance.amount.to_f32().unwrap_or(0.0),
@@ -115,12 +116,12 @@ impl BalanceUpdate {
             log_info!(KRAKEN_LOGGER, "Balance update persisted to Redis - Asset: {}, Balance: {:.8}, Type: {}, Wallet: {}", 
                 balance.asset, balance.balance, balance.r#type, balance.wallet_type);
             
-            balances.push(wallet.clone());
+            balances.push(w);
         }
 
         let wallets_payload = protocol::generated::WalletData {
             exchange: order_book.exchange.clone(),
-            wallets: balances.clone(),
+            wallets: balances,
         };
 
         let portfolio_message = PortfolioMessage {
