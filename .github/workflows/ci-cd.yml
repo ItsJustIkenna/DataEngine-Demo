@@ -829,45 +829,69 @@ jobs:
           
           Write-Host "[OK] Database secret created: $dbSecretName"
           
-          # Create Kubernetes Secret for API keys (if present)
-          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_API_KEY) -or -not [string]::IsNullOrWhiteSpace($env:KRAKEN_SECRET_KEY)) {
-            Write-Host "[SETUP] Creating API keys secret..."
-            $apiSecretName = "dataengine-api-keys"
-            
-            # Delete if exists
-            kubectl delete secret $apiSecretName -n ${{ env.NAMESPACE }} --ignore-not-found
-            
-            # Create secret with API credentials
-            kubectl create secret generic $apiSecretName -n ${{ env.NAMESPACE }} `
-              --from-literal=kraken_api_key="$($env:KRAKEN_API_KEY)" `
-              --from-literal=kraken_secret_key="$($env:KRAKEN_SECRET_KEY)"
-            
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "[FAIL] Failed to create API keys secret"
-              exit 1
-            }
-            Write-Host "[OK] API keys secret created: $apiSecretName"
+          # Create main application secret with ALL environment variables
+          # The Helm template uses {{ include "data-engine.fullname" . }} which generates: dataengine-db-data-engine
+          Write-Host "[SETUP] Creating main application secret..."
+          $mainSecretName = "$releaseName-data-engine"  # Will be: dataengine-db-data-engine
+          
+          # Delete if exists
+          kubectl delete secret $mainSecretName -n ${{ env.NAMESPACE }} --ignore-not-found
+          
+          # Build secret creation command with ALL values
+          $secretArgs = @(
+            "create", "secret", "generic", $mainSecretName,
+            "-n", "${{ env.NAMESPACE }}"
+          )
+          
+          # Add database credentials
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_USER)) {
+            $secretArgs += "--from-literal=POSTGRES_USER=$($env:POSTGRES_USER)"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PASSWORD)) {
+            $secretArgs += "--from-literal=POSTGRES_PASSWORD=$($env:POSTGRES_PASSWORD)"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) {
+            $secretArgs += "--from-literal=POSTGRES_HOST=$($env:POSTGRES_HOST)"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PORT)) {
+            $secretArgs += "--from-literal=POSTGRES_PORT=$($env:POSTGRES_PORT)"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_DB)) {
+            $secretArgs += "--from-literal=POSTGRES_DB=$($env:POSTGRES_DB)"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) {
+            $dbUrl = "postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)"
+            $secretArgs += "--from-literal=url=$dbUrl"
           }
           
-          # Create Kubernetes Secret for Elasticsearch credentials (if present)
-          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_USERNAME) -or -not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_PASSWORD)) {
-            Write-Host "[SETUP] Creating Elasticsearch credentials secret..."
-            $esSecretName = "dataengine-elasticsearch-credentials"
-            
-            # Delete if exists
-            kubectl delete secret $esSecretName -n ${{ env.NAMESPACE }} --ignore-not-found
-            
-            # Create secret with Elasticsearch credentials
-            kubectl create secret generic $esSecretName -n ${{ env.NAMESPACE }} `
-              --from-literal=username="$($env:ELASTIC_CLOUD_USERNAME)" `
-              --from-literal=password="$($env:ELASTIC_CLOUD_PASSWORD)"
-            
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "[FAIL] Failed to create Elasticsearch credentials secret"
-              exit 1
-            }
-            Write-Host "[OK] Elasticsearch secret created: $esSecretName"
+          # Add API keys
+          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_API_KEY)) {
+            $secretArgs += "--from-literal=KRAKEN_API_KEY=$($env:KRAKEN_API_KEY)"
           }
+          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_SECRET_KEY)) {
+            $secretArgs += "--from-literal=KRAKEN_SECRET_KEY=$($env:KRAKEN_SECRET_KEY)"
+          }
+          
+          # Add Elasticsearch credentials
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_ENDPOINT)) {
+            $secretArgs += "--from-literal=ELASTIC_CLOUD_ENDPOINT=$($env:ELASTIC_CLOUD_ENDPOINT)"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_USERNAME)) {
+            $secretArgs += "--from-literal=ELASTIC_CLOUD_USERNAME=$($env:ELASTIC_CLOUD_USERNAME)"
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_PASSWORD)) {
+            $secretArgs += "--from-literal=ELASTIC_CLOUD_PASSWORD=$($env:ELASTIC_CLOUD_PASSWORD)"
+          }
+          
+          # Create the secret
+          Write-Host "[SETUP] Creating secret $mainSecretName with $($secretArgs.Count - 4) key-value pairs"
+          kubectl @secretArgs
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "[FAIL] Failed to create main application secret"
+            exit 1
+          }
+          Write-Host "[OK] Main application secret created: $mainSecretName"
           
           # Build base helm command
           $helmCmd = @(
@@ -916,21 +940,8 @@ jobs:
             $setOverrides += @("--set-string", "externalDatabase.database=$($env:POSTGRES_DB)")
           }
           
-          # Kraken API keys - use secret NAME instead of individual values
-          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_API_KEY) -or -not [string]::IsNullOrWhiteSpace($env:KRAKEN_SECRET_KEY)) {
-            $setOverrides += @("--set-string", "secrets.api_keys.existingSecret=$apiSecretName")
-            Write-Host "[HELM] Using existing API keys secret: $apiSecretName"
-          }
-          
-          # Elasticsearch credentials - use secret NAME instead of individual values
-          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_USERNAME) -or -not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_PASSWORD)) {
-            $setOverrides += @("--set-string", "secrets.elasticsearch.existingSecret=$esSecretName")
-            Write-Host "[HELM] Using existing Elasticsearch secret: $esSecretName"
-          }
-          # Elasticsearch endpoint (not a secret, can be set directly)
-          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_ENDPOINT)) {
-            $setOverrides += @("--set-string", "secrets.elasticsearch.endpoint=$($env:ELASTIC_CLOUD_ENDPOINT)")
-          }
+          # Kraken API keys and Elasticsearch credentials are now in the main secret ($mainSecretName)
+          # No need to set existingSecret overrides - the chart will use the main secret by default
           
           # Debug: Print all overrides being applied
           Write-Host "[DEBUG] Helm set overrides being applied:"
