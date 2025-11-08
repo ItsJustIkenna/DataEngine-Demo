@@ -900,6 +900,7 @@ jobs:
             "--create-namespace",
             "--atomic",
             "--wait",
+            "--force",
             "--timeout", "${{ env.HELM_TIMEOUT }}",
             "--values", $valuesFile,
             "--set", "image.repository=${{ env.IMAGE_NAME }}",

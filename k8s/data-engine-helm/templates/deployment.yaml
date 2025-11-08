@@ -270,7 +270,7 @@ spec:
             
             {{- /* Redis configuration removed - no longer using Redis */ -}}
             
-            # API Keys - Support both values file and command line --set
+            {{- /* API Keys - Support both values file and command line --set */ -}}
             {{- if or .Values.kraken_api_key (and .Values.secrets.api_keys .Values.secrets.api_keys.enabled) }}
             - name: KRAKEN_API_KEY
               {{- if .Values.kraken_api_key }}
