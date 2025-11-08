@@ -68,8 +68,8 @@ impl BalanceSnapshot {
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook
     ) -> Result<()> {
-        // Reduce retry attempts for lower latency
-        let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
+        // Reduce retry attempts for lower latency (currently unused but available for future use)
+        let _retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
 
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "balances data is empty");
@@ -123,8 +123,10 @@ impl BalanceSnapshot {
                 .get("balances_snapshot")
                 .cloned()
                 .unwrap_or_else(|| "portfolio.updates.snapshots".to_string());
-                
-            match publisher_clone.lock().await.publish(message_clone, &topic_name) {
+            
+            // Acquire the lock into a named binding to ensure Arc and guard lifetimes are correct
+            let mut publisher_guard = publisher_clone.lock().await;
+            match publisher_guard.publish(message_clone, &topic_name) {
                 Ok(_) => {
                     log_debug!(KRAKEN_LOGGER, "Successfully published balances snapshot message");
                 },
