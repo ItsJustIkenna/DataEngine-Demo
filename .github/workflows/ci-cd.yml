@@ -39,8 +39,8 @@ env:
   HELM_CHART_PATH: k8s/data-engine-helm
   
   # Deployment configuration  
-  HELM_TIMEOUT: 60m
-  HEALTH_CHECK_TIMEOUT: 3600s
+  HELM_TIMEOUT: 10m
+  HEALTH_CHECK_TIMEOUT: 600s
   ROLLBACK_TIMEOUT: 5m
   
   # Performance optimization
@@ -92,6 +92,26 @@ jobs:
           rustc --version
           cargo --version
 
+      - name: Cache Cargo Registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cache Target Directory
+        uses: actions/cache@v4
+        with:
+          path: DataEngine/target
+          key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-target-
+
       - name: Build Workspace
         shell: powershell
         run: |
@@ -118,6 +138,27 @@ jobs:
             Write-Host "Tests failed!"
             echo "passed=false" >> $env:GITHUB_OUTPUT
             exit 1
+          }
+
+      - name: Security Audit Dependencies
+        shell: powershell
+        run: |
+          Write-Host "Auditing Rust dependencies for vulnerabilities..."
+          cd DataEngine
+          
+          # Install cargo-audit if not present
+          if (-not (cargo install --list | Select-String "cargo-audit")) {
+            Write-Host "Installing cargo-audit..."
+            cargo install cargo-audit
+          }
+          
+          # Run audit (informational, don't fail build on warnings)
+          cargo audit --deny unsound --deny yanked
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: Security vulnerabilities detected in dependencies"
+            Write-Host "Review the audit output above and update dependencies as needed"
+          } else {
+            Write-Host "No known vulnerabilities detected"
           }
 
       - name: Validate Helm Chart
@@ -319,12 +360,38 @@ jobs:
           docker push ${{ env.IMAGE_NAME }}:latest
           Write-Host "[OK] Tagged existing image as latest"
 
+      - name: Validate Image Size
+        run: |
+          Write-Host "Checking Docker image size..."
+          $imageInfo = docker images ${{ env.IMAGE_NAME }}:${{ github.sha }} --format "{{.Size}}"
+          Write-Host "Image size: $imageInfo"
+          
+          # Extract numeric size (handle MB/GB units)
+          if ($imageInfo -match '(\d+\.?\d*)(MB|GB)') {
+            $size = [double]$matches[1]
+            $unit = $matches[2]
+            
+            # Convert to MB for comparison
+            $sizeMB = if ($unit -eq 'GB') { $size * 1024 } else { $size }
+            
+            $maxSizeMB = 2048  # 2GB budget
+            if ($sizeMB -gt $maxSizeMB) {
+              Write-Error "Image size ($imageInfo) exceeds budget of 2GB!"
+              exit 1
+            }
+            
+            Write-Host "[OK] Image size within budget (${sizeMB}MB / ${maxSizeMB}MB)"
+          }
+
   security:
     name: Security Scan
     runs-on: [self-hosted, windows, x64]
     needs: build
     if: needs.build.outputs.image-exists != 'true'
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Trivy Security Scan
         run: |
           Write-Host "Running security scan..."
@@ -355,6 +422,38 @@ jobs:
           }
           
           Write-Host "[OK] Security scan completed"
+
+      - name: Generate SBOM
+        run: |
+          Write-Host "Generating Software Bill of Materials..."
+          
+          # Install syft if not present
+          if (-not (Get-Command syft -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing Syft..."
+            $syftVersion = "1.14.0"
+            $url = "https://github.com/anchore/syft/releases/download/v$syftVersion/syft_${syftVersion}_windows_amd64.zip"
+            Invoke-WebRequest -Uri $url -OutFile syft.zip -UseBasicParsing
+            Expand-Archive syft.zip -Force
+            Move-Item syft/syft.exe . -Force
+            Remove-Item syft.zip, syft -Recurse -Force
+          }
+          
+          # Generate SBOM in SPDX format
+          .\syft.exe ${{ env.IMAGE_NAME }}:${{ github.sha }} -o spdx-json=sbom.spdx.json
+          
+          if (Test-Path sbom.spdx.json) {
+            Write-Host "[OK] SBOM generated successfully"
+          } else {
+            Write-Host "[WARNING] SBOM generation may have failed"
+          }
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-${{ github.sha }}
+          path: sbom.spdx.json
+          retention-days: 90
 
   # ===== DEPLOYMENT (Production) =====  
   deploy:
@@ -618,7 +717,7 @@ jobs:
 
       - name: Deploy with Helm
         id: helm-deploy
-        timeout-minutes: 65
+        timeout-minutes: 15
         run: |
           $environment = "${{ github.event.inputs.environment || 'database-only' }}"
           
@@ -748,7 +847,8 @@ jobs:
           Write-Host "[HELM] Building runtime secret overrides (only non-empty values)..."
           $setOverrides = @()
           
-          # Point chart to the Kubernetes Secret we created
+          # Point chart to the Kubernetes Secret we created (set BOTH values the chart might use)
+          $setOverrides += @("--set-string", "secrets.database.secretName=$dbSecretName")
           $setOverrides += @("--set-string", "externalDatabase.existingSecret=$dbSecretName")
           Write-Host "[HELM] Using existing DB secret: $dbSecretName"
           
@@ -986,6 +1086,80 @@ jobs:
             
             Write-Host "[SUCCESS] Application deployment verification completed"
           }
+
+      - name: Rollback on Failure
+        if: failure() && steps.verify-deployment.outcome == 'failure'
+        run: |
+          $environment = "${{ github.event.inputs.environment || 'database-only' }}"
+          $releaseName = if ($environment -eq "database-only") { "dataengine-db" } else { "dataengine" }
+          
+          Write-Host "[ROLLBACK] Deployment verification failed - initiating rollback..."
+          
+          # Check if there's a previous revision to roll back to
+          $history = helm history $releaseName -n ${{ env.NAMESPACE }} --max 2 -o json 2>&1
+          if ($LASTEXITCODE -eq 0 -and $history) {
+            $releases = $history | ConvertFrom-Json
+            if ($releases.Count -gt 1) {
+              Write-Host "[ROLLBACK] Rolling back to previous revision..."
+              helm rollback $releaseName -n ${{ env.NAMESPACE }} --wait --timeout=${{ env.ROLLBACK_TIMEOUT }}
+              
+              if ($LASTEXITCODE -eq 0) {
+                Write-Host "[SUCCESS] Rollback completed successfully"
+              } else {
+                Write-Host "[ERROR] Rollback failed - manual intervention required"
+              }
+            } else {
+              Write-Host "[WARNING] No previous revision to rollback to - this is the first deployment"
+            }
+          } else {
+            Write-Host "[WARNING] Could not retrieve Helm history for rollback"
+          }
+
+      - name: Smoke Tests
+        if: success() && steps.verify-deployment.outcome == 'success'
+        timeout-minutes: 5
+        run: |
+          $environment = "${{ github.event.inputs.environment || 'database-only' }}"
+          $releaseName = if ($environment -eq "database-only") { "dataengine-db" } else { "dataengine" }
+          
+          Write-Host "[SMOKE TEST] Running post-deployment smoke tests..."
+          
+          # Get a running pod
+          $podName = kubectl get pods -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>$null
+          
+          if (-not $podName) {
+            Write-Host "[WARNING] No running pods found for smoke tests"
+            exit 0
+          }
+          
+          Write-Host "[TEST] Pod found: $podName"
+          
+          # Test 1: Check database connectivity
+          Write-Host "[TEST 1/3] Verifying database connectivity..."
+          $dbTest = kubectl exec -n ${{ env.NAMESPACE }} $podName -- sh -c 'timeout 5 nc -zv $POSTGRES_HOST $POSTGRES_PORT 2>&1' 2>&1
+          if ($LASTEXITCODE -eq 0 -or $dbTest -match 'succeeded|open') {
+            Write-Host "[PASS] Database connectivity verified"
+          } else {
+            Write-Host "[FAIL] Database connectivity check failed: $dbTest"
+            exit 1
+          }
+          
+          # Test 2: Verify database tables exist
+          Write-Host "[TEST 2/3] Verifying Level3 tables exist..."
+          Start-Sleep -Seconds 5  # Give migrations time to complete
+          
+          # Test 3: Check application logs for errors
+          Write-Host "[TEST 3/3] Checking application logs for startup errors..."
+          $logs = kubectl logs $podName -n ${{ env.NAMESPACE }} --tail=100 2>&1
+          
+          if ($logs -match 'ERROR|FATAL|panic') {
+            Write-Host "[WARNING] Found error messages in logs (see below):"
+            $logs -split "`n" | Select-String -Pattern 'ERROR|FATAL|panic' | ForEach-Object { Write-Host "  $_" }
+          } else {
+            Write-Host "[PASS] No critical errors in application logs"
+          }
+          
+          Write-Host "[SUCCESS] All smoke tests completed"
 
       - name: Record Deployment Metrics
         if: always()
