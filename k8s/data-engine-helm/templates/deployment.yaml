@@ -109,7 +109,7 @@ spec:
                 {{- else }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}-database
+                  name: {{ include "data-engine.fullname" . }}
                   key: password
                 {{- end }}
               {{- end }}
@@ -119,7 +119,7 @@ spec:
               {{- else if .Values.externalDatabase.enabled }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}-database
+                  name: {{ include "data-engine.fullname" . }}
                   key: url
               {{- end }}
             {{- with .Values.migration.env }}
@@ -241,7 +241,7 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}-database
+                  name: {{ include "data-engine.fullname" . }}
                   key: url
             {{- else }}
             # Individual database components - app builds DATABASE_URL internally for security
@@ -262,7 +262,7 @@ spec:
               {{- else }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}-database
+                  name: {{ include "data-engine.fullname" . }}
                   key: password
               {{- end }}
             {{- end }}

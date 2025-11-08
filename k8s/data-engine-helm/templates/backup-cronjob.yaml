@@ -115,7 +115,7 @@ spec:
                     {{- if .Values.externalDatabase.existingSecret }}
                   name: {{ .Values.externalDatabase.existingSecret }}
                     {{- else }}
-                  name: {{ include "data-engine.fullname" . }}-database
+                  name: {{ include "data-engine.fullname" . }}
                     {{- end }}
                   {{- end }}
                   key: password
