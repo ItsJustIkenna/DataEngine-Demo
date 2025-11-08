@@ -38,7 +38,7 @@ url = "2.5.2"
 
 # Enhanced security dependencies
 jsonwebtoken = "9.3"
-validator = { version = "0.18", features = ["derive"] }
+validator = { version = "0.19", features = ["derive"] }
 rand = "0.8"
 hex = "0.4"
 toml = "0.8"
