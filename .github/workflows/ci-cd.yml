@@ -566,20 +566,30 @@ jobs:
           
           $canaryRelease = "dataengine-canary"
           
+          # Build canary helm command with conditional secrets
+          $canaryCmd = @(
+            "upgrade", "--install", $canaryRelease, "${{ env.HELM_CHART_PATH }}",
+            "--namespace", "${{ env.NAMESPACE }}",
+            "--create-namespace",
+            "--atomic",
+            "--wait",
+            "--timeout", "10m",
+            "--values", "k8s/data-engine-helm/values-canary.yaml",
+            "--set", "image.repository=${{ env.IMAGE_NAME }}",
+            "--set", "image.tag=${{ github.sha }}",
+            "--set", "image.pullPolicy=Always"
+          )
+          
+          # Add database secrets only if present
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_USER)) {
+            $canaryCmd += @("--set-string", "secrets.database.username=$($env:POSTGRES_USER)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PASSWORD)) {
+            $canaryCmd += @("--set-string", "secrets.database.password=$($env:POSTGRES_PASSWORD)")
+          }
+          
           # Deploy canary with 10% traffic
-          helm upgrade --install $canaryRelease ${{ env.HELM_CHART_PATH }} `
-            --namespace ${{ env.NAMESPACE }} `
-            --create-namespace `
-            --atomic `
-            --wait `
-            --timeout 10m `
-            --values k8s/data-engine-helm/values-canary.yaml `
-            --set image.repository=${{ env.IMAGE_NAME }} `
-            --set image.tag=${{ github.sha }} `
-            --set image.pullPolicy=Always `
-            --set-string secrets.database.username=$($env:POSTGRES_USER) `
-            --set-string secrets.database.password=$($env:POSTGRES_PASSWORD)
-            # Redis secrets removed - no longer using Redis
+          helm @canaryCmd
           
           if ($LASTEXITCODE -eq 0) {
             Write-Host "[SUCCESS] Canary deployment completed"
@@ -695,8 +705,7 @@ jobs:
             Write-Host "[OK] Secret $secret is present (length: $($value.Length))"
           }
           
-          # Build base helm command using RUNTIME PowerShell env vars ($env:...), not workflow expressions
-          # CRITICAL: Must use $env:POSTGRES_PASSWORD (runtime) not ${{ env.POSTGRES_PASSWORD }} (compile-time, empty)
+          # Build base helm command
           $helmCmd = @(
             "upgrade", "--install", $releaseName, "${{ env.HELM_CHART_PATH }}",
             "--namespace", "${{ env.NAMESPACE }}",
@@ -707,26 +716,82 @@ jobs:
             "--values", $valuesFile,
             "--set", "image.repository=${{ env.IMAGE_NAME }}",
             "--set", "image.tag=${{ github.sha }}",
-            "--set", "image.pullPolicy=Always",
-            # Use --set-string for secrets with runtime PowerShell variables to prevent placeholder issues
-            "--set-string", "secrets.database.username=$($env:POSTGRES_USER)",
-            "--set-string", "secrets.database.password=$($env:POSTGRES_PASSWORD)",
-            # Build complete DATABASE_URL for security (password not exposed in pod spec)
-            "--set-string", "secrets.database.url=postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)",
-            # Redis configuration removed - no longer using Redis
-            "--set-string", "secrets.api_keys.kraken_api_key=$($env:KRAKEN_API_KEY)",
-            "--set-string", "secrets.api_keys.kraken_secret_key=$($env:KRAKEN_SECRET_KEY)",
-            # Elasticsearch logging credentials
-            "--set-string", "secrets.elasticsearch.endpoint=$($env:ELASTIC_CLOUD_ENDPOINT)",
-            "--set-string", "secrets.elasticsearch.username=$($env:ELASTIC_CLOUD_USERNAME)",
-            "--set-string", "secrets.elasticsearch.password=$($env:ELASTIC_CLOUD_PASSWORD)",
-            # External database settings using runtime variables
-            "--set-string", "externalDatabase.host=$($env:POSTGRES_HOST)",
-            "--set", "externalDatabase.port=$($env:POSTGRES_PORT)",
-            "--set-string", "externalDatabase.database=$($env:POSTGRES_DB)",
-            "--set-string", "externalDatabase.username=$($env:POSTGRES_USER)"
-            # External Redis configuration removed - no longer using Redis
+            "--set", "image.pullPolicy=Always"
           )
+          
+          # Build runtime secret overrides - only pass non-empty values to prevent invalid secretKeyRef
+          Write-Host "[HELM] Building runtime secret overrides (only non-empty values)..."
+          $setOverrides = @()
+          
+          # Database secrets
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_USER)) {
+            $setOverrides += @("--set-string", "secrets.database.username=$($env:POSTGRES_USER)")
+            $setOverrides += @("--set-string", "externalDatabase.username=$($env:POSTGRES_USER)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PASSWORD)) {
+            $setOverrides += @("--set-string", "secrets.database.password=$($env:POSTGRES_PASSWORD)")
+            # Build complete DATABASE_URL for security (password not exposed in pod spec)
+            if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) {
+              $setOverrides += @("--set-string", "secrets.database.url=postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)")
+            }
+          }
+          
+          # External database settings
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) {
+            $setOverrides += @("--set-string", "externalDatabase.host=$($env:POSTGRES_HOST)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PORT)) {
+            $setOverrides += @("--set", "externalDatabase.port=$($env:POSTGRES_PORT)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_DB)) {
+            $setOverrides += @("--set-string", "externalDatabase.database=$($env:POSTGRES_DB)")
+          }
+          
+          # Kraken API keys (optional)
+          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_API_KEY)) {
+            $setOverrides += @("--set-string", "secrets.api_keys.kraken_api_key=$($env:KRAKEN_API_KEY)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_SECRET_KEY)) {
+            $setOverrides += @("--set-string", "secrets.api_keys.kraken_secret_key=$($env:KRAKEN_SECRET_KEY)")
+          }
+          
+          # Elasticsearch credentials (optional)
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_ENDPOINT)) {
+            $setOverrides += @("--set-string", "secrets.elasticsearch.endpoint=$($env:ELASTIC_CLOUD_ENDPOINT)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_USERNAME)) {
+            $setOverrides += @("--set-string", "secrets.elasticsearch.username=$($env:ELASTIC_CLOUD_USERNAME)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_PASSWORD)) {
+            $setOverrides += @("--set-string", "secrets.elasticsearch.password=$($env:ELASTIC_CLOUD_PASSWORD)")
+          }
+          
+          # Append runtime overrides to helm command
+          $helmCmd += $setOverrides
+          Write-Host "[HELM] Added $($setOverrides.Count / 2) secret overrides"
+          
+          # Validate rendered manifest before deployment
+          Write-Host "[HELM] Rendering manifest for validation..."
+          $templateArgs = @(
+            "template", $releaseName, "${{ env.HELM_CHART_PATH }}",
+            "--namespace", "${{ env.NAMESPACE }}",
+            "--values", $valuesFile
+          ) + $setOverrides
+          
+          $renderOutput = helm @templateArgs 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "[FAIL] helm template failed: $renderOutput"
+            exit 1
+          }
+          
+          # Check for empty secretKeyRef.name in rendered manifest
+          if ($renderOutput -match "secretKeyRef:\s*\n\s*name:\s*[`"']?\s*[`"']?") {
+            Write-Error "[FAIL] Rendered manifest contains empty secretKeyRef.name - would cause deployment failure"
+            Write-Host "=== RENDERED MANIFEST (first 200 lines) ==="
+            $renderOutput -split "`n" | Select-Object -First 200 | ForEach-Object { Write-Host $_ }
+            exit 1
+          }
+          Write-Host "[OK] Manifest validation passed"
           
           # For database-only environment, explicitly disable cert-manager and ingress to avoid CRD dependencies
           if ($environment -eq "database-only") {
