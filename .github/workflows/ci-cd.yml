@@ -1140,16 +1140,13 @@ jobs:
           
           # Test 2: Check for recent Level3 data processing in logs
           Write-Host "[TEST 2/3] Verifying Level3 data processing..."
-          $logs = kubectl logs $podName -n ${{ env.NAMESPACE }} --tail=50 2>&1
+          $logs = kubectl logs $podName -n ${{ env.NAMESPACE }} --tail=50 2>&1 | Out-String
           
           if ($logs -match 'Order book update processed|Getting database connection from pool') {
             Write-Host "[PASS] Level3 data processing confirmed in logs"
           } else {
             Write-Host "[WARNING] No Level3 data processing found in recent logs"
           }
-          
-          # Test 3: Check application logs for critical errors
-          Write-Host "[TEST 3/3] Checking application logs for critical errors..."
           
           # Test 3: Check application logs for critical errors
           Write-Host "[TEST 3/3] Checking application logs for critical errors..."
