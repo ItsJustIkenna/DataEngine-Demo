@@ -37,9 +37,9 @@ use databaseschema::{
     },
 };
 use diesel_async::AsyncPgConnection;
-use diesel_async::AsyncPgConnection;
 use anyhow::Error;
-use crate::infrastructure::logging_facade::{MAIN_LOGGER, log_info, log_error};
+use crate::infrastructure::logging_facade::MAIN_LOGGER;
+use crate::{log_info, log_error};
 
 pub async fn get_exchange(
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,

@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use uuid;
-use crate::infrastructure::logging_facade::{MAIN_LOGGER, log_error};
+use crate::infrastructure::logging_facade::MAIN_LOGGER;
+use crate::log_error;
 
 #[derive(Debug, Error)]
 pub enum SecurityMonitorError {

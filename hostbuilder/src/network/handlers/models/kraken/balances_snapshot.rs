@@ -23,7 +23,8 @@ use tokio_retry::{
     },
     Retry
 };
-use crate::infrastructure::logging_facade::{KRAKEN_LOGGER, log_info, log_debug};
+use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
+use crate::{log_debug, log_error};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BalanceSnapshot {

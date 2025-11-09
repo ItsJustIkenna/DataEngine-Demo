@@ -38,7 +38,8 @@ use crate::network::handlers::{
     models::kraken::{responses::{parse_message, Response}, token_response::TokenResponse},
     logging::{KRAKEN_REST_LOGGER, AuthEvent},
 };
-use crate::infrastructure::logging_facade::{KRAKEN_LOGGER, log_info, log_error, log_warn};
+use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
+use crate::{log_info, log_error, log_warn};
 
 pub struct KrakenRestHandler;
 
