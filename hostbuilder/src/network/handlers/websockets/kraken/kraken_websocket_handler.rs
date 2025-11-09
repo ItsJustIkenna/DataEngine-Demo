@@ -97,26 +97,19 @@ impl KrakenWebSocketHandler {
             }
         };
 
-        eprintln!("DEBUG: KrakenWebSocketHandler::new() - About to load CONFIG_PATH");
         let config_path = env::var("CONFIG_PATH")
             .map_err(|_| anyhow::anyhow!("CONFIG_PATH environment variable must be set"))?;
-        eprintln!("DEBUG: KrakenWebSocketHandler::new() - CONFIG_PATH loaded: {}", config_path);
         
         let config = Config::new(&config_path)?;
-        eprintln!("DEBUG: KrakenWebSocketHandler::new() - Config loaded successfully");
 
         let (mut writer, reader) = ws_stream.split();
-        eprintln!("DEBUG: KrakenWebSocketHandler::new() - Stream split, about to send subscription for endpoint: {}", endpoint);
-        eprintln!("DEBUG: Subscription message: {}", subscribe_message);
         
         log_info!(KRAKEN_LOGGER, "📤 Sending subscription message to {}: {}", endpoint, subscribe_message);
         
-        eprintln!("DEBUG: About to call writer.send()");
         writer
             .send(Message::Text(subscribe_message.to_string()))
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send subscription message: {}", e))?;
-        eprintln!("DEBUG: writer.send() completed successfully");
 
         let reader = RwLock::new(reader);
         let writer = RwLock::new(writer);
@@ -192,13 +185,9 @@ impl EndpointHandler for KrakenWebSocketHandler {
                 _result = async {
                     loop {
                         let message = handler.reader.write().await.next().await;
-                        eprintln!("DEBUG: Received WebSocket message");
 
                         match message {
                             Some(Ok(Message::Text(text))) => {
-                                eprintln!("DEBUG: Message is Text, length: {} bytes", text.len());
-                                eprintln!("DEBUG: First 500 chars: {}", &text.chars().take(500).collect::<String>());
-                                
                                 // Log all incoming messages for debugging
                                 if text.contains("subscribe") || text.contains("status") || text.contains("error") {
                                     log_info!(KRAKEN_LOGGER, "📨 Received message: {}", text);
@@ -209,7 +198,6 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 
                                 // Fast path: use SIMD to identify message type before expensive parsing
                                 let is_fast_path = self.fast_parser.is_level3_update(message_bytes);
-                                eprintln!("DEBUG: is_level3_update returned: {}", is_fast_path);
                                 
                                 if is_fast_path {
                                     // Critical path optimization: parse Level3 updates with minimal allocations
@@ -231,28 +219,18 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 }
                                 
                                 // Fallback to standard parsing for non-critical messages
-                                eprintln!("DEBUG: About to call parse_message for non-fast-path message");
                                 match parse_message(&text) {
                                     Ok(Response::Level3Snapshot(snapshot)) => {
-                                        eprintln!("DEBUG: Successfully parsed Level3Snapshot for symbol: {}", snapshot.data[0].symbol);
                                         log_info!(KRAKEN_LOGGER, "📥 Received Level3 snapshot for {}", snapshot.data[0].symbol);
-                                        eprintln!("DEBUG: Looking for order_book in self.order_books with key: {}", snapshot.data[0].symbol);
-                                        eprintln!("DEBUG: Available order_book keys: {:?}", self.order_books.iter().map(|entry| entry.key().clone()).collect::<Vec<_>>());
                                         if let Some(order_book) = self.order_books.get(&snapshot.data[0].symbol) {
-                                            eprintln!("DEBUG: Found order_book, about to call process_snapshot");
                                             if let Err(e) = snapshot.process_snapshot(
                                                 Arc::clone(&self.postgres_pool), 
                                                 &self.config, 
                                                 self.publisher.as_ref().map(|p| Arc::clone(p)), 
                                                 &order_book
                                             ).await {
-                                                eprintln!("DEBUG: process_snapshot returned error: {}", e);
                                                 log_error!(KRAKEN_LOGGER, "Failed to process order book snapshot: {}", e);
-                                            } else {
-                                                eprintln!("DEBUG: process_snapshot completed successfully!");
                                             }
-                                        } else {
-                                            eprintln!("DEBUG: No order_book found for symbol: {}", snapshot.data[0].symbol);
                                         }
                                     },
                                     Ok(Response::Level3Update(update)) => {
@@ -317,8 +295,6 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                         log_info!(KRAKEN_LOGGER, "📭 Unhandled message type: {:?}", other);
                                     },
                                     Err(e) => {
-                                        eprintln!("DEBUG: parse_message returned error: {}", e);
-                                        eprintln!("DEBUG: Failed message (first 1000 chars): {}", &text.chars().take(1000).collect::<String>());
                                         log_error!(KRAKEN_LOGGER, "Failed to parse message: {}", e);
                                         
                                         // Log critical parsing error

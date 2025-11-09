@@ -51,7 +51,6 @@ impl Level3Snapshot {
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook,
     ) -> Result<()> {
-        eprintln!("DEBUG: process_snapshot - Entry point (Redis caching disabled)");
         let start = Instant::now();
 
         if self.data.is_empty() {
@@ -81,15 +80,12 @@ impl Level3Snapshot {
             return Ok(());
         }
         
-        eprintln!("DEBUG: process_snapshot - Processing {} bids and {} asks", snapshot_data.bids.len(), snapshot_data.asks.len());
-        
         let mut open_bid_volume = BigDecimal::zero();
         let mut open_ask_volume = BigDecimal::zero();
 
         // Process bids concurrently
         let bid_futures = async {
             if !snapshot_data.bids.is_empty() {
-                eprintln!("DEBUG: process_snapshot - Processing bids");
                 
                 // Pre-allocate all collections with appropriate capacity
                 let bid_count = snapshot_data.bids.len();
@@ -137,8 +133,6 @@ impl Level3Snapshot {
                     historical_orders.push(historical_order);
                 }
 
-                eprintln!("DEBUG: process_snapshot - About to persist {} buy orders to database", buy_orders.len());
-                
                 // Execute database operations concurrently
                 let buy_count = buy_orders.len();
                 let historical_count = historical_orders.len();
@@ -165,8 +159,6 @@ impl Level3Snapshot {
         // Process asks concurrently
         let ask_futures = async {
             if !snapshot_data.asks.is_empty() {
-                eprintln!("DEBUG: process_snapshot - Processing asks");
-                
                 // Pre-allocate all collections with appropriate capacity
                 let ask_count = snapshot_data.asks.len();
                 let mut sell_orders = Vec::with_capacity(ask_count);
@@ -212,8 +204,6 @@ impl Level3Snapshot {
                     historical_orders.push(historical_order);
                 }
 
-                eprintln!("DEBUG: process_snapshot - About to persist {} sell orders to database", sell_orders.len());
-                
                 // Execute database operations concurrently
                 let sell_count = sell_orders.len();
                 let historical_count = historical_orders.len();
@@ -247,8 +237,6 @@ impl Level3Snapshot {
         // Calculate total volume
         let total_volume = open_bid_volume.clone() + open_ask_volume.clone();
         log_debug!(KRAKEN_LOGGER, "Total volume: {}", total_volume);
-
-        eprintln!("DEBUG: process_snapshot - About to update orderbook in postgres");
         
         // Update orderbook in Postgres (Redis caching removed)
         let postgres_future = update_orderbook(postgres_pool.clone(), order_book.clone(), total_volume.clone());
@@ -263,11 +251,9 @@ impl Level3Snapshot {
         };
         
         if let Err(e) = postgres_result {
-            eprintln!("DEBUG: process_snapshot - Failed to update orderbook: {}", e);
             log_error!(KRAKEN_LOGGER, "Failed to update order book in postgres: {}", e);
             processing_error = Some(format!("Postgres error: {}", e));
         } else {
-            eprintln!("DEBUG: process_snapshot - Successfully updated orderbook in postgres");
             log_info!(KRAKEN_LOGGER, "✅ Successfully updated orderbook in postgres for {}", symbol);
         }
 

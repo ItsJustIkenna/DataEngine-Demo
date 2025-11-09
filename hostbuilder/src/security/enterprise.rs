@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use chrono::{DateTime, Utc, Duration};
 use jsonwebtoken::{Header, Algorithm, Validation, EncodingKey, DecodingKey};
+use crate::infrastructure::logging_facade::{MAIN_LOGGER, log_warn, log_error};
 
 /// Enhanced security context for all operations
 #[derive(Debug, Clone)]
@@ -437,7 +438,7 @@ impl EnterpriseSecurityManager {
         );
         
         // In production, send to SIEM system
-        eprintln!("SECURITY_AUDIT: {}", log_entry);
+        log_warn!(MAIN_LOGGER, "SECURITY_AUDIT: {}", log_entry);
     }
     
     /// Log security incidents for investigation
@@ -451,7 +452,7 @@ impl EnterpriseSecurityManager {
         );
         
         // In production, this would trigger alerts and investigations
-        eprintln!("{}", incident_log);
+        log_error!(MAIN_LOGGER, "{}", incident_log);
     }
     
     // Additional helper methods...

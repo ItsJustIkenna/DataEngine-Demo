@@ -37,8 +37,9 @@ use databaseschema::{
     },
 };
 use diesel_async::AsyncPgConnection;
+use diesel_async::AsyncPgConnection;
 use anyhow::Error;
-// Redis imports removed - no longer using Redis for caching
+use crate::infrastructure::logging_facade::{MAIN_LOGGER, log_info, log_error};
 
 pub async fn get_exchange(
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
@@ -46,16 +47,14 @@ pub async fn get_exchange(
 ) -> Result<Exchange, Error> {
     // Check if the exchange exists in the database
     if !exchange_exists(postgres_pool.clone(), &name).await {
-        println!("Exchange does not exist, creating new exchange");
+        log_info!(MAIN_LOGGER, "Exchange does not exist, creating new exchange: {}", name);
         let new_exchange = NewExchange::new(&name);
         let exchange = create_exchange(postgres_pool.clone(), new_exchange).await?;
-        println!("Created new exchange: {}", exchange.exchange);
+        log_info!(MAIN_LOGGER, "Created new exchange: {}", exchange.exchange);
         Ok(exchange)
     } else {
-        println!("Exchange already exists, retrieving from database");
-        // Retrieve the exchange from the database
         let exchange = get_exchanges_by_name(postgres_pool.clone(), &name).await?;
-        println!("Retrieved exchange: {}", exchange.exchange);
+        log_info!(MAIN_LOGGER, "Retrieved existing exchange: {}", exchange.exchange);
         Ok(exchange)
     }
 }
@@ -70,20 +69,17 @@ pub async fn get_securities(
 
     for symbol in symbols.iter() {
         if !security_exists(postgres_pool.clone(), symbol).await {
-            println!("Security does not exist in the database: {}", symbol);
+            log_info!(MAIN_LOGGER, "Security does not exist in database, creating: {}", symbol);
             let new_security = NewSecurity::new(symbol);
             let security = create_security(postgres_pool.clone(), new_security).await?;
-            println!("Created new security: {}", symbol);
             securities.push(security);
         } else {
-            println!("Security already exists in the database: {}", symbol);
             let security = get_security_by_symbol(postgres_pool.clone(), symbol).await?;
-            println!("Retrieved security: {}", security.symbol);
             securities.push(security);
         }
     }
 
-    println!("Successfully processed {} securities", securities.len());
+    log_info!(MAIN_LOGGER, "Successfully processed {} securities", securities.len());
     Ok(securities)
 }
 
@@ -95,13 +91,11 @@ pub async fn get_orderbooks(
 ) -> Result<HashMap<String, OrderBook>, Error> {
     let mut orderbooks = HashMap::new();
 
-    println!("Processing {} securities for orderbooks", securities.len());
+    log_info!(MAIN_LOGGER, "Processing {} securities for orderbooks", securities.len());
 
     for security in securities.iter() {
         // Check if orderbook exists in PostgreSQL
         if !orderbook_exists(postgres_pool.clone(), security.security_id).await {
-            println!("Orderbook does not exist for security: {}", security.symbol);
-
             // Create new orderbook in PostgreSQL
             let new_orderbook = NewOrderBook::new(
                 &security.symbol,
@@ -112,17 +106,15 @@ pub async fn get_orderbooks(
 
             match create_orderbook(postgres_pool.clone(), new_orderbook).await {
                 Ok(order_book) => {
-                    println!("Created new orderbook for security: {}", security.symbol);
+                    log_info!(MAIN_LOGGER, "Created new orderbook for security: {}", security.symbol);
                     orderbooks.insert(security.symbol.clone(), order_book);
                 }
                 Err(e) => {
-                    println!("Failed to create orderbook for {}: {}", security.symbol, e);
+                    log_error!(MAIN_LOGGER, "Failed to create orderbook for {}: {}", security.symbol, e);
                     return Err(anyhow::Error::from(e));
                 }
             }
         } else {
-            println!("Orderbook exists for security: {}", security.symbol);
-
             // Retrieve existing orderbook from PostgreSQL
             let order_book = get_orderbook_by_exchange_id_and_security_id(
                 postgres_pool.clone(),
@@ -131,11 +123,10 @@ pub async fn get_orderbooks(
             )
             .await?;
 
-            println!("Retrieved orderbook for security: {}", security.symbol);
             orderbooks.insert(security.symbol.clone(), order_book);
         }
     }
 
-    println!("Successfully processed {} orderbooks", orderbooks.len());
+    log_info!(MAIN_LOGGER, "Successfully processed {} orderbooks", orderbooks.len());
     Ok(orderbooks)
 }

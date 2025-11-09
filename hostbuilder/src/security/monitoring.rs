@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::sync::mpsc;
 use uuid;
+use crate::infrastructure::logging_facade::{MAIN_LOGGER, log_error};
 
 #[derive(Debug, Error)]
 pub enum SecurityMonitorError {
@@ -592,7 +593,7 @@ impl SecurityMonitor {
                 // Process through alert system
                 if let Ok(mut alert_system) = alert_system.lock() {
                     if let Err(e) = alert_system.process_event(event) {
-                        eprintln!("Alert processing error: {}", e);
+                        log_error!(MAIN_LOGGER, "Alert processing error: {}", e);
                     }
                 }
             }

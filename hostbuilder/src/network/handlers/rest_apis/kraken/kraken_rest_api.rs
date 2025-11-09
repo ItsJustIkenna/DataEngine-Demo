@@ -38,6 +38,7 @@ use crate::network::handlers::{
     models::kraken::{responses::{parse_message, Response}, token_response::TokenResponse},
     logging::{KRAKEN_REST_LOGGER, AuthEvent},
 };
+use crate::infrastructure::logging_facade::{KRAKEN_LOGGER, log_info, log_error, log_warn};
 
 pub struct KrakenRestHandler;
 
@@ -56,7 +57,7 @@ impl KrakenRestHandler {
         
         // Check if credentials are valid before attempting authentication
         if secret_key.is_empty() || secret_key == "placeholder_secret_key" {
-            println!("Kraken API credentials not configured (placeholder or empty). Skipping authentication.");
+            log_warn!(KRAKEN_LOGGER, "Kraken API credentials not configured (placeholder or empty). Skipping authentication.");
             return Err(anyhow::anyhow!("API credentials not configured"));
         }
 
@@ -83,7 +84,7 @@ impl KrakenRestHandler {
 
                 match parse_message(&body) {
                     Ok(Response::TokenResponse(api_response)) => {
-                        println!("Successfully received TokenResponse: {:?}", api_response);
+                        log_info!(KRAKEN_LOGGER, "Successfully received TokenResponse");
                         
                         // Log successful authentication
                         let auth_event = AuthEvent {
@@ -113,7 +114,7 @@ impl KrakenRestHandler {
                     }
                     Err(e) => {
                         // Handle parsing error
-                        println!("Error: Failed to parse message: {}", e);
+                        log_error!(KRAKEN_LOGGER, "Failed to parse authentication response: {}", e);
                         
                         // Log parsing error
                         let auth_event = AuthEvent {
@@ -129,7 +130,7 @@ impl KrakenRestHandler {
                 }
             }
             Err(e) => {
-                println!("Error: {:?}", e);
+                log_error!(KRAKEN_LOGGER, "Kraken API request error: {}", e);
                 
                 // Log network error
                 let auth_event = AuthEvent {

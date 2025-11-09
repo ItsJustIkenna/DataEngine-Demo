@@ -23,8 +23,7 @@ use tokio_retry::{
     },
     Retry
 };
-use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
-use crate::{log_debug, log_warn, log_error};
+use crate::infrastructure::logging_facade::{KRAKEN_LOGGER, log_info, log_debug};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BalanceSnapshot {
@@ -83,9 +82,9 @@ impl BalanceSnapshot {
         // Process the balance snapshot data here
         // For example, you can log the balance data or perform any other operations needed
         for balance in self.data.iter() {
-            println!("Asset: {}, Balance: {}", balance.asset, balance.balance);
+            log_debug!(KRAKEN_LOGGER, "Asset: {}, Balance: {}", balance.asset, balance.balance);
             for wallet in &balance.wallets {
-                println!("Wallet Type: {}, ID: {}, Balance: {}", wallet.r#type, wallet.id, wallet.balance);
+                log_debug!(KRAKEN_LOGGER, "Wallet Type: {}, ID: {}, Balance: {}", wallet.r#type, wallet.id, wallet.balance);
                 
                 let w = Wallet {
                     user_id: "default_user".to_string(),

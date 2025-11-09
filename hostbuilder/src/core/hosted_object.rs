@@ -128,19 +128,12 @@ impl HostedObjectTrait for HostedObject {
         let mut handles = vec![];
         let config = self.config.clone();
 
-        eprintln!("DEBUG: run() - About to process {} exchanges", config.exchanges.len());
-
         // Process each configured exchange
         for exchange in config.exchanges.iter().cloned() {
-            eprintln!("DEBUG: run() - Processing exchange: {}", exchange.name);
-            
             if exchange.name != "Kraken" {
                 log_info!(MAIN_LOGGER, "Skipping unsupported exchange: {}", exchange.name);
-                eprintln!("DEBUG: run() - Skipping exchange: {}", exchange.name);
                 continue;
             }
-
-            eprintln!("DEBUG: run() - About to initialize exchange: {}", exchange.name);
             
             // Initialize exchange (fetch data, authenticate, load securities & orderbooks)
             let (kraken_exchange, api_response, _securities, orderbooks) = match initialize_exchange(
@@ -151,12 +144,8 @@ impl HostedObjectTrait for HostedObject {
             )
             .await
             {
-                Ok(data) => {
-                    eprintln!("DEBUG: run() - Successfully initialized exchange");
-                    data
-                },
+                Ok(data) => data,
                 Err(e) => {
-                    eprintln!("DEBUG: run() - Failed to initialize exchange: {}", e);
                     log_error!(MAIN_LOGGER, "Failed to initialize exchange {}: {}", exchange.name, e);
                     continue;
                 }
@@ -167,13 +156,9 @@ impl HostedObjectTrait for HostedObject {
                 "Successfully initialized exchange: {}",
                 kraken_exchange.exchange
             );
-
-            eprintln!("DEBUG: run() - About to spawn {} websocket handlers", exchange.websockets.len());
             
             // Spawn handlers for each configured WebSocket channel
             for websocket in exchange.websockets.iter().cloned() {
-                eprintln!("DEBUG: run() - Spawning handler for channel: {}", websocket.channel);
-                
                 let handle = spawn_websocket_handler(
                     &websocket.channel,
                     &websocket.endpoint,
@@ -186,7 +171,6 @@ impl HostedObjectTrait for HostedObject {
                 );
 
                 handles.push(handle);
-                eprintln!("DEBUG: run() - Handler spawned for channel: {}", websocket.channel);
             }
         }
 
