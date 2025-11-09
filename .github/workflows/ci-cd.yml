@@ -804,94 +804,8 @@ jobs:
             Write-Host "[OK] Secret $secret is present (length: $($value.Length))"
           }
           
-          # Create Kubernetes Secret for database credentials
-          Write-Host "[SETUP] Creating database credentials secret..."
-          $dbSecretName = "dataengine-db-credentials"
-          
-          # Check if secret exists
-          $existingSecret = kubectl get secret $dbSecretName -n ${{ env.NAMESPACE }} --ignore-not-found -o name 2>&1
-          if ($existingSecret) {
-            Write-Host "[SETUP] Secret $dbSecretName exists - deleting to recreate with latest values"
-            kubectl delete secret $dbSecretName -n ${{ env.NAMESPACE }} --ignore-not-found
-          }
-          
-          # Create secret with database credentials
-          Write-Host "[SETUP] Creating secret $dbSecretName with DB credentials"
-          kubectl create secret generic $dbSecretName -n ${{ env.NAMESPACE }} `
-            --from-literal=username="$($env:POSTGRES_USER)" `
-            --from-literal=password="$($env:POSTGRES_PASSWORD)" `
-            --from-literal=url="postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)"
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "[FAIL] Failed to create database credentials secret"
-            exit 1
-          }
-          
-          Write-Host "[OK] Database secret created: $dbSecretName"
-          
-          # Create main application secret with ALL environment variables
-          # The Helm template uses {{ include "data-engine.fullname" . }} which generates: dataengine-db-data-engine
-          Write-Host "[SETUP] Creating main application secret..."
-          $mainSecretName = "$releaseName-data-engine"  # Will be: dataengine-db-data-engine
-          
-          # Delete if exists
-          kubectl delete secret $mainSecretName -n ${{ env.NAMESPACE }} --ignore-not-found
-          
-          # Build secret creation command with ALL values
-          $secretArgs = @(
-            "create", "secret", "generic", $mainSecretName,
-            "-n", "${{ env.NAMESPACE }}"
-          )
-          
-          # Add database credentials
-          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_USER)) {
-            $secretArgs += "--from-literal=POSTGRES_USER=$($env:POSTGRES_USER)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PASSWORD)) {
-            $secretArgs += "--from-literal=POSTGRES_PASSWORD=$($env:POSTGRES_PASSWORD)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) {
-            $secretArgs += "--from-literal=POSTGRES_HOST=$($env:POSTGRES_HOST)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PORT)) {
-            $secretArgs += "--from-literal=POSTGRES_PORT=$($env:POSTGRES_PORT)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_DB)) {
-            $secretArgs += "--from-literal=POSTGRES_DB=$($env:POSTGRES_DB)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) {
-            $dbUrl = "postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)"
-            $secretArgs += "--from-literal=url=$dbUrl"
-          }
-          
-          # Add API keys
-          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_API_KEY)) {
-            $secretArgs += "--from-literal=KRAKEN_API_KEY=$($env:KRAKEN_API_KEY)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_SECRET_KEY)) {
-            $secretArgs += "--from-literal=KRAKEN_SECRET_KEY=$($env:KRAKEN_SECRET_KEY)"
-          }
-          
-          # Add Elasticsearch credentials
-          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_ENDPOINT)) {
-            $secretArgs += "--from-literal=ELASTIC_CLOUD_ENDPOINT=$($env:ELASTIC_CLOUD_ENDPOINT)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_USERNAME)) {
-            $secretArgs += "--from-literal=ELASTIC_CLOUD_USERNAME=$($env:ELASTIC_CLOUD_USERNAME)"
-          }
-          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_PASSWORD)) {
-            $secretArgs += "--from-literal=ELASTIC_CLOUD_PASSWORD=$($env:ELASTIC_CLOUD_PASSWORD)"
-          }
-          
-          # Create the secret
-          Write-Host "[SETUP] Creating secret $mainSecretName with $($secretArgs.Count - 4) key-value pairs"
-          kubectl @secretArgs
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "[FAIL] Failed to create main application secret"
-            exit 1
-          }
-          Write-Host "[OK] Main application secret created: $mainSecretName"
+          # Secrets will be created by Helm templates with proper labels
+          Write-Host "[INFO] Secrets will be created by Helm with proper ownership labels"
           
           # Build base helm command
           $helmCmd = @(
@@ -908,16 +822,11 @@ jobs:
             "--set", "image.pullPolicy=Always"
           )
           
-          # Build runtime secret overrides - only pass non-empty values to prevent invalid secretKeyRef
-          Write-Host "[HELM] Building runtime secret overrides (only non-empty values)..."
+          # Build runtime secret overrides - pass values to Helm templates
+          Write-Host "[HELM] Building runtime secret overrides..."
           $setOverrides = @()
           
-          # Point chart to the Kubernetes Secret we created (set BOTH values the chart might use)
-          $setOverrides += @("--set-string", "secrets.database.secretName=$dbSecretName")
-          $setOverrides += @("--set-string", "externalDatabase.existingSecret=$dbSecretName")
-          Write-Host "[HELM] Using existing DB secret: $dbSecretName"
-          
-          # Database secrets (kept for compatibility with chart's main secret)
+          # Database secrets - Helm will create the secret
           if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_USER)) {
             $setOverrides += @("--set-string", "secrets.database.username=$($env:POSTGRES_USER)")
             $setOverrides += @("--set-string", "externalDatabase.username=$($env:POSTGRES_USER)")
@@ -941,8 +850,24 @@ jobs:
             $setOverrides += @("--set-string", "externalDatabase.database=$($env:POSTGRES_DB)")
           }
           
-          # Kraken API keys and Elasticsearch credentials are now in the main secret ($mainSecretName)
-          # No need to set existingSecret overrides - the chart will use the main secret by default
+          # API keys - Helm will create secret
+          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_API_KEY)) {
+            $setOverrides += @("--set-string", "secrets.api_keys.kraken_api_key=$($env:KRAKEN_API_KEY)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_SECRET_KEY)) {
+            $setOverrides += @("--set-string", "secrets.api_keys.kraken_secret_key=$($env:KRAKEN_SECRET_KEY)")
+          }
+          
+          # Elasticsearch credentials - Helm will create secret
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_ENDPOINT)) {
+            $setOverrides += @("--set-string", "secrets.elasticsearch.endpoint=$($env:ELASTIC_CLOUD_ENDPOINT)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_USERNAME)) {
+            $setOverrides += @("--set-string", "secrets.elasticsearch.username=$($env:ELASTIC_CLOUD_USERNAME)")
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_PASSWORD)) {
+            $setOverrides += @("--set-string", "secrets.elasticsearch.password=$($env:ELASTIC_CLOUD_PASSWORD)")
+          }
           
           # Debug: Print all overrides being applied
           Write-Host "[DEBUG] Helm set overrides being applied:"
@@ -951,8 +876,8 @@ jobs:
               $key = $setOverrides[$i]
               $value = $setOverrides[$i+1]
               # Mask password values in output
-              if ($value -match "password|secret_key" -and $value -match "=") {
-                $maskedValue = $value -replace "(password|secret_key)=.*", "`$1=***MASKED***"
+              if ($value -match "password|secret_key|api_key" -and $value -match "=") {
+                $maskedValue = $value -replace "(password|secret_key|api_key)=.*", "`$1=***MASKED***"
                 Write-Host "  $key $maskedValue"
               } else {
                 Write-Host "  $key $value"
@@ -963,28 +888,6 @@ jobs:
           # Append runtime overrides to helm command
           $helmCmd += $setOverrides
           Write-Host "[HELM] Added $($setOverrides.Count / 2) secret overrides"
-          
-          # Validate mandatory secret names are set
-          Write-Host "[VALIDATION] Checking mandatory secret name overrides..."
-          $mandatorySecretNames = @(
-            "secrets.database.secretName",
-            "externalDatabase.existingSecret"
-          )
-          
-          foreach ($requiredKey in $mandatorySecretNames) {
-            $found = $false
-            for ($i = 0; $i -lt $setOverrides.Count; $i += 2) {
-              if ($setOverrides[$i+1] -like "*$requiredKey=*") {
-                $found = $true
-                break
-              }
-            }
-            if (-not $found) {
-              Write-Error "[FAIL] Mandatory secret name '$requiredKey' is not set in helm overrides"
-              exit 1
-            }
-          }
-          Write-Host "[OK] All mandatory secret names are present"
           
           # Validate rendered manifest before deployment
           Write-Host "[HELM] Rendering manifest for validation..."
