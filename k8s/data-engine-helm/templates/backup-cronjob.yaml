@@ -53,11 +53,7 @@ spec:
               mkdir -p /backups
               
               # Perform backup
-              {{- if .Values.externalDatabase.enabled }}
               pg_dump "postgresql://${POSTGRES_USERNAME}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}" | gzip > "$BACKUP_FILE"
-              {{- else }}
-              PGPASSWORD=$POSTGRES_PASSWORD pg_dump -h $POSTGRES_HOST -U $POSTGRES_USERNAME -d $POSTGRES_DB | gzip > "$BACKUP_FILE"
-              {{- end }}
               
               # Verify backup was created
               if [ -f "$BACKUP_FILE" ]; then
@@ -79,46 +75,18 @@ spec:
               echo "Backup process completed at $(date)"
             env:
             - name: POSTGRES_HOST
-              {{- if .Values.customPostgresql.enabled }}
-              value: {{ include "data-engine.postgresql.host" . }}
-              {{- else }}
               value: {{ .Values.externalDatabase.host }}
-              {{- end }}
             - name: POSTGRES_PORT
-              {{- if .Values.customPostgresql.enabled }}
-              value: "5432"
-              {{- else }}
               value: {{ .Values.externalDatabase.port | quote }}
-              {{- end }}
             - name: POSTGRES_DB
-              {{- if .Values.customPostgresql.enabled }}
-              value: {{ .Values.customPostgresql.auth.database }}
-              {{- else }}
               value: {{ .Values.externalDatabase.database }}
-              {{- end }}
             - name: POSTGRES_USERNAME
-              {{- if .Values.customPostgresql.enabled }}
-              value: {{ .Values.customPostgresql.auth.username }}
-              {{- else }}
               value: {{ .Values.externalDatabase.username }}
-              {{- end }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  {{- if .Values.customPostgresql.enabled }}
-                    {{- if .Values.customPostgresql.auth.existingSecret }}
-                  name: {{ .Values.customPostgresql.auth.existingSecret }}
-                    {{- else }}
-                  name: {{ include "data-engine.fullname" . }}-postgresql
-                    {{- end }}
-                  {{- else if .Values.externalDatabase.enabled }}
-                    {{- if .Values.externalDatabase.existingSecret }}
-                  name: {{ .Values.externalDatabase.existingSecret }}
-                    {{- else }}
                   name: {{ include "data-engine.fullname" . }}
-                    {{- end }}
-                  {{- end }}
-                  key: password
+                  key: POSTGRES_PASSWORD
             volumeMounts:
             - name: backup-storage
               mountPath: /backups

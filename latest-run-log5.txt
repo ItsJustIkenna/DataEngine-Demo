@@ -1,0 +1,570 @@
+﻿Deploy to Kubernetes	Deploy with Helm	∩╗┐2025-11-08T22:42:43.8606306Z ##[group]Run $environment = "database-only"
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8607619Z [36;1m$environment = "database-only"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8608059Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8608512Z [36;1m# Determine values file and release name based on environment[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8609224Z [36;1m$valuesFile = "k8s/data-engine-helm/values.yaml"  # Default[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8609789Z [36;1m$releaseName = "dataengine"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8610202Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8610590Z [36;1mswitch ($environment) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8611023Z [36;1m  "database-only" ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8611581Z [36;1m    $valuesFile = "k8s/data-engine-helm/values-database-only.yaml"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8612188Z [36;1m    $releaseName = "dataengine-db"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8612877Z [36;1m    Write-Host "[DATABASE] Deploying Database-Only Configuration using $valuesFile..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8613535Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8613874Z [36;1m  "development" ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8614427Z [36;1m    $valuesFile = "k8s/data-engine-helm/values-dev.yaml"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8615144Z [36;1m    Write-Host "[DEV] Deploying Development Environment using $valuesFile..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8615754Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8616086Z [36;1m  "staging" ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8616555Z [36;1m    $valuesFile = "k8s/data-engine-helm/values-qa.yaml"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8617258Z [36;1m    Write-Host "[STAGING] Deploying Staging Environment using $valuesFile..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8617874Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8618214Z [36;1m  "production" ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8618718Z [36;1m    $valuesFile = "k8s/data-engine-helm/values-prod.yaml"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8619450Z [36;1m    Write-Host "[PROD] Deploying Production Environment using $valuesFile..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8620052Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8620375Z [36;1m  default ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8620874Z [36;1m    Write-Host "[DEFAULT] Deploying with default values.yaml..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8621593Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8621918Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8622226Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8622633Z [36;1mWrite-Host "[INFO] Using values file: $valuesFile"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8623223Z [36;1mWrite-Host "[INFO] Release name: $releaseName"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8623698Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8624020Z [36;1m$deployStart = Get-Date[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8624424Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8624863Z [36;1m# Check for and clean up stuck Helm releases before deploying[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8625551Z [36;1mWrite-Host "[PRE-DEPLOY] Checking for stuck Helm releases..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8626100Z [36;1mtry ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8626589Z [36;1m  $helmListJson = helm list -n dataengine -a --output json 2>&1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8627237Z [36;1m  if ($LASTEXITCODE -eq 0 -and $helmListJson) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8627819Z [36;1m    $helmReleases = $helmListJson | ConvertFrom-Json[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8628429Z [36;1m    $stuckRelease = $helmReleases | Where-Object *** [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8628965Z [36;1m      $_.name -eq $releaseName -and [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8629738Z [36;1m      ($_.status -eq "pending-install" -or $_.status -eq "pending-upgrade" -or $_.status -eq "pending-rollback") [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8630472Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8630785Z [36;1m    [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8631415Z [36;1m    if ($stuckRelease) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8632009Z [36;1m      Write-Host "[WARNING] Found stuck release: $($stuckRelease.name)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8632709Z [36;1m      Write-Host "[WARNING] Status: $($stuckRelease.status)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8633387Z [36;1m      Write-Host "[WARNING] Last updated: $($stuckRelease.updated)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8634138Z [36;1m      Write-Host "[FIX] Uninstalling stuck release to allow fresh deployment..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8634738Z [36;1m      [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8637232Z [36;1m      helm uninstall $releaseName -n dataengine --wait --timeout 3m 2>&1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8637879Z [36;1m      if ($LASTEXITCODE -eq 0) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8638456Z [36;1m        Write-Host "[SUCCESS] Stuck release removed successfully"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8639024Z [36;1m        Start-Sleep -Seconds 5[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8639498Z [36;1m      *** else ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8640021Z [36;1m        Write-Host "[WARNING] Uninstall had issues but continuing..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8640578Z [36;1m      ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8640921Z [36;1m    *** else ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8641351Z [36;1m      Write-Host "[OK] No stuck releases found"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8641828Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8642152Z [36;1m  *** else ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8642731Z [36;1m    Write-Host "[INFO] No existing releases or namespace not found (will be created)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8643355Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8643684Z [36;1m*** catch ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8644161Z [36;1m  Write-Host "[INFO] Could not check for stuck releases: $_"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8644782Z [36;1m  Write-Host "[INFO] Continuing with deployment..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8645274Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8645575Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8646070Z [36;1m# Deploy using the appropriate values file with minimal runtime overrides[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8646843Z [36;1mWrite-Host "[DEPLOY] Starting Helm deployment of $releaseName..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8647411Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8647971Z [36;1m# Validate runtime secrets are available (fetched from Key Vault in previous step)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8648801Z [36;1mWrite-Host "[VALIDATION] Checking runtime secrets availability..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8649726Z [36;1m$requiredSecrets = @("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8650540Z [36;1mforeach ($secret in $requiredSecrets) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8651146Z [36;1m  $value = [Environment]::GetEnvironmentVariable($secret)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8651751Z [36;1m  if ([string]::IsNullOrWhiteSpace($value)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8652413Z [36;1m    Write-Error "[FAIL] Required secret $secret is not set in environment"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8653000Z [36;1m    exit 1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8653333Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8653833Z [36;1m  Write-Host "[OK] Secret $secret is present (length: $($value.Length))"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8654411Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8654716Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8655122Z [36;1m# Create Kubernetes Secret for database credentials[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8655788Z [36;1mWrite-Host "[SETUP] Creating database credentials secret..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8656418Z [36;1m$dbSecretName = "dataengine-db-credentials"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8656887Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8657204Z [36;1m# Check if secret exists[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8657939Z [36;1m$existingSecret = kubectl get secret $dbSecretName -n dataengine --ignore-not-found -o name 2>&1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8658695Z [36;1mif ($existingSecret) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8659380Z [36;1m  Write-Host "[SETUP] Secret $dbSecretName exists - deleting to recreate with latest values"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8660267Z [36;1m  kubectl delete secret $dbSecretName -n dataengine --ignore-not-found[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8660862Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8661407Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8661772Z [36;1m# Create secret with database credentials[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8662543Z [36;1mWrite-Host "[SETUP] Creating secret $dbSecretName with DB credentials"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8663324Z [36;1mkubectl create secret generic $dbSecretName -n dataengine `[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8663966Z [36;1m  --from-literal=username="$($env:POSTGRES_USER)" `[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8664654Z [36;1m  --from-literal=*** `[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8665629Z [36;1m  --from-literal=url="***$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8667065Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8667401Z [36;1mif ($LASTEXITCODE -ne 0) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8667989Z [36;1m  Write-Error "[FAIL] Failed to create database credentials secret"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8668585Z [36;1m  exit 1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8668906Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8669208Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8669642Z [36;1mWrite-Host "[OK] Database secret created: $dbSecretName"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8670158Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8670611Z [36;1m# Create main application secret with ALL environment variables[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8671528Z [36;1m# The Helm template uses *** include "data-engine.fullname" . *** which generates: dataengine-db-data-engine[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8672411Z [36;1mWrite-Host "[SETUP] Creating main application secret..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8673198Z [36;1m$mainSecretName = "$releaseName-data-engine"  # Will be: dataengine-db-data-engine[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8673852Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8674164Z [36;1m# Delete if exists[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8674754Z [36;1mkubectl delete secret $mainSecretName -n dataengine --ignore-not-found[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8675355Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8675733Z [36;1m# Build secret creation command with ALL values[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8676222Z [36;1m$secretArgs = @([0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8676663Z [36;1m  "create", "secret", "generic", $mainSecretName,[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8677162Z [36;1m  "-n", "dataengine"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8677532Z [36;1m)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8677826Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8678145Z [36;1m# Add database credentials[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8678706Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_USER)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8679544Z [36;1m  $secretArgs += "--from-literal=POSTGRES_USER=$($env:POSTGRES_USER)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8680106Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8680586Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PASSWORD)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8681356Z [36;1m  $secretArgs += "--from-literal=POSTGRES_PASSWORD=$($env:POSTGRES_PASSWORD)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8682024Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8682487Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8683194Z [36;1m  $secretArgs += "--from-literal=POSTGRES_HOST=$($env:POSTGRES_HOST)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8683755Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8684205Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PORT)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8684915Z [36;1m  $secretArgs += "--from-literal=POSTGRES_PORT=$($env:POSTGRES_PORT)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8685477Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8685916Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_DB)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8686595Z [36;1m  $secretArgs += "--from-literal=POSTGRES_DB=$($env:POSTGRES_DB)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8687146Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8687607Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8688689Z [36;1m  $dbUrl = "***$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8689348Z [36;1m  $secretArgs += "--from-literal=url=$dbUrl"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8689813Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8690118Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8690426Z [36;1m# Add API keys[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8691130Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_API_KEY)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8691866Z [36;1m  $secretArgs += "--from-literal=KRAKEN_API_KEY=$($env:KRAKEN_API_KEY)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8692435Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8692907Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:KRAKEN_SECRET_KEY)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8693670Z [36;1m  $secretArgs += "--from-literal=KRAKEN_SECRET_KEY=$($env:KRAKEN_SECRET_KEY)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8694273Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8694708Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8695051Z [36;1m# Add Elasticsearch credentials[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8695680Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_ENDPOINT)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8696766Z [36;1m  $secretArgs += "--from-literal=ELASTIC_CLOUD_ENDPOINT=$($env:ELASTIC_CLOUD_ENDPOINT)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8697412Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8697901Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_USERNAME)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8698744Z [36;1m  $secretArgs += "--from-literal=ELASTIC_CLOUD_USERNAME=$($env:ELASTIC_CLOUD_USERNAME)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8699382Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8699880Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:ELASTIC_CLOUD_PASSWORD)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8700707Z [36;1m  $secretArgs += "--from-literal=ELASTIC_CLOUD_PASSWORD=$($env:ELASTIC_CLOUD_PASSWORD)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8701345Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8701640Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8701955Z [36;1m# Create the secret[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8702670Z [36;1mWrite-Host "[SETUP] Creating secret $mainSecretName with $($secretArgs.Count - 4) key-value pairs"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8703410Z [36;1mkubectl @secretArgs[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8703780Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8704118Z [36;1mif ($LASTEXITCODE -ne 0) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8704693Z [36;1m  Write-Error "[FAIL] Failed to create main application secret"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8705243Z [36;1m  exit 1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8705568Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8706052Z [36;1mWrite-Host "[OK] Main application secret created: $mainSecretName"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8706610Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8706927Z [36;1m# Build base helm command[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8707335Z [36;1m$helmCmd = @([0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8707832Z [36;1m  "upgrade", "--install", $releaseName, "k8s/data-engine-helm",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8708389Z [36;1m  "--namespace", "dataengine",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8708832Z [36;1m  "--create-namespace",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8709248Z [36;1m  "--atomic",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8709606Z [36;1m  "--wait",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8709953Z [36;1m  "--timeout", "10m",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8710352Z [36;1m  "--values", $valuesFile,[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8710938Z [36;1m  "--set", "image.repository=ghcr.io/nwagbara-group-llc/dataengine",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8711648Z [36;1m  "--set", "image.tag=2b8a3020569cdd6eec3a550097e4a02beb66f044",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8712236Z [36;1m  "--set", "image.pullPolicy=Always"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8712680Z [36;1m)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8712975Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8713562Z [36;1m# Build runtime secret overrides - only pass non-empty values to prevent invalid secretKeyRef[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8714485Z [36;1mWrite-Host "[HELM] Building runtime secret overrides (only non-empty values)..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8715143Z [36;1m$setOverrides = @()[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8715516Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8716077Z [36;1m# Point chart to the Kubernetes Secret we created (set BOTH values the chart might use)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8716945Z [36;1m$setOverrides += @("--set-string", "secrets.database.secretName=$dbSecretName")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8717793Z [36;1m$setOverrides += @("--set-string", "externalDatabase.existingSecret=$dbSecretName")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8718582Z [36;1mWrite-Host "[HELM] Using existing DB secret: $dbSecretName"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8720018Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8720515Z [36;1m# Database secrets (kept for compatibility with chart's main secret)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8721254Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_USER)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8722050Z [36;1m  $setOverrides += @("--set-string", "secrets.database.username=$($env:POSTGRES_USER)")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8722936Z [36;1m  $setOverrides += @("--set-string", "externalDatabase.username=$($env:POSTGRES_USER)")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8723584Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8724181Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PASSWORD)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8725056Z [36;1m  $setOverrides += @("--set-string", "secrets.database.***")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8725808Z [36;1m  # Build complete DATABASE_URL for security (password not exposed in pod spec)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8726588Z [36;1m  if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8727891Z [36;1m    $setOverrides += @("--set-string", "secrets.database.url=***$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8728713Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8729031Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8729345Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8729665Z [36;1m# External database settings[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8730236Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8731006Z [36;1m  $setOverrides += @("--set-string", "externalDatabase.host=$($env:POSTGRES_HOST)")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8731634Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8732093Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PORT)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8732861Z [36;1m  $setOverrides += @("--set-string", "externalDatabase.port=$($env:POSTGRES_PORT)")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8733481Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8733935Z [36;1mif (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_DB)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8734693Z [36;1m  $setOverrides += @("--set-string", "externalDatabase.database=$($env:POSTGRES_DB)")[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8735338Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8735649Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8736229Z [36;1m# Kraken API keys and Elasticsearch credentials are now in the main secret ($mainSecretName)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8737180Z [36;1m# No need to set existingSecret overrides - the chart will use the main secret by default[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8737825Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8738193Z [36;1m# Debug: Print all overrides being applied[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8738788Z [36;1mWrite-Host "[DEBUG] Helm set overrides being applied:"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8739399Z [36;1mfor ($i = 0; $i -lt $setOverrides.Count; $i += 2) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8739948Z [36;1m  if ($i+1 -lt $setOverrides.Count) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8740431Z [36;1m    $key = $setOverrides[$i][0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8740875Z [36;1m    $value = $setOverrides[$i+1][0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8741344Z [36;1m    # Mask password values in output[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8741958Z [36;1m    if ($value -match "password|secret_key" -and $value -match "=") ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8742733Z [36;1m      $maskedValue = $value -replace "(password|secret_key)=.*", "`$1=***MASKED***"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8743391Z [36;1m      Write-Host "  $key $maskedValue"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8743852Z [36;1m    *** else ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8744239Z [36;1m      Write-Host "  $key $value"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8744666Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8744992Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8745300Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8745599Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8745975Z [36;1m# Append runtime overrides to helm command[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8746463Z [36;1m$helmCmd += $setOverrides[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8747049Z [36;1mWrite-Host "[HELM] Added $($setOverrides.Count / 2) secret overrides"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8747617Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8747978Z [36;1m# Validate mandatory secret names are set[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8748786Z [36;1mWrite-Host "[VALIDATION] Checking mandatory secret name overrides..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8749408Z [36;1m$mandatorySecretNames = @([0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8749874Z [36;1m  "secrets.database.secretName",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8750369Z [36;1m  "externalDatabase.existingSecret"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8750812Z [36;1m)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8751105Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8751521Z [36;1mforeach ($requiredKey in $mandatorySecretNames) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8752788Z [36;1m  $found = $false[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8753260Z [36;1m  for ($i = 0; $i -lt $setOverrides.Count; $i += 2) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8753847Z [36;1m    if ($setOverrides[$i+1] -like "*$requiredKey=*") ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8754352Z [36;1m      $found = $true[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8754732Z [36;1m      break[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8755074Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8755386Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8755722Z [36;1m  if (-not $found) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8756375Z [36;1m    Write-Error "[FAIL] Mandatory secret name '$requiredKey' is not set in helm overrides"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8757036Z [36;1m    exit 1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8757370Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8757685Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8758129Z [36;1mWrite-Host "[OK] All mandatory secret names are present"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8758645Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8759034Z [36;1m# Validate rendered manifest before deployment[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8759650Z [36;1mWrite-Host "[HELM] Rendering manifest for validation..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8760198Z [36;1m$templateArgs = @([0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8760672Z [36;1m  "template", $releaseName, "k8s/data-engine-helm",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8761209Z [36;1m  "--namespace", "dataengine",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8761647Z [36;1m  "--values", $valuesFile[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8762058Z [36;1m) + $setOverrides[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8762431Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8762839Z [36;1m$renderOutput = helm @templateArgs 2>&1 | Out-String[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8763382Z [36;1mif ($LASTEXITCODE -ne 0) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8763972Z [36;1m  Write-Error "[FAIL] helm template failed: $renderOutput"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8764509Z [36;1m  exit 1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8764852Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8765157Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8765579Z [36;1m# Check for empty secretKeyRef.name in rendered manifest[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8766301Z [36;1m# Match: secretKeyRef: followed by name: with empty/whitespace-only value[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8767126Z [36;1mif ($renderOutput -match "secretKeyRef:\s*\n\s*name:\s*(`"`"|''|\s*\n)") ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8767885Z [36;1m  Write-Host "=== FAILURE: EMPTY secretKeyRef.name DETECTED ==="[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8768445Z [36;1m  Write-Host ""[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8768873Z [36;1m  Write-Host "=== ALL OVERRIDES APPLIED ==="[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8769451Z [36;1m  for ($i = 0; $i -lt $setOverrides.Count; $i += 2) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8770015Z [36;1m    if ($i+1 -lt $setOverrides.Count) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8770589Z [36;1m      Write-Host "  $($setOverrides[$i]) $($setOverrides[$i+1])"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8771113Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8771427Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8771752Z [36;1m  Write-Host ""[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8772226Z [36;1m  Write-Host "=== RENDERED MANIFEST (first 300 lines) ==="[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8773022Z [36;1m  $renderOutput -split "`n" | Select-Object -First 300 | ForEach-Object *** Write-Host $_ ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8773715Z [36;1m  Write-Host ""[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8774220Z [36;1m  Write-Host "=== CHECKING FOR EMPTY secretKeyRef BLOCKS ==="[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8774793Z [36;1m  $lines = $renderOutput -split "`n"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8775310Z [36;1m  for ($i=0; $i -lt $lines.Length; $i++) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8775830Z [36;1m    if ($lines[$i] -match 'secretKeyRef:') ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8776524Z [36;1m      $contextStart = [Math]::Max(0, $i-2)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8777065Z [36;1m      $contextEnd = [Math]::Min($lines.Length-1, $i+3)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8777672Z [36;1m      Write-Host "--- Found secretKeyRef at line $($i+1) ---"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8778387Z [36;1m      $lines[$contextStart..$contextEnd] | ForEach-Object *** Write-Host $_ ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8779001Z [36;1m      Write-Host ""[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8779381Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8779874Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8780551Z [36;1m  Write-Error "[FAIL] Rendered manifest contains empty secretKeyRef.name - would cause deployment failure"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8781395Z [36;1m  exit 1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8781725Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8782278Z [36;1mWrite-Host "[OK] Manifest validation passed - no empty secretKeyRef.name found"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8782904Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8783559Z [36;1m# For database-only environment, explicitly disable cert-manager and ingress to avoid CRD dependencies[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8784366Z [36;1mif ($environment -eq "database-only") ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8785140Z [36;1m  Write-Host "[DATABASE-ONLY] Explicitly disabling cert-manager and ingress (no CRD dependency)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8785862Z [36;1m  $helmCmd += @([0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8786284Z [36;1m    "--set", "certManager.enabled=false",[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8800173Z [36;1m    "--set", "ingress.enabled=false"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8800665Z [36;1m  )[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8800992Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8801294Z [36;1m[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8801771Z [36;1mWrite-Host "[HELM] Executing helm upgrade with runtime secrets..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8802374Z [36;1m# Execute helm command[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8802771Z [36;1m& helm $helmCmd[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8803119Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8803464Z [36;1mif ($LASTEXITCODE -eq 0) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8803946Z [36;1m  $duration = (Get-Date) - $deployStart[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8804560Z [36;1m  $durationMinutes = [math]::Round($duration.TotalMinutes, 1)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8805319Z [36;1m  Write-Host "[SUCCESS] Deployment completed in $durationMinutes minutes"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8805921Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8806251Z [36;1m  # Show deployment status[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8806771Z [36;1m  Write-Host "[STATUS] Checking deployed resources..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8807311Z [36;1m  kubectl get pods -n dataengine[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8807790Z [36;1m  kubectl get services -n dataengine[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8808274Z [36;1m  kubectl get deployments -n dataengine[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8808706Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8809027Z [36;1m*** else ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8809598Z [36;1m  Write-Host "[ERROR] Helm deployment failed. Getting diagnostic information..."[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8810223Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8810548Z [36;1m  # Show Helm status[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8810929Z [36;1m  try ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8811322Z [36;1m    helm status $releaseName -n dataengine[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8811967Z [36;1m  *** catch ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8812370Z [36;1m    Write-Host "No Helm release found"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8812817Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8813124Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8813450Z [36;1m  # Show Kubernetes resources[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8814036Z [36;1m  Write-Host "[DEBUG] Kubernetes resources in namespace dataengine:"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8814647Z [36;1m  kubectl get all -n dataengine[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8815063Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8815455Z [36;1m  # Show recent events (PowerShell-compatible)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8815981Z [36;1m  Write-Host "[DEBUG] Recent events:"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8816630Z [36;1m  $events = kubectl get events -n dataengine --sort-by='.lastTimestamp' 2>$null[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8817515Z [36;1m  if ($events) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8818115Z [36;1m    $events -split "`n" | Select-Object -Last 10 | ForEach-Object *** Write-Host $_ ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8818751Z [36;1m  *** else ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8819139Z [36;1m    Write-Host "No events found"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8819565Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8819871Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8820195Z [36;1m  # Show Helm manifest[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8820629Z [36;1m  Write-Host "[DEBUG] Helm manifest:"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8821207Z [36;1m  try ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8821624Z [36;1m    helm get manifest $releaseName -n dataengine[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8822115Z [36;1m  *** catch ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8822562Z [36;1m    Write-Host "Could not retrieve Helm manifest"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8823033Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8823340Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8823682Z [36;1m  # Show migration jobs details[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8824156Z [36;1m  Write-Host "[DEBUG] Migration jobs:"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8824962Z [36;1m  $migrationJobs = kubectl get jobs -n dataengine -l app.kubernetes.io/component=migration -o name 2>$null[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8825739Z [36;1m  if ($migrationJobs) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8826246Z [36;1m    foreach ($job in $migrationJobs -split "`n") ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8826760Z [36;1m      if ($job) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8827180Z [36;1m        Write-Host "=== Describe $job ==="[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8827781Z [36;1m        kubectl describe $job -n dataengine | Select-Object -Last 200[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8828350Z [36;1m      ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8828675Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8828996Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8829302Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8829729Z [36;1m  # Show migration pod logs and details (PowerShell-safe)[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8830289Z [36;1m  Write-Host "[DEBUG] Migration pods:"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8831237Z [36;1m  $migrationPods = kubectl get pods -n dataengine -l app.kubernetes.io/component=migration -o jsonpath='***.items[*].metadata.name***' 2>&1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8832350Z [36;1m  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($migrationPods)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8833271Z [36;1m    Write-Host "No migration pods found or failed to query pods: $migrationPods"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8833901Z [36;1m  *** else ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8834362Z [36;1m    foreach ($pod in $migrationPods -split '\s+') ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8834957Z [36;1m      if (-not [string]::IsNullOrWhiteSpace($pod)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8835516Z [36;1m        Write-Host "=== Logs for pod $pod ==="[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8835992Z [36;1m        try ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8836471Z [36;1m          $logs = kubectl logs $pod -n dataengine --tail=300 2>&1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8837153Z [36;1m          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($logs)) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8837950Z [36;1m            Write-Host "No logs available for pod $pod (kubectl returned: $LASTEXITCODE)"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8838595Z [36;1m          *** else ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8839102Z [36;1m            $logs -split "`n" | ForEach-Object *** Write-Host $_ ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8839621Z [36;1m          ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8839992Z [36;1m        *** catch ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8840480Z [36;1m          Write-Host "Failed to fetch logs for pod $pod : $_"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8840991Z [36;1m        ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8841402Z [36;1m        Write-Host "=== Describe pod $pod ==="[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8841867Z [36;1m        try ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8842449Z [36;1m          kubectl describe pod $pod -n dataengine 2>&1 | ForEach-Object *** Write-Host $_ ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8843110Z [36;1m        *** catch ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8843573Z [36;1m          Write-Host "Failed to describe pod $pod : $_"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8844067Z [36;1m        ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8844568Z [36;1m      ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8844896Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8845213Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8845523Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8845864Z [36;1m  # Show all pod logs if any exist[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8846338Z [36;1m  Write-Host "[DEBUG] All pod logs:"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8846915Z [36;1m  $pods = kubectl get pods -n dataengine --no-headers 2>$null[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8847455Z [36;1m  if ($pods) ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8847939Z [36;1m    try ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8848519Z [36;1m      kubectl logs -l app.kubernetes.io/instance=$releaseName -n dataengine --tail=50[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8849181Z [36;1m    *** catch ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8849598Z [36;1m      Write-Host "No logs available"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8850038Z [36;1m    ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8850358Z [36;1m  ***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8850663Z [36;1m  [0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8851051Z [36;1m  Write-Error "[FAILED] Helm deployment failed"[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8851536Z [36;1m  exit 1[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8851858Z [36;1m***[0m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8914872Z shell: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.EXE -command ". '***0***'"
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8915502Z env:
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8915863Z   IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8916323Z   NAMESPACE: dataengine
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8916679Z   HELM_CHART_PATH: k8s/data-engine-helm
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8917077Z   HELM_TIMEOUT: 10m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8917422Z   HEALTH_CHECK_TIMEOUT: 600s
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8917790Z   ROLLBACK_TIMEOUT: 5m
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8918110Z   PARALLEL_JOBS: 3
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8918420Z   DOCKER_BUILDKIT: 1
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8918755Z   BUILDX_NO_DEFAULT_ATTESTATIONS: 1
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8919290Z   POSTGRES_HOST: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8919614Z   POSTGRES_PORT: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8919946Z   POSTGRES_USER: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8920287Z   POSTGRES_PASSWORD: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8920651Z   POSTGRES_DB: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8921152Z   KRAKEN_API_KEY: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8921911Z   KRAKEN_SECRET_KEY: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8922595Z   ELASTIC_CLOUD_ENDPOINT: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8922971Z   ELASTIC_CLOUD_USERNAME: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8923396Z   ELASTIC_CLOUD_PASSWORD: ***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:43.8923746Z ##[endgroup]
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.2345534Z [DATABASE] Deploying Database-Only Configuration using k8s/data-engine-helm/values-database-only.yaml...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.2354435Z [INFO] Using values file: k8s/data-engine-helm/values-database-only.yaml
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.2361295Z [INFO] Release name: dataengine-db
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.2400250Z [PRE-DEPLOY] Checking for stuck Helm releases...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5535035Z [OK] No stuck releases found
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5540874Z [DEPLOY] Starting Helm deployment of dataengine-db...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5547592Z [VALIDATION] Checking runtime secrets availability...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5622973Z [OK] Secret POSTGRES_USER is present (length: 9)
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5628841Z [OK] Secret POSTGRES_PASSWORD is present (length: 16)
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5635871Z [OK] Secret POSTGRES_HOST is present (length: 46)
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5642760Z [OK] Secret POSTGRES_PORT is present (length: 5)
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5649619Z [OK] Secret POSTGRES_DB is present (length: 4)
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.5656304Z [SETUP] Creating database credentials secret...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.7347307Z [SETUP] Secret dataengine-db-credentials exists - deleting to recreate with latest values
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.9045682Z secret "dataengine-db-credentials" deleted from dataengine namespace
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:44.9274344Z [SETUP] Creating secret dataengine-db-credentials with DB credentials
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.0569591Z secret/dataengine-db-credentials created
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.0776335Z [OK] Database secret created: dataengine-db-credentials
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.0787267Z [SETUP] Creating main application secret...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.2369253Z secret "dataengine-db-data-engine" deleted from dataengine namespace
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.2639914Z [SETUP] Creating secret dataengine-db-data-engine with 13 key-value pairs
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.3813560Z secret/dataengine-db-data-engine created
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.3961282Z [OK] Main application secret created: dataengine-db-data-engine
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.3968765Z [HELM] Building runtime secret overrides (only non-empty values)...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4003115Z [HELM] Using existing DB secret: dataengine-db-credentials
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4013529Z [DEBUG] Helm set overrides being applied:
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4058539Z   --set-string secrets.database.secretName=dataengine-db-credentials
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4066033Z   --set-string externalDatabase.existingSecret=dataengine-db-credentials
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4074122Z   --set-string secrets.database.username=***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4081184Z   --set-string externalDatabase.username=***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4098790Z   --set-string secrets.database.***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4105318Z   --set-string secrets.database.url=***:***/***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4112708Z   --set-string externalDatabase.host=***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4119581Z   --set-string externalDatabase.port=***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4127058Z   --set-string externalDatabase.database=***
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4158048Z [HELM] Added 9 secret overrides
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4166793Z [VALIDATION] Checking mandatory secret name overrides...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4188636Z [OK] All mandatory secret names are present
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.4200274Z [HELM] Rendering manifest for validation...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.5844708Z [OK] Manifest validation passed - no empty secretKeyRef.name found
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.5852521Z [DATABASE-ONLY] Explicitly disabling cert-manager and ingress (no CRD dependency)
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:45.5861059Z [HELM] Executing helm upgrade with runtime secrets...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.1366800Z I1108 17:42:47.136102   12968 warnings.go:110] "Warning: unknown field \"spec.jobTemplate.spec.template.spec.containers[0].securityContext.fsGroup\""
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.5200551Z Error: UPGRADE FAILED: an error occurred while rolling back the release. original upgrade error: cannot patch "dataengine-db-data-engine" with kind Deployment: Deployment.apps "dataengine-db-data-engine" is invalid: spec.template.spec.containers[0].env[11].valueFrom.secretKeyRef.key: Invalid value: "url# API Keys - Support both values file and command line --set": a valid config key must consist of alphanumeric characters, '-', '_' or '.' (e.g. 'key.name',  or 'KEY_NAME',  or 'key-name', regex used for validation is '[-._a-zA-Z0-9]+'): no Secret with the name "dataengine-db-data-engine-database" found
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.5370334Z [ERROR] Helm deployment failed. Getting diagnostic information...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.7365510Z NAME: dataengine-db
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.7366008Z LAST DEPLOYED: Sat Nov  8 17:42:47 2025
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.7366447Z NAMESPACE: dataengine
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.7366771Z STATUS: failed
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.7367069Z REVISION: 13
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.7367416Z TEST SUITE: None
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.7491580Z [DEBUG] Kubernetes resources in namespace dataengine:
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9730083Z NAME                                                  READY   STATUS      RESTARTS   AGE
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9730919Z pod/dataengine-db-data-engine-697476bbb4-59t8g        1/1     Running     0          25h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9731822Z pod/dataengine-db-data-engine-697476bbb4-9vslf        1/1     Running     0          25h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9732702Z pod/dataengine-db-data-engine-697476bbb4-p5k4f        1/1     Running     0          25h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9733624Z pod/dataengine-db-data-engine-backup-29376120-fbn9c   0/1     Completed   0          20h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9744425Z 
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9744829Z NAME                                        READY   UP-TO-DATE   AVAILABLE   AGE
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9745501Z deployment.apps/dataengine-db-data-engine   3/3     3            3           41h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9803783Z 
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9804710Z NAME                                                   DESIRED   CURRENT   READY   AGE
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9805488Z replicaset.apps/dataengine-db-data-engine-576b664fbf   0         0         0       32h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9806403Z replicaset.apps/dataengine-db-data-engine-5b76c58f66   0         0         0       31h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9807237Z replicaset.apps/dataengine-db-data-engine-697476bbb4   3         3         3       25h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9808070Z replicaset.apps/dataengine-db-data-engine-69bc86b684   0         0         0       41h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9809225Z replicaset.apps/dataengine-db-data-engine-6b5cc6b6dd   0         0         0       29h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9810059Z replicaset.apps/dataengine-db-data-engine-7d888cc6b6   0         0         0       33h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9810910Z replicaset.apps/dataengine-db-data-engine-85f98fbf49   0         0         0       30h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9811900Z 
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9812801Z NAME                                             SCHEDULE    TIMEZONE   SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9813727Z cronjob.batch/dataengine-db-data-engine-backup   0 2 * * *   <none>     False     0        20h             41h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9817460Z 
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9818297Z NAME                                                  STATUS     COMPLETIONS   DURATION   AGE
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:47.9819048Z job.batch/dataengine-db-data-engine-backup-29376120   Complete   1/1           7s         20h
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.0044263Z [DEBUG] Recent events:
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.2668128Z kubectl : No resources found in dataengine namespace.
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.2670963Z At C:\Users\Administrator\actions-runner\_work\_temp\e12e3502-a5ba-4147-bd61-bbeaee0ba6b7.ps1:352 char:13
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.2673809Z +   $events = kubectl get events -n dataengine --sort-by='.lastTimestam ...
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.2675283Z +             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.2677191Z     + CategoryInfo          : NotSpecified: (No resources fo...gine namespace.:String) [], RemoteException
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.2678891Z     + FullyQualifiedErrorId : NativeCommandError
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.2679855Z  
+Deploy to Kubernetes	Deploy with Helm	2025-11-08T22:42:48.2869403Z ##[error]Process completed with exit code 1.
+Cleanup Resources	Cleanup Docker Images	∩╗┐2025-11-08T22:42:58.5011890Z ##[group]Run Write-Host "≡ƒº╣ Cleaning up Docker resources..."
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5013222Z [36;1mWrite-Host "≡ƒº╣ Cleaning up Docker resources..."[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5013951Z [36;1m[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5014446Z [36;1m# Keep last 3 versions of our image[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5015608Z [36;1m$images = docker images ghcr.io/nwagbara-group-llc/dataengine --format "{{.ID}} {{.Tag}}" | [0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5016767Z [36;1m  Where-Object { $_ -notmatch "latest" } | [0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5017483Z [36;1m  Select-Object -Skip 3[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5018051Z [36;1m[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5018485Z [36;1mif ($images) {[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5019037Z [36;1m  $images | ForEach-Object { [0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5019696Z [36;1m    $imageId = ($_ -split " ")[0][0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5020369Z [36;1m    docker rmi $imageId -f 2>$null [0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5020997Z [36;1m  }[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5021553Z [36;1m  Write-Host "[SUCCESS] Cleaned up old images"[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5022274Z [36;1m}[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5022703Z [36;1m[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5023133Z [36;1m# System cleanup[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5023843Z [36;1mdocker system prune -f --filter "until=24h" 2>$null[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5024740Z [36;1mWrite-Host "[SUCCESS] Docker cleanup completed"[0m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5092768Z shell: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.EXE -command ". '{0}'"
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5094062Z env:
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5094617Z   IMAGE_NAME: ghcr.io/nwagbara-group-llc/dataengine
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5095322Z   NAMESPACE: dataengine
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5095873Z   HELM_CHART_PATH: k8s/data-engine-helm
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5096490Z   HELM_TIMEOUT: 10m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5096989Z   HEALTH_CHECK_TIMEOUT: 600s
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5097568Z   ROLLBACK_TIMEOUT: 5m
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5098070Z   PARALLEL_JOBS: 3
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5098542Z   DOCKER_BUILDKIT: 1
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5099054Z   BUILDX_NO_DEFAULT_ATTESTATIONS: 1
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.5099645Z ##[endgroup]
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:58.8850431Z ├░┼╕┬º┬╣ Cleaning up Docker resources...
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.3790209Z Untagged: ghcr.io/nwagbara-group-llc/dataengine:c13757c16c44dbedfbc67da7e80537fbbd1028e7
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.3793323Z Deleted: sha256:9e6208f4651e89e86c8953d688bb60d6a8a996debff47c9926737c1ef6397139
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6439762Z docker : Error response from daemon: conflict: unable to delete 2e042a52f063 (cannot be forced) - image is being used 
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6443877Z by running container 036578d0eef0
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6446357Z At C:\Users\Administrator\actions-runner\_work\_temp\0a3f37f5-b84a-47e5-b2fa-03306e8589a3.ps1:12 char:5
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6448887Z +     docker rmi $imageId -f 2>$null
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6450133Z +     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6452312Z     + CategoryInfo          : NotSpecified: (Error response ...er 036578d0eef0:String) [], RemoteException
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6454787Z     + FullyQualifiedErrorId : NativeCommandError
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6456422Z  
+Cleanup Resources	Cleanup Docker Images	2025-11-08T22:42:59.6656330Z ##[error]Process completed with exit code 1.

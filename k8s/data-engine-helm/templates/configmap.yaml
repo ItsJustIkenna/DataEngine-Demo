@@ -15,24 +15,9 @@ data:
   CONNECTION_TIMEOUT: {{ .Values.config.connection_timeout | quote }}
   
   # Database Configuration (non-sensitive)
-  {{- if .Values.customPostgresql.enabled }}
-  POSTGRES_HOST: {{ include "data-engine.postgresql.host" . | quote }}
-  POSTGRES_PORT: "5432"
-  POSTGRES_DB: {{ .Values.customPostgresql.auth.database | quote }}
-  {{- else if .Values.externalDatabase.enabled }}
   POSTGRES_HOST: {{ .Values.externalDatabase.host | quote }}
   POSTGRES_PORT: {{ .Values.externalDatabase.port | quote }}
   POSTGRES_DB: {{ .Values.externalDatabase.database | quote }}
-  {{- end }}
-  
-  # Redis Configuration (non-sensitive)
-  {{- if .Values.customRedis.enabled }}
-  REDIS_HOST: {{ include "data-engine.redis.host" . | quote }}
-  REDIS_PORT: "6379"
-  {{- else if .Values.externalRedis.enabled }}
-  REDIS_HOST: {{ .Values.externalRedis.host | quote }}
-  REDIS_PORT: {{ .Values.externalRedis.port | quote }}
-  {{- end }}
   
   # Performance Configuration
   {{- if .Values.performance.hugepages.enabled }}
