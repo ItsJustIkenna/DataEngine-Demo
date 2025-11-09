@@ -261,7 +261,7 @@ healthcheck:
 # Database Backup Configuration
 # =============================================================================
 backup:
-  enabled: true
+  enabled: false  # Disabled temporarily to resolve PVC immutability issue
   schedule: "0 2 * * *"  # 2 AM UTC daily for database-only environment
   retentionDays: 30  # Keep backups for 30 days
   resources:

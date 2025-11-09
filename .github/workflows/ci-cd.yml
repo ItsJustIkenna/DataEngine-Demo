@@ -789,28 +789,6 @@ jobs:
             Write-Host "[INFO] Continuing with deployment..."
           }
           
-          # Clean up PVCs that might block deployment due to immutable spec changes
-          Write-Host "[PRE-DEPLOY] Checking for PVCs that might block deployment..."
-          try {
-            $pvcName = "dataengine-db-data-engine-backup"
-            $existingPvc = kubectl get pvc $pvcName -n ${{ env.NAMESPACE }} --ignore-not-found -o name 2>&1
-            if ($existingPvc) {
-              Write-Host "[CLEANUP] Found existing PVC: $pvcName"
-              Write-Host "[CLEANUP] Deleting PVC to allow spec changes..."
-              kubectl delete pvc $pvcName -n ${{ env.NAMESPACE }} --wait=true --timeout=2m
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "[SUCCESS] PVC deleted successfully"
-              } else {
-                Write-Host "[WARNING] PVC deletion had issues but continuing..."
-              }
-            } else {
-              Write-Host "[OK] No existing PVC to clean up"
-            }
-          } catch {
-            Write-Host "[INFO] Could not check for PVCs: $_"
-            Write-Host "[INFO] Continuing with deployment..."
-          }
-          
           # Deploy using the appropriate values file with minimal runtime overrides
           Write-Host "[DEPLOY] Starting Helm deployment of $releaseName..."
           
