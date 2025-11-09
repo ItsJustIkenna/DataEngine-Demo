@@ -70,58 +70,11 @@ spec:
               drop:
                 - ALL
           env:
-            - name: POSTGRES_HOST
-              value: {{ include "data-engine.postgresql.host" . }}
-            - name: POSTGRES_PORT
-              {{- if .Values.customPostgresql.enabled }}
-              value: "5432"
-              {{- else }}
-              value: {{ .Values.externalDatabase.port | quote }}
-              {{- end }}
-            - name: POSTGRES_DB
-              {{- if .Values.customPostgresql.enabled }}
-              value: {{ .Values.customPostgresql.auth.database }}
-              {{- else }}
-              value: {{ .Values.externalDatabase.database }}
-              {{- end }}
-            - name: POSTGRES_USERNAME
-              {{- if .Values.customPostgresql.enabled }}
-              value: {{ .Values.customPostgresql.auth.username }}
-              {{- else }}
-              value: {{ .Values.externalDatabase.username }}
-              {{- end }}
-            - name: POSTGRES_PASSWORD
-              {{- if .Values.customPostgresql.enabled }}
-                {{- if .Values.customPostgresql.auth.existingSecret }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.customPostgresql.auth.existingSecret }}
-                  key: password
-                {{- else }}
-              value: {{ .Values.customPostgresql.auth.password | quote }}
-                {{- end }}
-              {{- else if .Values.externalDatabase.enabled }}
-                {{- if .Values.externalDatabase.existingSecret }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalDatabase.existingSecret }}
-                  key: password
-                {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}
-                  key: password
-                {{- end }}
-              {{- end }}
             - name: DATABASE_URL
-              {{- if .Values.customPostgresql.enabled }}
-              value: "postgres://{{ .Values.customPostgresql.auth.username }}:{{ .Values.customPostgresql.auth.password }}@{{ include "data-engine.postgresql.host" . }}:5432/{{ .Values.customPostgresql.auth.database }}"
-              {{- else if .Values.externalDatabase.enabled }}
               valueFrom:
                 secretKeyRef:
                   name: {{ include "data-engine.fullname" . }}
-                  key: url
-              {{- end }}
+                  key: DATABASE_URL
             {{- with .Values.migration.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -132,19 +85,7 @@ spec:
         {{- end }}
         - name: wait-for-dependencies
           image: busybox:1.35
-          command: ['sh', '-c']
-          args:
-            - |
-              echo "Waiting for dependencies to be ready..."
-              {{- if .Values.customPostgresql.enabled }}
-              until nc -z {{ include "data-engine.postgresql.fullname" . }}-primary 5432; do
-                echo "Waiting for PostgreSQL at {{ include "data-engine.postgresql.fullname" . }}-primary:5432..."
-                sleep 2
-              done
-              echo "PostgreSQL is ready!"
-              {{- end }}
-              {{- /* Redis init container removed - no longer using Redis */ -}}
-              echo "All dependencies are ready!"
+          command: ['sh', '-c', 'echo "Dependencies ready"']
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
         {{- if .Values.persistence.enabled }}
@@ -231,67 +172,24 @@ spec:
             {{- end }}
             
             # Database configuration
-            {{- if .Values.customPostgresql.enabled }}
-            - name: DATABASE_URL
-              value: "postgresql://{{ .Values.customPostgresql.auth.username }}:{{ .Values.customPostgresql.auth.password }}@{{ include "data-engine.postgresql.fullname" . }}:5432/{{ .Values.customPostgresql.auth.database }}"
-            - name: POSTGRES_PASSWORD
-              value: {{ .Values.customPostgresql.auth.password | quote }}
-            {{- else if .Values.externalDatabase.enabled }}
-            {{- if .Values.externalDatabase.useCompleteUrl }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: {{ include "data-engine.fullname" . }}
-                  key: url
-            {{- else }}
-            # Individual database components - app builds DATABASE_URL internally for security
-            - name: POSTGRES_HOST
-              value: {{ .Values.externalDatabase.host | quote }}
-            - name: POSTGRES_PORT
-              value: {{ .Values.externalDatabase.port | quote }}
-            - name: POSTGRES_DB
-              value: {{ .Values.externalDatabase.database | quote }}
-            - name: POSTGRES_USER
-              value: {{ .Values.externalDatabase.username | quote }}
-            - name: DATABASE_PASSWORD
-              {{- if .Values.externalDatabase.existingSecret }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.externalDatabase.existingSecret }}
-                  key: password
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "data-engine.fullname" . }}
-                  key: password
-              {{- end }}
-            {{- end }}
-            {{- end }}
+                  key: DATABASE_URL
             
-            {{- /* Redis configuration removed - no longer using Redis */ -}}
-            
-            {{- /* API Keys - Support both values file and command line --set */ -}}
-            {{- if or .Values.kraken_api_key (and .Values.secrets.api_keys .Values.secrets.api_keys.enabled) }}
+            # API Keys
+            {{- if .Values.secrets.api_keys }}
             - name: KRAKEN_API_KEY
-              {{- if .Values.kraken_api_key }}
-              value: {{ .Values.kraken_api_key | quote }}
-              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ include "data-engine.fullname" . }}
                   key: KRAKEN_API_KEY
-              {{- end }}
-            {{- end }}
-            {{- if or .Values.kraken_secret_key (and .Values.secrets.api_keys .Values.secrets.api_keys.enabled) }}
             - name: KRAKEN_SECRET_KEY
-              {{- if .Values.kraken_secret_key }}
-              value: {{ .Values.kraken_secret_key | quote }}
-              {{- else }}
               valueFrom:
                 secretKeyRef:
                   name: {{ include "data-engine.fullname" . }}
                   key: KRAKEN_SECRET_KEY
-              {{- end }}
             {{- end }}
             
             # Performance tuning
