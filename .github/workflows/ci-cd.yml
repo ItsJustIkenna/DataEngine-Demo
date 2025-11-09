@@ -833,10 +833,12 @@ jobs:
           }
           if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_PASSWORD)) {
             $setOverrides += @("--set-string", "secrets.database.password=$($env:POSTGRES_PASSWORD)")
-            # Build complete DATABASE_URL for security (password not exposed in pod spec)
-            if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST)) {
-              $setOverrides += @("--set-string", "secrets.database.url=postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)")
-            }
+          }
+          
+          # Build complete DATABASE_URL for security (password not exposed in pod spec)
+          if (-not [string]::IsNullOrWhiteSpace($env:POSTGRES_HOST) -and -not [string]::IsNullOrWhiteSpace($env:POSTGRES_PASSWORD)) {
+            $databaseUrl = "postgresql://$($env:POSTGRES_USER):$($env:POSTGRES_PASSWORD)@$($env:POSTGRES_HOST):$($env:POSTGRES_PORT)/$($env:POSTGRES_DB)"
+            $setOverrides += @("--set-string", "secrets.database.url=$databaseUrl")
           }
           
           # External database settings
