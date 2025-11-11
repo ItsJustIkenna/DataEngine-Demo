@@ -214,14 +214,31 @@ impl HostedObjectTrait for HostedObject {
                     }
                 }
             }
+            
+            Ok(())
         });
 
         handles.push(shutdown_handle);
 
         // Wait for all handlers to complete
+        // If any handler returns an error, propagate it to crash the pod
         log_info!(MAIN_LOGGER, "Application running with {} active handlers", handles.len());
         for handle in handles {
-            let _ = handle.await;
+            match handle.await {
+                Ok(Ok(())) => {
+                    // Handler completed successfully
+                }
+                Ok(Err(e)) => {
+                    // Handler returned an error - crash the pod
+                    log_error!(MAIN_LOGGER, "Handler failed with error: {}", e);
+                    return Err(e);
+                }
+                Err(e) => {
+                    // Task panicked
+                    log_error!(MAIN_LOGGER, "Handler task panicked: {}", e);
+                    return Err(anyhow::anyhow!("Handler task panicked: {}", e));
+                }
+            }
         }
         
         log_info!(MAIN_LOGGER, "All handlers completed, application shutting down");
@@ -440,7 +457,7 @@ fn spawn_websocket_handler(
     orderbooks: std::collections::HashMap<String, databaseschema::models::order_book::OrderBook>,
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
     shutdown_rx: tokio::sync::broadcast::Receiver<()>,
-) -> tokio::task::JoinHandle<()> {
+) -> tokio::task::JoinHandle<Result<()>> {
     let channel_name = channel.to_string();
     let endpoint = endpoint.to_string();
     let symbols = symbols.to_vec();
@@ -470,7 +487,7 @@ fn spawn_websocket_handler(
         );
 
         // Create and start WebSocket handler
-        match KrakenWebSocketHandler::new(
+        let handler = KrakenWebSocketHandler::new(
             &endpoint,
             orderbooks,
             &subscribe_message,
@@ -479,37 +496,19 @@ fn spawn_websocket_handler(
             Arc::clone(&ws_is_connected),
             Arc::clone(&ws_last_message),
         )
-        .await
-        {
-            Ok(handler) => {
-                let handler = Arc::new(handler);
-                match handler.listen(shutdown_rx).await {
-                    Ok(_) => {
-                        log_info!(
-                            MAIN_LOGGER,
-                            "Successfully listening to {} channel",
-                            channel_name
-                        );
-                    }
-                    Err(e) => {
-                        log_error!(
-                            MAIN_LOGGER,
-                            "Failed to listen on {} channel: {}",
-                            channel_name,
-                            e
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                log_error!(
-                    MAIN_LOGGER,
-                    "Failed to create handler for {} channel: {}",
-                    channel_name,
-                    e
-                );
-            }
-        }
+        .await?;
+        
+        let handler = Arc::new(handler);
+        // Propagate error to crash pod on WebSocket failure
+        handler.listen(shutdown_rx).await?;
+        
+        log_info!(
+            MAIN_LOGGER,
+            "Successfully completed listening to {} channel",
+            channel_name
+        );
+        
+        Ok(())
     })
 }
 
