@@ -168,6 +168,8 @@ impl HostedObjectTrait for HostedObject {
                     orderbooks.clone(),
                     Arc::clone(&self.postgres_pool),
                     shutdown_tx.subscribe(),
+                    Arc::clone(&ws_is_connected),
+                    Arc::clone(&ws_last_message),
                 );
 
                 handles.push(handle);
@@ -445,6 +447,8 @@ async fn initialize_exchange(
 /// * `redis_pool` - Redis connection pool
 /// * `postgres_pool` - PostgreSQL connection pool
 /// * `shutdown_rx` - Shutdown signal receiver
+/// * `ws_is_connected` - Health check flag for WebSocket connection status
+/// * `ws_last_message` - Health check timestamp for last received message
 /// 
 /// # Returns
 /// JoinHandle for the spawned task
@@ -457,6 +461,8 @@ fn spawn_websocket_handler(
     orderbooks: std::collections::HashMap<String, databaseschema::models::order_book::OrderBook>,
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<diesel_async::AsyncPgConnection>>,
     shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+    ws_is_connected: Arc<AtomicBool>,
+    ws_last_message: Arc<AtomicU64>,
 ) -> tokio::task::JoinHandle<Result<()>> {
     let channel_name = channel.to_string();
     let endpoint = endpoint.to_string();
