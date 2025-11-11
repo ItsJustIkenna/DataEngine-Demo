@@ -55,6 +55,9 @@ pub struct HostedObject {
     health_monitor: Arc<SystemHealthMonitor>,
     security_manager: Arc<SecurityManager>,
     error_handler: Arc<ErrorHandler>,
+    // WebSocket health tracking
+    ws_is_connected: Arc<AtomicBool>,
+    ws_last_message: Arc<AtomicU64>,
 }
 
 impl HostedObject {
@@ -117,6 +120,8 @@ impl HostedObject {
             health_monitor,
             security_manager,
             error_handler,
+            ws_is_connected,
+            ws_last_message,
         })
     }
 }
@@ -168,8 +173,8 @@ impl HostedObjectTrait for HostedObject {
                     orderbooks.clone(),
                     Arc::clone(&self.postgres_pool),
                     shutdown_tx.subscribe(),
-                    Arc::clone(&ws_is_connected),
-                    Arc::clone(&ws_last_message),
+                    Arc::clone(&self.ws_is_connected),
+                    Arc::clone(&self.ws_last_message),
                 );
 
                 handles.push(handle);
