@@ -476,6 +476,8 @@ fn spawn_websocket_handler(
             &subscribe_message,
             &unsubscribe_message,
             postgres_pool,
+            Arc::clone(&ws_is_connected),
+            Arc::clone(&ws_last_message),
         )
         .await
         {

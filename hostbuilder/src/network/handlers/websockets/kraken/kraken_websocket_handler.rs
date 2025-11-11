@@ -43,6 +43,8 @@ use crate::network::handlers::models::kraken::responses::{parse_message, Respons
 use crate::network::handlers::models::kraken::fast_parser::FastMessageParser;
 use crate::network::handlers::logging::{KRAKEN_WEBSOCKET_LOGGER, WebSocketEvent, CriticalError};
 use performance::{CpuAffinityManager, cpu_affinity::{set_high_priority, prefault_stack}};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 //-------------------------------------------------------------------------
 
 pub struct KrakenWebSocketHandler {
@@ -55,10 +57,20 @@ pub struct KrakenWebSocketHandler {
     // redis_pool removed - no Redis caching
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
     fast_parser: FastMessageParser, // SIMD-accelerated message parsing
+    is_connected: Arc<AtomicBool>, // Health check flag
+    last_message_time: Arc<AtomicU64>, // Health check timestamp
 }
 
 impl KrakenWebSocketHandler {
-    pub async fn new(endpoint: &str, order_books: HashMap<String, OrderBook>, subscribe_message: &Value, unsubscribe_message: &Value, postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>) -> Result<Self> {
+    pub async fn new(
+        endpoint: &str, 
+        order_books: HashMap<String, OrderBook>, 
+        subscribe_message: &Value, 
+        unsubscribe_message: &Value, 
+        postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
+        is_connected: Arc<AtomicBool>,
+        last_message_time: Arc<AtomicU64>,
+    ) -> Result<Self> {
         // Use default config for now, optimize later
         let connection_start = Instant::now();
         let (ws_stream, _) = match connect_async(endpoint).await {
@@ -142,6 +154,14 @@ impl KrakenWebSocketHandler {
             order_books_map.insert(key, value);
         }
         
+        // Set connected status and initial timestamp
+        is_connected.store(true, Ordering::Relaxed);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(std::time::Duration::ZERO)
+            .as_millis() as u64;
+        last_message_time.store(now, Ordering::Relaxed);
+        
         Ok(Self {
             config,
             writer,
@@ -152,6 +172,8 @@ impl KrakenWebSocketHandler {
             // redis_pool removed
             postgres_pool,
             fast_parser: FastMessageParser::new(),
+            is_connected,
+            last_message_time,
         })
     }
 }
@@ -182,12 +204,19 @@ impl EndpointHandler for KrakenWebSocketHandler {
 
             tokio::select! {
                 // Listening to WebSocket Messages
-                _result = async {
+                result = async {
                     loop {
                         let message = handler.reader.write().await.next().await;
 
                         match message {
                             Some(Ok(Message::Text(text))) => {
+                                // Update health check timestamp on every message
+                                let now = SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap_or(std::time::Duration::ZERO)
+                                    .as_millis() as u64;
+                                handler.last_message_time.store(now, Ordering::Relaxed);
+                                
                                 // Log all incoming messages for debugging
                                 if text.contains("subscribe") || text.contains("status") || text.contains("error") {
                                     log_info!(KRAKEN_LOGGER, "📨 Received message: {}", text);
@@ -310,22 +339,24 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 }
                             },
                             Some(Ok(Message::Close(_))) => {
-                                log_warn!(KRAKEN_LOGGER, "WebSocket connection closed by server, will attempt reconnection");
+                                log_warn!(KRAKEN_LOGGER, "WebSocket connection closed by server");
+                                
+                                // Mark as disconnected for health check
+                                handler.is_connected.store(false, Ordering::Relaxed);
                                 
                                 // Log WebSocket disconnect
                                 let disconnect_event = WebSocketEvent {
                                     endpoint: "kraken-websocket".to_string(),
                                     action: "disconnect".to_string(),
                                     connection_id: None,
-                                    message: "WebSocket connection closed by server, reconnecting...".to_string(),
+                                    message: "WebSocket connection closed by server".to_string(),
                                     level: LogLevel::Warn,
                                     latency_micros: None,
                                 };
                                 let _ = KRAKEN_WEBSOCKET_LOGGER.log_websocket_event(disconnect_event).await;
                                 
-                                // Exit loop to trigger reconnection in outer loop
-                                log_warn!(KRAKEN_LOGGER, "WebSocket closed by server, exiting listener loop");
-                                break;
+                                // Return error to trigger pod restart
+                                return Err(anyhow::anyhow!("WebSocket closed by server"));
                             },
                             Some(Ok(Message::Ping(data))) => {
                                 // Send pong response
@@ -338,18 +369,29 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                 // Handle other message types silently
                             },
                             Some(Err(e)) => {
-                                log_error!(KRAKEN_LOGGER, "Error receiving message: {}, exiting listener loop", e);
-                                break;
+                                log_error!(KRAKEN_LOGGER, "Error receiving message: {}", e);
+                                
+                                // Mark as disconnected for health check
+                                handler.is_connected.store(false, Ordering::Relaxed);
+                                
+                                // Return error to trigger pod restart
+                                return Err(anyhow::anyhow!("WebSocket error: {}", e));
                             },
                             None => {
-                                log_warn!(KRAKEN_LOGGER, "WebSocket connection closed unexpectedly, exiting listener loop");
-                                break;
+                                log_warn!(KRAKEN_LOGGER, "WebSocket connection closed unexpectedly");
+                                
+                                // Mark as disconnected for health check
+                                handler.is_connected.store(false, Ordering::Relaxed);
+                                
+                                // Return error to trigger pod restart
+                                return Err(anyhow::anyhow!("WebSocket connection closed unexpectedly"));
                             }
                         }
                     }
                 } => {
-                    // WebSocket listener completed (loop exited via break)
+                    // WebSocket listener completed with result (error will propagate)
                     log_info!(KRAKEN_LOGGER, "WebSocket listener loop completed");
+                    result?; // Propagate error to cause pod restart
                 },
 
                 // Handling Shutdown
