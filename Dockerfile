@@ -104,11 +104,12 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # Stage 3: Minimal Alpine runtime with built-in shell and process tools
 FROM alpine:latest AS runtime
 
-# Install essential runtime dependencies including procps for pgrep
+# Install essential runtime dependencies including procps for pgrep and postgresql for psql
 RUN apk add --no-cache \
     ca-certificates \
     libgcc \
     procps \
+    postgresql-client \
     && adduser -D -u 65532 nonroot
 
 # Copy only the optimized binary
