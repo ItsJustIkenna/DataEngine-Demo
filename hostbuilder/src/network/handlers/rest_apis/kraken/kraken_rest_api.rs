@@ -46,10 +46,13 @@ pub struct KrakenRestHandler;
 impl KrakenRestHandler {
     pub async fn authenticate(endpoint: &str) -> Result<TokenResponse> {
         let auth_start = Instant::now();
+        
+        // Use nanoseconds for higher precision to avoid nonce collisions across multiple pods
+        // Kraken requires strictly increasing nonces, and microsecond precision prevents collisions
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
-            .as_millis();
+            .as_nanos() as u64; // Nanosecond precision (u64 safe until year 2554)
 
         let url = Url::parse(endpoint).expect("Failed to parse URL");
 
