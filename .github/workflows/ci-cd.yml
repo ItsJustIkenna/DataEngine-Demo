@@ -622,11 +622,13 @@ jobs:
           $cleanupJobs | Remove-Job -Force
           
           # Force delete stuck PVCs if any remain
-          $remainingPVCs = kubectl get pvc -n ${{ env.NAMESPACE }} --no-headers 2>$null
-          if ($remainingPVCs) {
+          $remainingPVCs = kubectl get pvc -n ${{ env.NAMESPACE }} --no-headers 2>&1 | Where-Object { $_ -notmatch "No resources found" }
+          if ($remainingPVCs -and $remainingPVCs.Count -gt 0) {
             Write-Warning "[CLEANUP] Some PVCs still exist, attempting force deletion..."
             kubectl patch pvc -n ${{ env.NAMESPACE }} --all -p '{"metadata":{"finalizers":null}}' 2>$null
             kubectl delete pvc --all -n ${{ env.NAMESPACE }} --force --grace-period=0 2>$null
+          } else {
+            Write-Host "[OK] No PVCs remaining in namespace"
           }
           
           Write-Host "[SUCCESS] Clean deployment cleanup completed"
