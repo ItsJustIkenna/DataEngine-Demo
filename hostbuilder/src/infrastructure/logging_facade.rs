@@ -235,3 +235,10 @@ macro_rules! log_error {
         }
     };
 }
+
+/// Create a standalone UltraLogger instance with Elasticsearch configuration
+/// Used by KrakenLogger and other specialized loggers
+pub fn create_ultra_logger(service_name: &str) -> UltraLogger {
+    let config = DataEngineLogger::create_elasticsearch_config();
+    UltraLogger::with_config(format!("DataEngine-{}", service_name), config)
+}

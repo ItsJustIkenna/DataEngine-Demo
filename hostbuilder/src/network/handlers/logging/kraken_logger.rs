@@ -1,18 +1,24 @@
-use ultra_logger::{LogLevel, LogEntry};
+use ultra_logger::{LogLevel, LogEntry, UltraLogger};
 use std::collections::HashMap;
 use bigdecimal::BigDecimal;
 use once_cell::sync::Lazy;
+use std::sync::Arc;
 
 /// High-performance centralized logging service for Kraken operations
 /// Optimized for minimal latency impact on critical trading paths
 pub struct KrakenLogger {
     service_name: String,
+    logger: Arc<UltraLogger>,
 }
 
 impl KrakenLogger {
     pub fn new(service_name: &str) -> Self {
+        // Get or create the Elasticsearch logger
+        let logger = Arc::new(crate::infrastructure::logging_facade::create_ultra_logger(service_name));
+        
         Self {
             service_name: service_name.to_string(),
+            logger,
         }
     }
 
@@ -36,9 +42,9 @@ impl KrakenLogger {
         // Add metadata
         entry.metadata = metadata;
 
-        // Use structured logging output
-        println!("{}", entry.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log order book update processing with performance metrics
@@ -65,8 +71,9 @@ impl KrakenLogger {
 
         entry.metadata = metadata;
 
-        println!("{}", entry.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log trade processing events
@@ -93,8 +100,9 @@ impl KrakenLogger {
 
         entry.metadata = metadata;
 
-        println!("{}", entry.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log API authentication events
@@ -123,8 +131,9 @@ impl KrakenLogger {
             acc.with_metadata(k, v)
         });
 
-        println!("{}", entry_with_fields.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry_with_fields).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log performance metrics
@@ -147,8 +156,9 @@ impl KrakenLogger {
             acc.with_metadata(k, v)
         });
 
-        println!("{}", entry_with_fields.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry_with_fields).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Emergency error logging with minimal overhead
@@ -173,8 +183,9 @@ impl KrakenLogger {
             acc.with_metadata(k, v)
         });
 
-        println!("{}", entry_with_fields.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry_with_fields).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log snapshot processing (Level3, Trade, Balance snapshots)
@@ -202,8 +213,9 @@ impl KrakenLogger {
             acc.with_metadata(k, v)
         });
 
-        println!("{}", entry_with_fields.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry_with_fields).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log balance updates
@@ -231,8 +243,9 @@ impl KrakenLogger {
             acc.with_metadata(k, v)
         });
 
-        println!("{}", entry_with_fields.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry_with_fields).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log heartbeat events for connection monitoring
@@ -264,8 +277,9 @@ impl KrakenLogger {
             acc.with_metadata(k, v)
         });
 
-        println!("{}", entry_with_fields.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry_with_fields).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     /// Log subscription management events
@@ -301,8 +315,9 @@ impl KrakenLogger {
             acc.with_metadata(k, v)
         });
 
-        println!("{}", entry_with_fields.to_json());
-        Ok(())
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry_with_fields).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 }
 
