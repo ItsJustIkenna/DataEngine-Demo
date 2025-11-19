@@ -29,6 +29,7 @@ use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
 use std::time::Instant;
 
 use crate::network::handlers::logging::{KRAKEN_SNAPSHOT_LOGGER, SnapshotProcessingLog};
+use crate::network::handlers::logging::{KRAKEN_HISTORICAL_LOGGER, HistoricalOrderLog};
 
 use super::trade_data::TradeData;
 
@@ -143,6 +144,8 @@ impl TradeSnapshot {
         };
         
         // Only store trade data in historical_orders for snapshots (not real-time trades)
+        let order_count = trades.len();
+        let hist_start = std::time::Instant::now();
         let postgres_future = create_historical_orders(postgres_pool.clone(), trades);
         
         // Handle publisher conditionally for database-only mode
@@ -183,8 +186,30 @@ impl TradeSnapshot {
         if let Err(e) = postgres_result {
             log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
             processing_error = Some(format!("Postgres error: {}", e));
+            
+            // Log historical order storage failure
+            let hist_log = HistoricalOrderLog {
+                symbol: symbol.clone(),
+                event_type: "trade".to_string(),
+                order_count,
+                processing_time_ms: hist_start.elapsed().as_millis(),
+                success: false,
+                error: Some(e.to_string()),
+            };
+            let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
         } else {
             log_debug!(KRAKEN_LOGGER, "Added historical orders to postgres");
+            
+            // Log successful historical order storage
+            let hist_log = HistoricalOrderLog {
+                symbol: symbol.clone(),
+                event_type: "trade".to_string(),
+                order_count,
+                processing_time_ms: hist_start.elapsed().as_millis(),
+                success: true,
+                error: None,
+            };
+            let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
         }
 
         // Log trade snapshot processing completion

@@ -50,6 +50,7 @@ use std::time::Instant;
 
 // Import the Kraken logger
 use crate::network::handlers::logging::{KRAKEN_WEBSOCKET_LOGGER, KRAKEN_ORDERBOOK_LOGGER, Level3UpdateLog, OrderBookUpdateLog};
+use crate::network::handlers::logging::{KRAKEN_HISTORICAL_LOGGER, HistoricalOrderLog};
 
 // Ultra-high performance constants - optimized for cache lines
 const INITIAL_ORDERS_CAPACITY: usize = 512; // Increased for better performance
@@ -283,6 +284,7 @@ impl Level3Update {
             let historical_buy_count = historical_orders.len();
 
             // Process database operations concurrently
+            let hist_start = std::time::Instant::now();
             let create_buy_orders_future = create_open_buy_orders(postgres_pool.clone(), buy_orders);
             let modify_buy_orders_future = modify_open_buy_orders(postgres_pool.clone(), modify_orders);
             let delete_buy_orders_future = delete_open_buy_orders(postgres_pool.clone(), &delete_orders);
@@ -317,10 +319,29 @@ impl Level3Update {
                     delete_buy_count, order_book.symbol);
             }
             
-            if let Err(e) = historical_result {
+            // Log historical order storage with structured logging
+            if let Err(e) = &historical_result {
                 log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
+                let hist_log = HistoricalOrderLog {
+                    symbol: order_book.symbol.clone(),
+                    event_type: "buy-mixed".to_string(),
+                    order_count: historical_buy_count,
+                    processing_time_ms: hist_start.elapsed().as_millis(),
+                    success: false,
+                    error: Some(e.to_string()),
+                };
+                let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
             } else {
                 log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_buy_count);
+                let hist_log = HistoricalOrderLog {
+                    symbol: order_book.symbol.clone(),
+                    event_type: "buy-mixed".to_string(),
+                    order_count: historical_buy_count,
+                    processing_time_ms: hist_start.elapsed().as_millis(),
+                    success: true,
+                    error: None,
+                };
+                let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
             }
 
             Ok::<(), Error>(())
@@ -472,6 +493,7 @@ impl Level3Update {
             let historical_sell_count = historical_orders.len();
 
             // Process database operations concurrently
+            let hist_start = std::time::Instant::now();
             let create_sell_orders_future = create_open_sell_orders(postgres_pool.clone(), sell_orders);
             let modify_sell_orders_future = modify_open_sell_orders(postgres_pool.clone(), modify_orders);
             let delete_sell_orders_future = delete_open_sell_orders(postgres_pool.clone(), &delete_orders);
@@ -506,10 +528,29 @@ impl Level3Update {
                     delete_sell_count, order_book.symbol);
             }
             
-            if let Err(e) = historical_result {
+            // Log historical order storage with structured logging
+            if let Err(e) = &historical_result {
                 log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
+                let hist_log = HistoricalOrderLog {
+                    symbol: order_book.symbol.clone(),
+                    event_type: "sell-mixed".to_string(),
+                    order_count: historical_sell_count,
+                    processing_time_ms: hist_start.elapsed().as_millis(),
+                    success: false,
+                    error: Some(e.to_string()),
+                };
+                let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
             } else {
                 log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_sell_count);
+                let hist_log = HistoricalOrderLog {
+                    symbol: order_book.symbol.clone(),
+                    event_type: "sell-mixed".to_string(),
+                    order_count: historical_sell_count,
+                    processing_time_ms: hist_start.elapsed().as_millis(),
+                    success: true,
+                    error: None,
+                };
+                let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
             }
 
             Ok::<(), Error>(())

@@ -319,6 +319,40 @@ impl KrakenLogger {
         self.logger.log_entry(entry_with_fields).await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
+
+    /// Log historical order storage events
+    pub async fn log_historical_order_storage(&self, storage: HistoricalOrderLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut metadata = HashMap::new();
+        metadata.insert("symbol".to_string(), storage.symbol.clone());
+        metadata.insert("event_type".to_string(), storage.event_type.clone());
+        metadata.insert("order_count".to_string(), storage.order_count.to_string());
+        metadata.insert("processing_time_ms".to_string(), storage.processing_time_ms.to_string());
+        metadata.insert("success".to_string(), storage.success.to_string());
+        
+        if let Some(ref error) = storage.error {
+            metadata.insert("error".to_string(), error.clone());
+        }
+
+        let level = if storage.success { LogLevel::Info } else { LogLevel::Error };
+        
+        let entry = LogEntry::new(
+            level,
+            self.service_name.clone(),
+            format!("Historical orders stored: {} {} events for {} ({}ms)", 
+                   storage.order_count,
+                   storage.event_type,
+                   storage.symbol,
+                   storage.processing_time_ms),
+        );
+
+        let entry_with_fields = metadata.into_iter().fold(entry, |acc, (k, v)| {
+            acc.with_metadata(k, v)
+        });
+
+        // Send to Elasticsearch via UltraLogger
+        self.logger.log_entry(entry_with_fields).await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
 }
 
 // Global logger instances for different components - using Lazy for thread safety
@@ -330,6 +364,7 @@ pub static KRAKEN_BALANCE_LOGGER: Lazy<KrakenLogger> = Lazy::new(|| KrakenLogger
 pub static KRAKEN_SNAPSHOT_LOGGER: Lazy<KrakenLogger> = Lazy::new(|| KrakenLogger::new("Snapshot"));
 pub static KRAKEN_HEARTBEAT_LOGGER: Lazy<KrakenLogger> = Lazy::new(|| KrakenLogger::new("Heartbeat"));
 pub static KRAKEN_SUBSCRIPTION_LOGGER: Lazy<KrakenLogger> = Lazy::new(|| KrakenLogger::new("Subscription"));
+pub static KRAKEN_HISTORICAL_LOGGER: Lazy<KrakenLogger> = Lazy::new(|| KrakenLogger::new("HistoricalOrder"));
 
 // Logging data structures for structured logging
 #[derive(Debug, Clone)]
@@ -463,10 +498,20 @@ pub struct HeartbeatLog {
 #[derive(Debug, Clone)]
 pub struct SubscriptionLog {
     pub channel: String,
-    pub action: String, // subscribe, unsubscribe, ack, error
+    pub action: String,  // "subscribe" or "unsubscribe"
     pub symbol: Option<String>,
     pub success: bool,
-    pub processing_time_micros: u64,
+    pub processing_time_micros: u128,
+    pub error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoricalOrderLog {
+    pub symbol: String,
+    pub event_type: String,  // "new", "modify", "cancel", "trade", or "mixed"
+    pub order_count: usize,
+    pub processing_time_ms: u128,
+    pub success: bool,
     pub error: Option<String>,
 }
 
