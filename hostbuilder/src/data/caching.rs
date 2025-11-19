@@ -10,11 +10,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use ahash::AHashMap;
 use crossbeam_utils::CachePadded;
 use dashmap::DashMap;
-use parking_lot::{RwLock, Mutex};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use once_cell::sync::Lazy;
-use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
+use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_warn, log_debug};
 
 /// Cache entry with metadata
 #[derive(Debug, Clone)]
@@ -100,7 +100,7 @@ where
     capacity: usize,
     stats: CachePadded<RwLock<CacheStats>>,
     // Simple counter-based eviction instead of maintaining order
-    access_counter: CachePadded<AtomicU64>,
+    _access_counter: CachePadded<AtomicU64>,
 }
 
 impl<K, V> OptimizedLRUCache<K, V>
@@ -113,7 +113,7 @@ where
             data: DashMap::with_capacity(capacity),
             capacity,
             stats: CachePadded::new(RwLock::new(CacheStats::new())),
-            access_counter: CachePadded::new(AtomicU64::new(0)),
+            _access_counter: CachePadded::new(AtomicU64::new(0)),
         }
     }
 

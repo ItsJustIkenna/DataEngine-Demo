@@ -32,7 +32,6 @@ use std::{
     }
 };
 use url::Url;
-use ultra_logger::LogLevel;
 
 use crate::network::handlers::{
     models::kraken::{responses::{parse_message, Response}, token_response::TokenResponse},

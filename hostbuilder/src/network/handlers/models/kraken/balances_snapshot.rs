@@ -16,13 +16,6 @@ use serde::{
     Deserialize,
     Serialize
 };
-use tokio_retry::{
-    strategy::{
-        jitter,
-        ExponentialBackoff
-    },
-    Retry
-};
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
 use crate::{log_debug, log_error};
 
@@ -68,9 +61,6 @@ impl BalanceSnapshot {
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook
     ) -> Result<()> {
-        // Reduce retry attempts for lower latency (currently unused but available for future use)
-        let _retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
-
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "balances data is empty");
             return Ok(());

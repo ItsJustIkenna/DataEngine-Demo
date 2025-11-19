@@ -28,7 +28,6 @@ use crate::{
         monitoring::{DatabaseHealthChecker, PerformanceHealthChecker, SystemHealthMonitor, WebSocketHealthChecker},
         resilience::ErrorHandler,
     },
-    data::caching::CacheMaintenanceService,
     network::{
         endpoint::EndpointHandler,
         handlers::{
@@ -38,7 +37,7 @@ use crate::{
     },
     security::{SecurityConfig, SecurityManager},
     // Import logging macros (exported at crate root) and logger instance
-    log_info, log_warn, log_error, log_debug,
+    log_info, log_warn, log_error,
     infrastructure::logging_facade::MAIN_LOGGER,
 };
 
@@ -52,9 +51,9 @@ pub struct HostedObject {
     config: Config,
     // Redis pool removed - no longer using Redis for caching
     postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
-    health_monitor: Arc<SystemHealthMonitor>,
-    security_manager: Arc<SecurityManager>,
-    error_handler: Arc<ErrorHandler>,
+    _health_monitor: Arc<SystemHealthMonitor>,
+    _security_manager: Arc<SecurityManager>,
+    _error_handler: Arc<ErrorHandler>,
     // WebSocket health tracking
     ws_is_connected: Arc<AtomicBool>,
     ws_last_message: Arc<AtomicU64>,
@@ -117,9 +116,9 @@ impl HostedObject {
             config,
             // redis_pool removed
             postgres_pool,
-            health_monitor,
-            security_manager,
-            error_handler,
+            _health_monitor: health_monitor,
+            _security_manager: security_manager,
+            _error_handler: error_handler,
             ws_is_connected,
             ws_last_message,
         })

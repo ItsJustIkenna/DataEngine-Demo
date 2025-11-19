@@ -5,7 +5,7 @@ use serde::{
 };
 use std::time::Instant;
 
-use crate::network::handlers::logging::{KRAKEN_WEBSOCKET_LOGGER, KRAKEN_SUBSCRIPTION_LOGGER, WebSocketLog, SubscriptionLog};
+use crate::network::handlers::logging::{KRAKEN_SUBSCRIPTION_LOGGER, SubscriptionLog};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Level3Subscribe {
@@ -30,7 +30,7 @@ impl Level3Subscribe {
                 action: "subscribe".to_string(),
                 symbol: Some(symbol.clone()),
                 success: true, // Assume success for now, could be enhanced with actual result
-                processing_time_micros: start.elapsed().as_micros() as u64,
+                processing_time_micros: start.elapsed().as_micros(),
                 error: None,
             };
             

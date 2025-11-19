@@ -4,9 +4,8 @@
 //! and high-performance socket optimizations on Windows for ultra-low latency.
 
 use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
-use std::time::{Instant, Duration};
 use anyhow::{Result, anyhow};
-use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
+use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::log_info;
 use socket2::{Socket, Domain, Type, Protocol};
 use std::net::SocketAddr;
 
@@ -25,7 +24,7 @@ pub struct KernelBypassManager {
     
     // Configuration
     buffer_size: usize,
-    queue_depth: u32,
+    _queue_depth: u32,
     
     is_initialized: AtomicBool,
 }
@@ -39,7 +38,7 @@ impl KernelBypassManager {
             bytes_processed: AtomicU64::new(0),
             processing_time_ns: AtomicU64::new(0),
             buffer_size: 8192,
-            queue_depth: 256,
+            _queue_depth: 256,
             is_initialized: AtomicBool::new(false),
         };
         
@@ -51,14 +50,15 @@ impl KernelBypassManager {
     pub async fn initialize(&mut self) -> Result<()> {
         #[cfg(target_os = "linux")]
         {
+            let queue_depth = 256u32;
             // Initialize io_uring for zero-copy I/O
-            match IoUring::new(self.queue_depth) {
+            match IoUring::new(queue_depth) {
                 Ok(ring) => {
                     self.ring = Some(ring);
-                    log_info!(MAIN_LOGGER, "io_uring initialized with queue depth {}", self.queue_depth);
+                    log_info!(MAIN_LOGGER, "io_uring initialized with queue depth {}", queue_depth);
                 }
                 Err(e) => {
-                    log_warn!(MAIN_LOGGER, "Failed to initialize io_uring: {}, falling back to optimized sockets", e);
+                    log_info!(MAIN_LOGGER, "Failed to initialize io_uring: {}, falling back to optimized sockets", e);
                 }
             }
         }
@@ -122,7 +122,7 @@ impl KernelBypassManager {
         {
             use std::os::windows::io::AsRawSocket;
             
-            let socket_handle = socket.as_raw_socket();
+            let _socket_handle = socket.as_raw_socket();
             
             // Windows-specific optimizations - use basic socket options
             // Windows doesn't need the same low-level optimizations as Linux
@@ -254,7 +254,7 @@ pub struct ZeroCopyMessageBuffer {
     ptr: *mut u8,
     size: usize,
     capacity: usize,
-    is_mmap: bool,
+    _is_mmap: bool,
 }
 
 unsafe impl Send for ZeroCopyMessageBuffer {}
@@ -291,7 +291,7 @@ impl ZeroCopyMessageBuffer {
                 ptr,
                 size: 0,
                 capacity: size,
-                is_mmap: true,
+                _is_mmap: true,
             })
         }
         #[cfg(not(unix))]
@@ -308,7 +308,7 @@ impl ZeroCopyMessageBuffer {
                 ptr,
                 size: 0,
                 capacity: size,
-                is_mmap: false,
+                _is_mmap: false,
             })
         }
     }

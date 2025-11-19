@@ -167,20 +167,20 @@ pub struct AnomalyDetector {
 
 #[derive(Debug, Clone)]
 struct ConnectionPattern {
-    ip_address: String,
+    _ip_address: String,
     connection_count: u32,
     request_rate: f64,
     last_activity: Instant,
     connection_times: VecDeque<Instant>,
-    unusual_behavior_score: f64,
+    _unusual_behavior_score: f64,
 }
 
 #[derive(Debug, Clone)]
 struct RequestPattern {
-    endpoint: String,
+    _endpoint: String,
     request_count: u32,
     average_size: f64,
-    error_rate: f64,
+    _error_rate: f64,
     response_times: VecDeque<Duration>,
 }
 
@@ -189,7 +189,7 @@ struct BaselineMetrics {
     normal_connection_rate: f64,
     normal_request_size: f64,
     normal_response_time: Duration,
-    normal_error_rate: f64,
+    _normal_error_rate: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -222,7 +222,7 @@ impl AnomalyDetector {
                 normal_connection_rate: 10.0,
                 normal_request_size: 1024.0,
                 normal_response_time: Duration::from_millis(100),
-                normal_error_rate: 0.01,
+                _normal_error_rate: 0.01,
             }),
             detection_thresholds: DetectionThresholds::default(),
         }
@@ -234,12 +234,12 @@ impl AnomalyDetector {
         
         let pattern = patterns.entry(ip.to_string()).or_insert_with(|| {
             ConnectionPattern {
-                ip_address: ip.to_string(),
+                _ip_address: ip.to_string(),
                 connection_count: 0,
                 request_rate: 0.0,
                 last_activity: Instant::now(),
                 connection_times: VecDeque::new(),
-                unusual_behavior_score: 0.0,
+                _unusual_behavior_score: 0.0,
             }
         });
         
@@ -283,10 +283,10 @@ impl AnomalyDetector {
         
         let pattern = patterns.entry(endpoint.to_string()).or_insert_with(|| {
             RequestPattern {
-                endpoint: endpoint.to_string(),
+                _endpoint: endpoint.to_string(),
                 request_count: 0,
                 average_size: 0.0,
-                error_rate: 0.0,
+                _error_rate: 0.0,
                 response_times: VecDeque::new(),
             }
         });
@@ -346,7 +346,7 @@ impl AnomalyDetector {
 pub struct SecurityAlertSystem {
     alert_rules: Vec<AlertRule>,
     notification_channels: Vec<NotificationChannel>,
-    alert_history: Arc<Mutex<VecDeque<Alert>>>,
+    _alert_history: Arc<Mutex<VecDeque<Alert>>>,
     suppression_rules: HashMap<String, SuppressionRule>,
 }
 
@@ -430,7 +430,7 @@ impl SecurityAlertSystem {
                     file_path: "security_alerts.log".to_string(),
                 },
             ],
-            alert_history: Arc::new(Mutex::new(VecDeque::new())),
+            _alert_history: Arc::new(Mutex::new(VecDeque::new())),
             suppression_rules: HashMap::new(),
         }
     }

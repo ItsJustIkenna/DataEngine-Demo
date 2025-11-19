@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn test_timer() {
-        let mut timer = Timer::start();
+        let timer = Timer::start();
         thread::sleep(Duration::from_millis(1));
         let elapsed = timer.elapsed_ns();
         assert!(elapsed > 500_000); // Should be > 0.5ms

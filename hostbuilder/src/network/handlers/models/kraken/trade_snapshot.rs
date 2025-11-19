@@ -15,16 +15,7 @@ use serde::{
     Deserialize,
     Serialize
 };
-use tokio_retry::{
-    strategy::{
-        jitter,
-        ExponentialBackoff
-    },
-    Retry
-};
-use crate::network::handlers::logging::KRAKEN_TRADE_LOGGER;
-use crate::{log_info, log_warn, log_error, log_debug};
-use crate::network::handlers::logging::{KRAKEN_WEBSOCKET_LOGGER, TradeSnapshotLog};
+use crate::{log_error, log_debug};
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
 use std::time::Instant;
 
@@ -59,9 +50,6 @@ impl TradeSnapshot {
     ) -> Result<()> {
         let start = Instant::now();
         
-        // Reduce retry attempts for lower latency
-        let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
-
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "Trade data is empty");
             

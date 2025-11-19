@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex; // Add tokio::sync::Mutex for optional publisher
 
 use anyhow::Result;
-use bigdecimal::{BigDecimal, Zero, ToPrimitive};
+use bigdecimal::{BigDecimal, Zero};
 use chrono::{DateTime, Utc};
 use config::Config;
 use databaseschema::{
@@ -11,7 +11,6 @@ use databaseschema::{
     }
 };
 use diesel_async::AsyncPgConnection;
-use protocol::broker::messages::{market_message, publish_request, MarketMessage, Order, Orders, PublishRequest};
 use publisher::Publisher;
 // Redis imports removed - no longer using Redis for caching
 use serde::{
@@ -19,10 +18,10 @@ use serde::{
     Serialize
 };
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
-use crate::{log_debug, log_info, log_warn, log_error};
+use crate::{log_debug, log_info, log_error};
 use std::time::Instant;
 
-use crate::network::handlers::logging::{KRAKEN_WEBSOCKET_LOGGER, KRAKEN_SNAPSHOT_LOGGER, Level3SnapshotLog, SnapshotProcessingLog};
+use crate::network::handlers::logging::{KRAKEN_SNAPSHOT_LOGGER, SnapshotProcessingLog};
 
 
 // Common strings to avoid allocations
@@ -47,7 +46,7 @@ impl Level3Snapshot {
     pub async fn process_snapshot(
         &self,
         postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
-        config: &Config,
+        _config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook,
     ) -> Result<()> {

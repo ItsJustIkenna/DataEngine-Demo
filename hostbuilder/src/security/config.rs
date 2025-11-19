@@ -3,7 +3,6 @@
 //! Provides secure defaults, privilege reduction, and network hardening
 //! configurations to minimize attack surface and improve security posture.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -427,6 +426,7 @@ impl SecurityConfigManager {
 
 /// Security utilities for runtime checks
 pub mod security_utils {
+    #[allow(unused_imports)]
     use super::*;
     
     /// Check if running with root privileges

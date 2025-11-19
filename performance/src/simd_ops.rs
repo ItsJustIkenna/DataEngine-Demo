@@ -34,11 +34,11 @@ pub struct ParsedMessageBatch {
 }
 
 pub struct SimdMessageParser {
-    capabilities: SimdCapabilities,
+    _capabilities: SimdCapabilities,
 }
 
 pub struct SimdCalculator {
-    capabilities: SimdCapabilities,
+    _capabilities: SimdCapabilities,
 }
 
 static INIT: Once = Once::new();
@@ -69,7 +69,7 @@ impl SimdCapabilities {
 impl SimdMessageParser {
     pub fn new() -> Self {
         Self {
-            capabilities: SimdCapabilities::detect(),
+            _capabilities: SimdCapabilities::detect(),
         }
     }
 
@@ -80,9 +80,9 @@ impl SimdMessageParser {
 
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
-            if self.capabilities.has_avx2 {
+            if self._capabilities.has_avx2 {
                 unsafe { self.parse_with_avx2(buffer) }
-            } else if self.capabilities.has_sse42 {
+            } else if self._capabilities.has_sse42 {
                 unsafe { self.parse_with_sse42(buffer) }
             } else {
                 self.parse_scalar(buffer)
@@ -188,7 +188,7 @@ impl SimdMessageParser {
 impl SimdCalculator {
     pub fn new() -> Self {
         Self {
-            capabilities: SimdCapabilities::detect(),
+            _capabilities: SimdCapabilities::detect(),
         }
     }
 
@@ -199,7 +199,7 @@ impl SimdCalculator {
 
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
-            if self.capabilities.has_avx2 {
+            if self._capabilities.has_avx2 {
                 unsafe { self.calculate_vwap_avx2(prices, volumes) }
             } else {
                 self.calculate_vwap_scalar(prices, volumes)
@@ -257,7 +257,10 @@ pub fn get_global_parser() -> &'static SimdMessageParser {
             PARSER = Some(SimdMessageParser::new());
             CALCULATOR = Some(SimdCalculator::new());
         });
-        PARSER.as_ref().unwrap()
+        match PARSER {
+            Some(ref parser) => parser,
+            None => panic!("Parser not initialized"),
+        }
     }
 }
 
@@ -267,7 +270,10 @@ pub fn get_global_calculator() -> &'static SimdCalculator {
             PARSER = Some(SimdMessageParser::new());
             CALCULATOR = Some(SimdCalculator::new());
         });
-        CALCULATOR.as_ref().unwrap()
+        match CALCULATOR {
+            Some(ref calculator) => calculator,
+            None => panic!("Calculator not initialized"),
+        }
     }
 }
 

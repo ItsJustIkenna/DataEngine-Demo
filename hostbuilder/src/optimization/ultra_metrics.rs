@@ -6,8 +6,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
+use std::time::Instant;
+use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn};
 
 /// Ultra-precision metrics collector
 pub struct UltraPrecisionMetrics {
@@ -33,14 +33,14 @@ pub struct UltraPrecisionMetrics {
     cache_misses: AtomicU64,
     
     // Hardware performance
-    cpu_cycles_per_operation: AtomicU64,
+    _cpu_cycles_per_operation: AtomicU64,
     
     // Symbol-specific metrics
     symbol_metrics: Arc<RwLock<HashMap<String, SymbolMetrics>>>,
     
     // Timing calibration
-    rdtsc_frequency: u64,
-    start_time: Instant,
+    _rdtsc_frequency: u64,
+    _start_time: Instant,
 }
 
 #[derive(Debug, Default)]
@@ -48,8 +48,8 @@ struct SymbolMetrics {
     orders_added: AtomicU64,
     trades_count: AtomicU64,
     last_trade_price: AtomicU64, // Fixed point representation
-    best_bid_updates: AtomicU64,
-    best_ask_updates: AtomicU64,
+    _best_bid_updates: AtomicU64,
+    _best_ask_updates: AtomicU64,
 }
 
 impl UltraPrecisionMetrics {
@@ -70,10 +70,10 @@ impl UltraPrecisionMetrics {
             zero_copy_operations: AtomicU64::new(0),
             cache_hits: AtomicU64::new(0),
             cache_misses: AtomicU64::new(0),
-            cpu_cycles_per_operation: AtomicU64::new(0),
+            _cpu_cycles_per_operation: AtomicU64::new(0),
             symbol_metrics: Arc::new(RwLock::new(HashMap::new())),
-            rdtsc_frequency: rdtsc_freq,
-            start_time: Instant::now(),
+            _rdtsc_frequency: rdtsc_freq,
+            _start_time: Instant::now(),
         }
     }
     
@@ -287,8 +287,15 @@ pub fn init_global_ultra_metrics() {
 
 /// Get global ultra-precision metrics
 pub fn get_global_ultra_metrics() -> &'static UltraPrecisionMetrics {
+    INIT_ULTRA_METRICS.call_once(|| {
+        unsafe {
+            GLOBAL_ULTRA_METRICS = Some(UltraPrecisionMetrics::new());
+        }
+    });
+    
     unsafe {
-        GLOBAL_ULTRA_METRICS.as_ref().expect("Ultra-precision metrics not initialized")
+        let ptr = std::ptr::addr_of!(GLOBAL_ULTRA_METRICS);
+        (*ptr).as_ref().expect("Ultra-precision metrics not initialized")
     }
 }
 

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use std::sync::Arc;
-use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
+use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn};
 
 use crate::data::caching::CacheManager;
 use crate::optimization::kernel_bypass::KernelBypassManager;
@@ -66,8 +66,10 @@ impl DataPipeline {
         
         // Use zero-copy buffer from global pool
         let buffer_pool = unsafe { 
-            performance::memory_pool::GLOBAL_BUFFER_POOL.as_ref()
-                .ok_or_else(|| anyhow!("Global buffer pool not initialized"))?
+            match performance::memory_pool::GLOBAL_BUFFER_POOL {
+                Some(ref pool) => pool,
+                None => return Err(anyhow!("Global buffer pool not initialized")),
+            }
         };
         let mut buffer = buffer_pool.get_buffer()?;
         

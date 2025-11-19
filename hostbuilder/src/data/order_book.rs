@@ -4,10 +4,8 @@
 //! data structures and RCU-style updates for minimal latency operations.
 
 use std::sync::atomic::{AtomicPtr, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::collections::BTreeMap;
-use std::ptr::{self, NonNull};
-use std::alloc::{alloc, dealloc, Layout};
+use std::ptr;
+use std::alloc::{Layout, alloc};
 use crossbeam_utils::CachePadded;
 use anyhow::{Result, anyhow};
 
@@ -59,13 +57,13 @@ pub struct LockFreeOrderBook {
     total_bid_quantity: CachePadded<AtomicU64>,
     total_ask_quantity: CachePadded<AtomicU64>,
     total_orders: CachePadded<AtomicUsize>,
-    last_trade_price: CachePadded<AtomicU64>,
+    _last_trade_price: CachePadded<AtomicU64>,
     
     // Update sequence counter for lock-free reads
     sequence: CachePadded<AtomicU64>,
     
     // Symbol identifier
-    symbol: String,
+    _symbol: String,
     
     // Memory management
     level_allocator: LevelAllocator,
@@ -91,9 +89,9 @@ impl LockFreeOrderBook {
             total_bid_quantity: CachePadded::new(AtomicU64::new(0)),
             total_ask_quantity: CachePadded::new(AtomicU64::new(0)),
             total_orders: CachePadded::new(AtomicUsize::new(0)),
-            last_trade_price: CachePadded::new(AtomicU64::new(0)),
+            _last_trade_price: CachePadded::new(AtomicU64::new(0)),
             sequence: CachePadded::new(AtomicU64::new(0)),
-            symbol,
+            _symbol: symbol,
             level_allocator,
             order_allocator,
             operations_count: AtomicU64::new(0),
@@ -507,7 +505,7 @@ pub struct OrderBookStats {
 /// Lock-free price level allocator
 struct LevelAllocator {
     free_list: AtomicPtr<PriceLevel>,
-    capacity: usize,
+    _capacity: usize,
     allocated: AtomicUsize,
 }
 
@@ -530,7 +528,7 @@ impl LevelAllocator {
         
         Ok(Self {
             free_list: AtomicPtr::new(free_list),
-            capacity,
+            _capacity: capacity,
             allocated: AtomicUsize::new(0),
         })
     }
@@ -590,7 +588,7 @@ impl LevelAllocator {
 /// Lock-free order allocator
 struct OrderAllocator {
     free_list: AtomicPtr<Order>,
-    capacity: usize,
+    _capacity: usize,
     allocated: AtomicUsize,
 }
 
@@ -613,7 +611,7 @@ impl OrderAllocator {
         
         Ok(Self {
             free_list: AtomicPtr::new(free_list),
-            capacity,
+            _capacity: capacity,
             allocated: AtomicUsize::new(0),
         })
     }
@@ -648,6 +646,7 @@ impl OrderAllocator {
         }
     }
     
+    #[allow(dead_code)]
     fn deallocate(&self, order: *mut Order) {
         loop {
             let head = self.free_list.load(Ordering::Acquire);

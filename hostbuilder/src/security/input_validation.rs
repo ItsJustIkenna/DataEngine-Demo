@@ -415,6 +415,7 @@ impl ApiValidator {
 
 /// Utility functions for safe string handling
 pub mod string_utils {
+    #[allow(unused_imports)]
     use super::*;
     
     /// Safely truncate string to maximum length

@@ -23,7 +23,7 @@ pub struct BufferPool {
     // Configuration
     buffer_size: usize,
     buffer_alignment: usize,
-    initial_pool_size: usize,
+    _initial_pool_size: usize,
 }
 
 struct PoolNode {
@@ -47,7 +47,7 @@ impl BufferPool {
             allocation_count: AtomicU64::new(0),
             buffer_size,
             buffer_alignment: alignment,
-            initial_pool_size,
+            _initial_pool_size: initial_pool_size,
         };
         
         // Pre-allocate initial buffers
@@ -339,10 +339,10 @@ pub fn init_global_pool(buffer_size: usize, pool_size: usize) -> Result<()> {
 /// Get buffer from global pool
 pub fn get_global_buffer() -> Result<PooledBuffer> {
     unsafe {
-        GLOBAL_BUFFER_POOL
-            .as_ref()
-            .ok_or_else(|| anyhow!("Global buffer pool not initialized"))?
-            .get_buffer()
+        match GLOBAL_BUFFER_POOL {
+            Some(ref pool) => pool.get_buffer(),
+            None => Err(anyhow!("Global buffer pool not initialized"))
+        }
     }
 }
 

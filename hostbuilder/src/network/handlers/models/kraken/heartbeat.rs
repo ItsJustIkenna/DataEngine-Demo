@@ -5,7 +5,7 @@ use serde::{
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::network::handlers::logging::{KRAKEN_WEBSOCKET_LOGGER, KRAKEN_HEARTBEAT_LOGGER, HeartbeatLog};
+use crate::network::handlers::logging::{KRAKEN_HEARTBEAT_LOGGER, HeartbeatLog};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct HeartBeat {

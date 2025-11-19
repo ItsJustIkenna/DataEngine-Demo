@@ -17,17 +17,9 @@ use serde::{
     Deserialize,
     Serialize
 };
-use tokio_retry::{
-    strategy::{
-        jitter,
-        ExponentialBackoff
-    },
-    Retry
-};
-use crate::infrastructure::logging_facade::KRAKEN_LOGGER; use crate::{log_info, log_warn, log_error, log_debug};
+use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
+use crate::{log_info, log_error, log_debug};
 use std::time::Instant;
-
-use crate::network::handlers::logging::{KRAKEN_BALANCE_LOGGER, BalanceUpdateLog};
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -81,9 +73,6 @@ impl BalanceUpdate {
     ) -> Result<()> {
         let start_time = Instant::now();
         
-        // Reduce retry attempts for lower latency (currently unused but available for future use)
-        let _retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
-
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "balances data is empty");
             return Ok(());

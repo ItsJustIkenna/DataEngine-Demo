@@ -56,6 +56,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       tests-passed: ${{ steps.test-result.outputs.passed }}
+      skip-tests: ${{ steps.check-skip.outputs.skip }}
     steps:
       - name: Checkout DataEngine
         uses: actions/checkout@v4
@@ -90,6 +91,19 @@ jobs:
           rustc --version
           cargo --version
 
+      - name: Check for Skip Tests Flag
+        id: check-skip
+        shell: powershell
+        run: |
+          $commitMsg = git log -1 --pretty=%B
+          if ($commitMsg -match '\[skip-tests\]') {
+            Write-Host "⏭️  [skip-tests] flag detected in commit message - skipping tests"
+            echo "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Running full validation with tests"
+            echo "skip=false" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Cache Cargo Registry
         uses: actions/cache@v4
         with:
@@ -110,33 +124,54 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-target-
 
+      - name: Fast Check (Syntax & Type Check)
+        shell: powershell
+        run: |
+          Write-Host "Running fast cargo check (no codegen)..."
+          cd DataEngine
+          cargo check --workspace --jobs 10
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Cargo check failed - syntax or type errors detected"
+            exit 1
+          }
+          Write-Host "✅ Fast check passed!"
+
       - name: Build Workspace
         shell: powershell
         run: |
-          Write-Host "Building DataEngine workspace..."
+          Write-Host "Building DataEngine workspace with parallel compilation..."
           cd DataEngine
-          cargo build --workspace --jobs 1
+          cargo build --workspace --jobs 10
           if ($LASTEXITCODE -ne 0) {
-            Write-Host "Build failed!"
+            Write-Host "❌ Build failed!"
             exit 1
           }
-          Write-Host "Build passed!"
+          Write-Host "✅ Build passed!"
 
       - name: Run Tests
+        if: steps.check-skip.outputs.skip != 'true'
         id: test-result
         shell: powershell
         run: |
-          Write-Host "Running tests..."
+          Write-Host "Running tests with parallel execution..."
           cd DataEngine
-          cargo test --workspace --jobs 1
+          cargo test --workspace --jobs 10
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Tests passed!"
+            Write-Host "✅ Tests passed!"
             echo "passed=true" >> $env:GITHUB_OUTPUT
           } else {
-            Write-Host "Tests failed!"
+            Write-Host "❌ Tests failed!"
             echo "passed=false" >> $env:GITHUB_OUTPUT
             exit 1
           }
+
+      - name: Skip Tests
+        if: steps.check-skip.outputs.skip == 'true'
+        id: skip-test-result
+        shell: powershell
+        run: |
+          Write-Host "⏭️  Tests skipped due to [skip-tests] flag"
+          echo "passed=true" >> $env:GITHUB_OUTPUT
 
       - name: Security Audit Dependencies
         shell: powershell

@@ -16,15 +16,8 @@ use serde::{
     Deserialize,
     Serialize
 };
-use tokio_retry::{
-    strategy::{
-        jitter,
-        ExponentialBackoff
-    },
-    Retry
-};
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER; 
-use crate::{log_info, log_warn, log_error, log_debug};
+use crate::{log_info, log_error, log_debug};
 use std::time::Instant;
 
 // Import the Kraken logger
@@ -50,13 +43,10 @@ impl TradeUpdate {
         postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
-        order_book: &OrderBook
+        order_book: &OrderBook,
     ) -> Result<()> {
         let start_time = Instant::now();
         
-        // Reduce retry attempts for lower latency
-        let retry_strategy = ExponentialBackoff::from_millis(5).map(jitter).take(2);
-
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "Trade data is empty");
             return Ok(());

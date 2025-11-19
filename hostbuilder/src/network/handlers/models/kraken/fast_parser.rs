@@ -9,14 +9,14 @@ pub struct FastMessageParser {
     // Pre-allocated buffer for SIMD parsing
     buffer: Vec<u8>,
     // Cache for frequently accessed fields
-    field_cache: AHashMap<String, OwnedValue>,
+    _field_cache: AHashMap<String, OwnedValue>,
 }
 
 impl FastMessageParser {
     pub fn new() -> Self {
         Self {
             buffer: Vec::with_capacity(16384), // 16KB buffer
-            field_cache: AHashMap::with_capacity(64),
+            _field_cache: AHashMap::with_capacity(64),
         }
     }
 

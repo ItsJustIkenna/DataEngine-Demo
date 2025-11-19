@@ -37,24 +37,16 @@ use serde::{
     Serialize
 };
 use tokio::sync::Mutex; // Keep Mutex for compatibility
-use tokio_retry::{
-    strategy::{
-        jitter,
-        ExponentialBackoff
-    },
-    Retry
-};
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
-use crate::{log_debug, log_warn, log_error, log_info};
+use crate::{log_debug, log_error, log_info};
 use std::time::Instant;
 
 // Import the Kraken logger
-use crate::network::handlers::logging::{KRAKEN_WEBSOCKET_LOGGER, KRAKEN_ORDERBOOK_LOGGER, Level3UpdateLog, OrderBookUpdateLog};
+use crate::network::handlers::logging::{KRAKEN_ORDERBOOK_LOGGER, OrderBookUpdateLog};
 use crate::network::handlers::logging::{KRAKEN_HISTORICAL_LOGGER, HistoricalOrderLog};
 
 // Ultra-high performance constants - optimized for cache lines
 const INITIAL_ORDERS_CAPACITY: usize = 512; // Increased for better performance
-const ZERO_STR: &str = "0";
 const EVENT_ADD: &str = "add";
 const EVENT_MODIFY: &str = "modify";
 const EVENT_DELETE: &str = "delete";
@@ -88,9 +80,6 @@ impl Level3Update {
     ) -> Result<()> {
         let start_time = Instant::now();
         
-        // Reduced retry attempts for ultra-low latency - only 1 retry
-        let retry_strategy = ExponentialBackoff::from_millis(2).map(jitter).take(1);
-
         if self.data.is_empty() {
             log_debug!(KRAKEN_LOGGER, "Data is empty");
             

@@ -112,7 +112,7 @@ mod kraken_logger_tests {
     #[tokio::test]
     async fn test_logger_creation() {
         let service_name = "TestKrakenLoggingService";
-        let logger = KrakenLogger::new(service_name);
+        let _logger = KrakenLogger::new(service_name);
         
         // Test that logger was created successfully (can't access private field)
         assert!(true, "Logger creation should succeed");

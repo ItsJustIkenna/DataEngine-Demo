@@ -1,4 +1,4 @@
-use ultra_logger::{UltraLogger, LogLevel, LoggerConfig, TransportConfig, ConnectionConfig, load_config_from_env};
+use ultra_logger::{UltraLogger, LogLevel, LoggerConfig, TransportConfig, ConnectionConfig};
 use std::sync::Arc;
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 /// Provides unified access to UltraLogger across all components
 pub struct DataEngineLogger {
     logger: UltraLogger,
-    service_name: String,
+    _service_name: String,
 }
 
 impl DataEngineLogger {
@@ -17,7 +17,7 @@ impl DataEngineLogger {
 
         Self {
             logger: UltraLogger::with_config(format!("DataEngine-{}", service_name), config),
-            service_name: service_name.to_string(),
+            _service_name: service_name.to_string(),
         }
     }
 

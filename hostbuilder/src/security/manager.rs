@@ -13,7 +13,7 @@ use hmac::{Hmac, Mac};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Sha512};
-use crate::{infrastructure::logging_facade::MAIN_LOGGER, log_info, log_warn, log_error, log_debug};
+use crate::{infrastructure::logging_facade::MAIN_LOGGER, log_warn, log_error, log_debug};
 use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 

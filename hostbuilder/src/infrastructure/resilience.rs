@@ -8,10 +8,10 @@
 
 use anyhow::{anyhow, Result};
 use fastrand;
-use std::sync::{Arc, atomic::{AtomicU64, AtomicU32, Ordering}};
+use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use crate::{infrastructure::logging_facade::MAIN_LOGGER, log_warn, log_error, log_debug, log_info};
+use crate::{infrastructure::logging_facade::MAIN_LOGGER, log_warn, log_error, log_info};
 
 /// Circuit breaker states
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,7 +29,7 @@ pub struct CircuitBreaker {
     last_failure_time: Arc<AtomicU64>,
     failure_threshold: u64,
     recovery_timeout: Duration,
-    reset_timeout: Duration,
+    _reset_timeout: Duration,
 }
 
 impl CircuitBreaker {
@@ -41,7 +41,7 @@ impl CircuitBreaker {
             last_failure_time: Arc::new(AtomicU64::new(0)),
             failure_threshold,
             recovery_timeout,
-            reset_timeout,
+            _reset_timeout: reset_timeout,
         }
     }
 
@@ -401,6 +401,7 @@ pub struct ErrorCounts {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicU32;
 
     #[tokio::test]
     async fn test_circuit_breaker_basic_flow() {
@@ -430,7 +431,7 @@ mod tests {
         let executor = ResilientExecutor::new(cb, retry_config);
         
         let call_count = Arc::new(AtomicU32::new(0));
-        let count_clone = Arc::clone(&call_count);
+        let count_clone: Arc<AtomicU32> = Arc::clone(&call_count);
         
         let result = executor.execute(move || {
             let count = count_clone.fetch_add(1, Ordering::SeqCst) + 1;
