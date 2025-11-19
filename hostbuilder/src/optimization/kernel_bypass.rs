@@ -254,7 +254,8 @@ pub struct ZeroCopyMessageBuffer {
     ptr: *mut u8,
     size: usize,
     capacity: usize,
-    _is_mmap: bool,
+    #[allow(dead_code)]
+    is_mmap: bool,
 }
 
 unsafe impl Send for ZeroCopyMessageBuffer {}
@@ -291,7 +292,7 @@ impl ZeroCopyMessageBuffer {
                 ptr,
                 size: 0,
                 capacity: size,
-                _is_mmap: true,
+                is_mmap: true,
             })
         }
         #[cfg(not(unix))]
@@ -308,7 +309,7 @@ impl ZeroCopyMessageBuffer {
                 ptr,
                 size: 0,
                 capacity: size,
-                _is_mmap: false,
+                is_mmap: false,
             })
         }
     }
@@ -341,13 +342,15 @@ impl ZeroCopyMessageBuffer {
 impl Drop for ZeroCopyMessageBuffer {
     fn drop(&mut self) {
         #[cfg(unix)]
-        if self.is_mmap {
-            unsafe {
-                libc::munmap(self.ptr as *mut libc::c_void, self.capacity);
+        {
+            if self.is_mmap {
+                unsafe {
+                    libc::munmap(self.ptr as *mut libc::c_void, self.capacity);
+                }
+            } else {
+                let layout = std::alloc::Layout::from_size_align(self.capacity, 64).unwrap();
+                unsafe { std::alloc::dealloc(self.ptr, layout) };
             }
-        } else {
-            let layout = std::alloc::Layout::from_size_align(self.capacity, 64).unwrap();
-            unsafe { std::alloc::dealloc(self.ptr, layout) };
         }
         
         #[cfg(not(unix))]
