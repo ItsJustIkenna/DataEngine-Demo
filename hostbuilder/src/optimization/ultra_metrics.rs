@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::collections::HashMap;
 use std::time::Instant;
+#[cfg(target_arch = "x86_64")]
+use std::time::Duration;
 use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn};
 
 /// Ultra-precision metrics collector
