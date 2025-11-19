@@ -109,8 +109,8 @@ mod kraken_logger_tests {
         assert!(result.is_ok(), "Auth event logging should succeed");
     }
 
-    #[test]
-    fn test_logger_creation() {
+    #[tokio::test]
+    async fn test_logger_creation() {
         let service_name = "TestKrakenLoggingService";
         let logger = KrakenLogger::new(service_name);
         
@@ -118,8 +118,8 @@ mod kraken_logger_tests {
         assert!(true, "Logger creation should succeed");
     }
 
-    #[test]
-    fn test_global_logger_initialization() {
+    #[tokio::test]
+    async fn test_global_logger_initialization() {
         // Test that global loggers are properly initialized via lazy statics
         let _ws_logger = &*KRAKEN_WEBSOCKET_LOGGER;
         let _orderbook_logger = &*KRAKEN_ORDERBOOK_LOGGER;
