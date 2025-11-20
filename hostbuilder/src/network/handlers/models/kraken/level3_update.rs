@@ -308,29 +308,81 @@ impl Level3Update {
                     delete_buy_count, order_book.symbol);
             }
             
-            // Log historical order storage with structured logging
+            // Log historical order storage with structured logging - granular per event type
             if let Err(e) = &historical_result {
                 log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
-                let hist_log = HistoricalOrderLog {
-                    symbol: order_book.symbol.clone(),
-                    event_type: "buy-mixed".to_string(),
-                    order_count: historical_buy_count,
-                    processing_time_ms: hist_start.elapsed().as_millis(),
-                    success: false,
-                    error: Some(e.to_string()),
-                };
-                let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                
+                // Log failure for each event type that occurred
+                if buy_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "buy-add".to_string(),
+                        order_count: buy_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: false,
+                        error: Some(e.to_string()),
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
+                if modify_buy_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "buy-modify".to_string(),
+                        order_count: modify_buy_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: false,
+                        error: Some(e.to_string()),
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
+                if delete_buy_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "buy-delete".to_string(),
+                        order_count: delete_buy_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: false,
+                        error: Some(e.to_string()),
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
             } else {
                 log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_buy_count);
-                let hist_log = HistoricalOrderLog {
-                    symbol: order_book.symbol.clone(),
-                    event_type: "buy-mixed".to_string(),
-                    order_count: historical_buy_count,
-                    processing_time_ms: hist_start.elapsed().as_millis(),
-                    success: true,
-                    error: None,
-                };
-                let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                
+                // Log success for each event type that occurred
+                if buy_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "buy-add".to_string(),
+                        order_count: buy_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: true,
+                        error: None,
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
+                if modify_buy_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "buy-modify".to_string(),
+                        order_count: modify_buy_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: true,
+                        error: None,
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
+                if delete_buy_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "buy-delete".to_string(),
+                        order_count: delete_buy_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: true,
+                        error: None,
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
             }
 
             Ok::<(), Error>(())
@@ -517,29 +569,81 @@ impl Level3Update {
                     delete_sell_count, order_book.symbol);
             }
             
-            // Log historical order storage with structured logging
+            // Log historical order storage with structured logging - granular per event type
             if let Err(e) = &historical_result {
                 log_error!(KRAKEN_LOGGER, "Failed to add historical orders to postgres: {}", e);
-                let hist_log = HistoricalOrderLog {
-                    symbol: order_book.symbol.clone(),
-                    event_type: "sell-mixed".to_string(),
-                    order_count: historical_sell_count,
-                    processing_time_ms: hist_start.elapsed().as_millis(),
-                    success: false,
-                    error: Some(e.to_string()),
-                };
-                let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                
+                // Log failure for each event type that occurred
+                if sell_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "sell-add".to_string(),
+                        order_count: sell_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: false,
+                        error: Some(e.to_string()),
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
+                if modify_sell_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "sell-modify".to_string(),
+                        order_count: modify_sell_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: false,
+                        error: Some(e.to_string()),
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
+                if delete_sell_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "sell-delete".to_string(),
+                        order_count: delete_sell_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: false,
+                        error: Some(e.to_string()),
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
             } else {
                 log_info!(KRAKEN_LOGGER, "📚 Archived {} historical orders to database", historical_sell_count);
-                let hist_log = HistoricalOrderLog {
-                    symbol: order_book.symbol.clone(),
-                    event_type: "sell-mixed".to_string(),
-                    order_count: historical_sell_count,
-                    processing_time_ms: hist_start.elapsed().as_millis(),
-                    success: true,
-                    error: None,
-                };
-                let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                
+                // Log success for each event type that occurred
+                if sell_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "sell-add".to_string(),
+                        order_count: sell_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: true,
+                        error: None,
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
+                if modify_sell_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "sell-modify".to_string(),
+                        order_count: modify_sell_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: true,
+                        error: None,
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
+                if delete_sell_count > 0 {
+                    let hist_log = HistoricalOrderLog {
+                        symbol: order_book.symbol.clone(),
+                        event_type: "sell-delete".to_string(),
+                        order_count: delete_sell_count,
+                        processing_time_ms: hist_start.elapsed().as_millis(),
+                        success: true,
+                        error: None,
+                    };
+                    let _ = KRAKEN_HISTORICAL_LOGGER.log_historical_order_storage(hist_log).await;
+                }
             }
 
             Ok::<(), Error>(())
