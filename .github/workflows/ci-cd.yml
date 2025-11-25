@@ -703,6 +703,8 @@ jobs:
       - name: Canary Deployment
         id: canary-deploy
         if: github.event.inputs.environment == 'production' && github.event_name != 'pull_request'
+        shell: powershell
+        continue-on-error: true
         run: |
           Write-Host "[CANARY] Deploying canary release..."
           
@@ -755,8 +757,6 @@ jobs:
             Write-Host "[FAIL] Canary deployment failed"
             echo "canary-healthy=false" >> $env:GITHUB_OUTPUT
           }
-        shell: powershell
-        continue-on-error: true
 
       - name: Deploy with Helm
         id: helm-deploy
