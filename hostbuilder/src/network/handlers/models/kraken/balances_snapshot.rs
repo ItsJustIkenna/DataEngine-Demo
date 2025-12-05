@@ -2,10 +2,12 @@ use std::sync::Arc;
 use tokio::sync::Mutex; // Add tokio::sync::Mutex for optional publisher
 
 use anyhow::Result;
-use bigdecimal::ToPrimitive;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use config::Config;
 use databaseschema::{
-    models::order_book::OrderBook
+    models::order_book::OrderBook,
+    models::wallet_balance::NewWalletBalance,
+    ops::wallet_balance_ops,
 };
 use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{portfolio_message, publish_request, PortfolioMessage, PublishRequest};
@@ -17,7 +19,7 @@ use serde::{
     Serialize
 };
 use crate::infrastructure::logging_facade::KRAKEN_LOGGER;
-use crate::{log_debug, log_error};
+use crate::{log_debug, log_error, log_info};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BalanceSnapshot {
@@ -56,7 +58,7 @@ impl BalanceSnapshot {
 
     pub async fn process_snapshot(
         &self,
-        _postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
+        postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook
@@ -69,6 +71,7 @@ impl BalanceSnapshot {
         // Pre-allocate arrays with capacity based on data size
         let balances_count = self.data.len();
         let mut balances = Vec::with_capacity(balances_count);
+        let mut db_balances = Vec::new();
 
         // Process the balance snapshot data here
         // For example, you can log the balance data or perform any other operations needed
@@ -86,6 +89,32 @@ impl BalanceSnapshot {
                 };
 
                 balances.push(w);
+                
+                // Create database balance record
+                // For snapshot, we use the wallet balance which is the free balance
+                // Locked is 0 since this is a snapshot of available balances
+                let db_balance = NewWalletBalance::from_snapshot(
+                    &order_book.exchange,
+                    &balance.asset,
+                    &wallet.r#type,
+                    &wallet.id,
+                    BigDecimal::try_from(wallet.balance).unwrap_or_default(),
+                    BigDecimal::from(0), // No locked amount in snapshot
+                    self.sequence as i64,
+                );
+                db_balances.push(db_balance);
+            }
+        }
+
+        // Persist balances to database
+        if !db_balances.is_empty() {
+            match wallet_balance_ops::create_wallet_balances(postgres_pool.clone(), db_balances).await {
+                Ok(created) => {
+                    log_info!(KRAKEN_LOGGER, "💾 Persisted {} wallet balances to database", created.len());
+                }
+                Err(e) => {
+                    log_error!(KRAKEN_LOGGER, "Failed to persist wallet balances to database: {:?}", e);
+                }
             }
         }
 

@@ -468,6 +468,7 @@ dependencies = [
  "futures-util",
  "mockall",
  "native-tls",
+ "once_cell",
  "postgres-native-tls",
  "rand 0.8.5",
  "serde",
@@ -2160,6 +2161,7 @@ dependencies = [
  "crossbeam",
  "libc",
  "mockall",
+ "once_cell",
  "parking_lot",
  "prost",
  "prost-build",
@@ -2168,7 +2170,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
- "tracing",
+ "ultra-logger",
  "winapi",
 ]
 

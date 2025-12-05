@@ -632,11 +632,6 @@ jobs:
             kubectl delete pvc --all -n $using:env:NAMESPACE --ignore-not-found --timeout=30s 2>&1
           }
           
-          # Migration job cleanup
-          $cleanupJobs += Start-Job -Name "migration-cleanup" -ScriptBlock { 
-            kubectl delete job -l app.kubernetes.io/component=migration -n $using:env:NAMESPACE --ignore-not-found 
-          }
-          
           # Secret cleanup (excludes ghcr-secret for image pulls)
           $cleanupJobs += Start-Job -Name "secret-cleanup" -ScriptBlock { 
             kubectl delete secret dataengine-db-data-engine -n $using:env:NAMESPACE --ignore-not-found 2>&1
@@ -1005,47 +1000,6 @@ jobs:
               Write-Host "Could not retrieve Helm manifest"
             }
             
-            # Show migration jobs details
-            Write-Host "[DEBUG] Migration jobs:"
-            $migrationJobs = kubectl get jobs -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o name 2>$null
-            if ($migrationJobs) {
-              foreach ($job in $migrationJobs -split "`n") {
-                if ($job) {
-                  Write-Host "=== Describe $job ==="
-                  kubectl describe $job -n ${{ env.NAMESPACE }} | Select-Object -Last 200
-                }
-              }
-            }
-            
-            # Show migration pod logs and details (PowerShell-safe)
-            Write-Host "[DEBUG] Migration pods:"
-            $migrationPods = kubectl get pods -n ${{ env.NAMESPACE }} -l app.kubernetes.io/component=migration -o jsonpath='{.items[*].metadata.name}' 2>&1
-            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($migrationPods)) {
-              Write-Host "No migration pods found or failed to query pods: $migrationPods"
-            } else {
-              foreach ($pod in $migrationPods -split '\s+') {
-                if (-not [string]::IsNullOrWhiteSpace($pod)) {
-                  Write-Host "=== Logs for pod $pod ==="
-                  try {
-                    $logs = kubectl logs $pod -n ${{ env.NAMESPACE }} --tail=300 2>&1
-                    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($logs)) {
-                      Write-Host "No logs available for pod $pod (kubectl returned: $LASTEXITCODE)"
-                    } else {
-                      $logs -split "`n" | ForEach-Object { Write-Host $_ }
-                    }
-                  } catch {
-                    Write-Host "Failed to fetch logs for pod $pod : $_"
-                  }
-                  Write-Host "=== Describe pod $pod ==="
-                  try {
-                    kubectl describe pod $pod -n ${{ env.NAMESPACE }} 2>&1 | ForEach-Object { Write-Host $_ }
-                  } catch {
-                    Write-Host "Failed to describe pod $pod : $_"
-                  }
-                }
-              }
-            }
-            
             # Show all pod logs if any exist
             Write-Host "[DEBUG] All pod logs:"
             $pods = kubectl get pods -n ${{ env.NAMESPACE }} --no-headers 2>$null
@@ -1075,16 +1029,15 @@ jobs:
           if ($environment -eq "database-only") {
             Write-Host "[VERIFY] Checking database-only deployment..."
             
-            # Migrations now run as initContainers, not separate jobs
-            # Verify pods are running (which means migrations succeeded)
-            Write-Host "[VERIFY] Waiting for pods to be ready (migrations run as initContainers)..."
+            # Verify pods are running
+            Write-Host "[VERIFY] Waiting for pods to be ready..."
             
             kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --timeout=${{ env.HEALTH_CHECK_TIMEOUT }}
             
             $podCount = kubectl get pods -l app.kubernetes.io/instance=$releaseName -n ${{ env.NAMESPACE }} --field-selector=status.phase=Running -o name 2>$null | Measure-Object | Select-Object -ExpandProperty Count
             
             if ($podCount -gt 0) {
-              Write-Host "[SUCCESS] $podCount pod(s) running (migrations completed successfully)"
+              Write-Host "[SUCCESS] $podCount pod(s) running"
             } else {
               Write-Host "[ERROR] No running pods found"
               exit 1

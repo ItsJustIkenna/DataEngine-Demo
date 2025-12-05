@@ -2,11 +2,13 @@ use std::sync::Arc;
 use tokio::sync::Mutex; // Add tokio::sync::Mutex for optional publisher
 
 use anyhow::Result;
-use bigdecimal::ToPrimitive;
+use bigdecimal::{BigDecimal, ToPrimitive};
 use chrono::{DateTime, Utc};
 use config::Config;
 use databaseschema::{
-    models::order_book::OrderBook
+    models::order_book::OrderBook,
+    models::wallet_balance::NewWalletBalance,
+    ops::wallet_balance_ops,
 };
 use diesel_async::AsyncPgConnection;
 use protocol::broker::messages::{portfolio_message, publish_request, PortfolioMessage, PublishRequest};
@@ -66,7 +68,7 @@ impl BalanceUpdate {
 
     pub async fn process_update(
         &self,
-        _postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
+        postgres_pool: Arc<diesel_async::pooled_connection::deadpool::Pool<AsyncPgConnection>>,
         config: &Config,
         _publisher: Option<Arc<Mutex<Publisher>>>, // Optional for database-only mode
         order_book: &OrderBook
@@ -81,6 +83,7 @@ impl BalanceUpdate {
         // Pre-allocate arrays with capacity based on data size
         let balances_count = self.data.len();
         let mut balances = Vec::with_capacity(balances_count);
+        let mut db_balances = Vec::new();
         
         // Log detailed balance update summary
         let balance_summary: Vec<String> = self.data.iter()
@@ -102,10 +105,36 @@ impl BalanceUpdate {
             };
             
             // Log individual balance for detailed tracking
-            log_info!(KRAKEN_LOGGER, "Balance update persisted to Redis - Asset: {}, Balance: {:.8}, Type: {}, Wallet: {}", 
+            log_info!(KRAKEN_LOGGER, "Balance update - Asset: {}, Balance: {:.8}, Type: {}, Wallet: {}", 
                 balance.asset, balance.balance, balance.r#type, balance.wallet_type);
             
             balances.push(w);
+            
+            // Create database balance record
+            // Balance update provides the final balance, we treat it as free balance
+            let db_balance = NewWalletBalance::new(
+                &order_book.exchange,
+                &balance.asset,
+                &balance.wallet_type,
+                &balance.wallet_id,
+                BigDecimal::try_from(balance.balance).unwrap_or_default(),
+                BigDecimal::from(0), // Locked balance not provided in update
+                self.sequence as i64,
+                balance.timestamp,
+            );
+            db_balances.push(db_balance);
+        }
+
+        // Persist balances to database
+        if !db_balances.is_empty() {
+            match wallet_balance_ops::create_wallet_balances(postgres_pool.clone(), db_balances).await {
+                Ok(created) => {
+                    log_info!(KRAKEN_LOGGER, "💾 Persisted {} wallet balance updates to database", created.len());
+                }
+                Err(e) => {
+                    log_error!(KRAKEN_LOGGER, "Failed to persist wallet balance updates to database: {:?}", e);
+                }
+            }
         }
 
         let wallets_payload = protocol::generated::WalletData {
