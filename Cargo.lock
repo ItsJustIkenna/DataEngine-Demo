@@ -2129,7 +2129,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tracing",
+ "ultra-logger",
 ]
 
 [[package]]
