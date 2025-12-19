@@ -29,13 +29,16 @@ impl DataEngineLogger {
             .unwrap_or(true); // Default to true for production
 
         if use_elasticsearch {
-            // Try to get credentials from environment or use fallback
-            let endpoint = std::env::var("ELASTIC_CLOUD_ENDPOINT")
-                .unwrap_or_else(|_| "https://my-observability-deployment-76d771.es.us-east-2.aws.elastic-cloud.com".to_string());
+            // Get credentials from environment variables (required in production)
+            let endpoint = std::env::var("ELASTIC_CLOUD_ENDPOINT").unwrap_or_default();
             let username = std::env::var("ELASTIC_CLOUD_USERNAME")
                 .unwrap_or_else(|_| "elastic".to_string());
-            let password = std::env::var("ELASTIC_CLOUD_PASSWORD")
-                .unwrap_or_else(|_| "mN9CNxqYU9J0nw4aywXVxTAw".to_string());
+            let password = std::env::var("ELASTIC_CLOUD_PASSWORD").unwrap_or_default();
+            
+            // Only configure elasticsearch if endpoint is set
+            if endpoint.is_empty() {
+                return LoggerConfig::default();
+            }
 
             let mut options = HashMap::new();
             options.insert("index".to_string(), "dataengine-logs".to_string());
