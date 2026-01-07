@@ -508,7 +508,7 @@ customPostgresql:
     pullSecrets: []
   auth:
     username: "dataengine"
-    password: "dataengine123"
+    password: "CHANGE_ME_IN_PRODUCTION"
     database: "dataengine"
   persistence:
     enabled: true

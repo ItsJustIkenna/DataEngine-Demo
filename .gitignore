@@ -1,21 +1,28 @@
-# Ignore build artifacts
-target/
-
-# Ignore sensitive or environment-specific files
-appsettings.json
-.env
-
-# Helm values files with real credentials - NEVER COMMIT THESE!
-**/values-dev.yaml
-**/values-qa.yaml
-**/values-prod.yaml
-**/values-local.yaml
-**/values-secrets.yaml
-k8s/helm/values-*.yaml
-
-# Database and API credentials - NEVER COMMIT THESE!
+# Credentials and secrets
+*.env
+.env.*
 **/secrets.yaml
-**/credentials.yaml
-**/*secrets*
-**/*credentials*
-config/secrets.yaml
+**/values-prod.yaml
+**/*secret*.yaml
+*.pem
+*.key
+
+# Build artifacts
+target/
+**/target/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
