@@ -26,7 +26,7 @@ debug = true
 debug-assertions = true
 incremental = false
 
-# Ultra-aggressive profile for maximum performance
+# Aggressive profile for maximum performance
 [profile.ultra]
 inherits = "release"
 opt-level = 3

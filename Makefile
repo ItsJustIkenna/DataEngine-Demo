@@ -66,7 +66,7 @@ release: ## Build in release mode
 	@$(CARGO) build --release
 	@echo -e "$(GREEN)✅ Release build completed$(NC)"
 
-ultra: ## Build with ultra-high performance optimizations
+ultra: ## Build with the ultra profile
 	@echo -e "$(CYAN)🔧 Building with ultra-high performance optimizations...$(NC)"
 	@echo -e "$(YELLOW)⚡ Configuring ultra flags...$(NC)"
 	@export RUSTFLAGS="-C target-cpu=native -C target-feature=+avx2,+sse4.2 -C lto=fat -C codegen-units=1" && \

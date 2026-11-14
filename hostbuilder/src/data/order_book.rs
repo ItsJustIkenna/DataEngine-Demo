@@ -1,4 +1,4 @@
-//! Ultra-fast lock-free order book for sub-microsecond trading
+//! Lock-free order book for trading
 //! 
 //! Implements a high-performance, lock-free order book using advanced concurrent
 //! data structures and RCU-style updates for minimal latency operations.
@@ -45,7 +45,7 @@ pub enum OrderSide {
 
 /// Lock-free order book implementation
 pub struct LockFreeOrderBook {
-    // Best bid/ask pointers for ultra-fast L1 access
+    // Best bid/ask pointers for L1 access
     best_bid: CachePadded<AtomicPtr<PriceLevel>>,
     best_ask: CachePadded<AtomicPtr<PriceLevel>>,
     
@@ -427,7 +427,7 @@ impl LockFreeOrderBook {
         Ok(())
     }
     
-    /// Get best bid/ask (ultra-fast L1 access)
+    /// Get best bid/ask (L1 access)
     pub fn get_best_bid(&self) -> Option<BookLevel> {
         let level_ptr = self.best_bid.load(Ordering::Acquire);
         if level_ptr.is_null() {

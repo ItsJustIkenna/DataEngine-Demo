@@ -25,7 +25,7 @@ fastrand = "2.0"
 num_cpus = "1.16"
 libc = "0.2"
 
-# Ultra-high performance logging
+# Logging
 ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
 
 # Local dependencies

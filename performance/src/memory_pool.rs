@@ -1,7 +1,7 @@
-//! Ultra-high performance memory pools for zero-copy trading operations
+//! Memory pools for zero-copy trading operations
 //! 
-//! Provides NUMA-aware, lock-free memory pools with sub-microsecond allocation
-//! and deallocation for trading system critical paths.
+//! Provides NUMA-aware, lock-free memory pools for allocation
+//! and deallocation on trading-system critical paths.
 
 use std::sync::atomic::{AtomicPtr, AtomicUsize, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -10,7 +10,7 @@ use std::ptr::{self, NonNull};
 use anyhow::{Result, anyhow};
 use crossbeam::utils::CachePadded;
 
-/// Ultra-fast memory pool for trading operations
+/// Memory pool for trading operations
 pub struct BufferPool {
     // Lock-free stack of available buffers
     free_buffers: CachePadded<AtomicPtr<PoolNode>>,
@@ -61,7 +61,7 @@ impl BufferPool {
         Ok(pool)
     }
 
-    /// Get buffer from pool (ultra-fast path)
+    /// Get buffer from pool (path)
     #[inline(always)]
     pub fn get_buffer(&self) -> Result<PooledBuffer> {
         // Try to pop from free list first (lock-free)
@@ -89,7 +89,7 @@ impl BufferPool {
         })
     }
 
-    /// Return buffer to pool (ultra-fast path)
+    /// Return buffer to pool (path)
     #[inline(always)]
     pub fn return_buffer(&self, buffer: PooledBuffer) {
         let node = Box::into_raw(Box::new(PoolNode {

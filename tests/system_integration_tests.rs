@@ -102,8 +102,8 @@ async fn test_concurrent_operations() -> Result<()> {
 async fn test_performance_benchmarks() -> Result<()> {
     // Test performance meets SLA requirements
     
-    // TODO: Test latency requirements (< 1ms for critical paths)
-    // TODO: Test throughput requirements (>10k ops/sec)
+    // TODO: Test latency requirements
+    // TODO: Test throughput requirements
     // TODO: Test memory usage limits
     
     Ok(())

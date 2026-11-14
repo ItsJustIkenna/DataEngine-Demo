@@ -3,7 +3,7 @@
 //! This module contains performance optimization functionality including:
 //! - SIMD optimizations for numerical processing
 //! - Kernel bypass techniques for low-latency operations
-//! - Ultra-fast metrics and performance monitoring
+//! - metrics and performance monitoring
 
 pub mod kernel_bypass;
 pub mod simd_optimizations;

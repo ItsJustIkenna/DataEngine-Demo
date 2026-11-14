@@ -1,6 +1,6 @@
 apiVersion: v2
 name: data-engine
-description: High-Performance DataEngine for Cryptocurrency Market Data Processing
+description: DataEngine Helm chart for cryptocurrency market data processing
 type: application
 version: 1.0.0
 appVersion: "1.0.0"

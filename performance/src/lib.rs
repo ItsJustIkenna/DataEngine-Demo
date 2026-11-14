@@ -1,13 +1,13 @@
 //! # Performance Optimization Library
 //! 
-//! Ultra-high performance optimization modules for DataEngine trading system.
-//! Provides CPU affinity management, sub-microsecond metrics collection,
+//! Performance optimization modules for the DataEngine trading system.
+//! Provides CPU affinity management, high-resolution metrics collection,
 //! zero-copy buffer pools, and SIMD-accelerated operations.
 //!
 //! ## Features
 //!
 //! - **CPU Affinity Management**: Pin trading threads to specific CPU cores
-//! - **Performance Metrics**: Sub-microsecond precision timing and statistics  
+//! - **Performance Metrics**: High-resolution timing and statistics  
 //! - **Memory Pools**: Zero-copy buffer management for high-frequency operations
 //! - **SIMD Operations**: Hardware-accelerated message parsing and calculations
 //!
@@ -85,7 +85,7 @@ pub use simd_ops::{SimdMessageParser, SimdCalculator};
 /// This should be called once at application startup to configure
 /// global performance settings and warm up optimization modules.
 pub fn initialize() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize global metrics for ultra-low latency tracking
+    // Initialize global metrics for low-latency tracking
     initialize_global_performance_metrics()?;
     
     // Configure CPU affinity for critical trading threads
@@ -101,7 +101,7 @@ pub fn initialize() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize SIMD operations for financial calculations
     perf_log_info!("SIMD support initialized");
     
-    // Set up high-resolution timers for sub-microsecond measurements
+    // Set up high-resolution timers
     initialize_high_precision_timing()?;
     
     // Configure memory allocator for trading workloads
@@ -127,12 +127,12 @@ fn initialize_global_performance_metrics() -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
-/// Initialize high-precision timing for sub-microsecond measurements
+/// Initialize high-precision timing
 fn initialize_high_precision_timing() -> Result<(), Box<dyn std::error::Error>> {
     // Platform-specific high-resolution timer setup
     #[cfg(target_os = "windows")]
     {
-        // Windows: Note - would need specific timer APIs for production
+        // Windows: Note - would need specific timer APIs for a full implementation
         perf_log_info!("High-resolution timing configured for Windows");
     }
     
@@ -204,7 +204,7 @@ pub fn create_latency_timer() -> LatencyTimer {
     LatencyTimer::new()
 }
 
-/// Ultra-high performance timer for measuring sub-microsecond latencies
+/// Timer for high-resolution latency measurements
 pub struct LatencyTimer {
     start: std::time::Instant,
 }

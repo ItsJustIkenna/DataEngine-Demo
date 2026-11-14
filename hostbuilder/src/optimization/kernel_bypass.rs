@@ -1,7 +1,7 @@
-//! Kernel bypass networking for sub-microsecond latency trading
+//! Kernel bypass networking for low-latency paths
 //! 
 //! Provides zero-copy, kernel-bypass networking using io_uring on Linux
-//! and high-performance socket optimizations on Windows for ultra-low latency.
+//! and high-performance socket optimizations on Windows for low latency.
 
 use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 use anyhow::{Result, anyhow};
@@ -12,7 +12,7 @@ use std::net::SocketAddr;
 #[cfg(target_os = "linux")]
 use io_uring::{IoUring, opcode, types};
 
-/// Ultra-high performance kernel bypass manager
+/// Kernel bypass manager
 pub struct KernelBypassManager {
     #[cfg(target_os = "linux")]
     ring: Option<IoUring>,
@@ -72,7 +72,7 @@ impl KernelBypassManager {
     pub fn create_trading_socket(&self, _addr: SocketAddr) -> Result<Socket> {
         let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))?;
         
-        // Ultra-aggressive TCP optimizations for sub-microsecond latency
+        // TCP optimizations for low latency
         socket.set_nodelay(true)?; // Disable Nagle's algorithm
         socket.set_nonblocking(true)?;
         

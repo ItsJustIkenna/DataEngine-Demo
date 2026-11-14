@@ -4,7 +4,7 @@ use crate::log_warn;
 use simd_json::{self, OwnedValue};
 use ahash::AHashMap;
 
-/// Ultra-high performance message parser using SIMD JSON
+/// Message parser using SIMD JSON
 pub struct FastMessageParser {
     // Pre-allocated buffer for SIMD parsing
     buffer: Vec<u8>,
@@ -26,7 +26,7 @@ impl FastMessageParser {
         self.buffer.clear();
         self.buffer.extend_from_slice(text.as_bytes());
         
-        // Use SIMD JSON for ultra-fast parsing
+        // Use SIMD JSON for parsing
         match simd_json::to_owned_value(&mut self.buffer) {
             Ok(value) => Ok(value),
             Err(e) => {
@@ -41,7 +41,7 @@ impl FastMessageParser {
     /// Fast channel detection using byte pattern matching
     #[inline(always)]
     pub fn detect_channel_fast(data: &[u8]) -> Option<&'static str> {
-        // Use SIMD-style byte pattern matching for ultra-fast channel detection
+        // Use SIMD-style byte pattern matching for channel detection
         if data.len() < 10 { return None; } // Minimum length for a meaningful JSON message
         
         // Look for "level3" pattern
@@ -117,7 +117,7 @@ impl FastMessageParser {
     }
 }
 
-/// Ultra-fast memory search using manual SIMD-style operations
+/// Memory search using manual SIMD-style operations
 #[inline(always)]
 fn memmem_fast(haystack: &[u8], needle: &[u8]) -> bool {
     if needle.is_empty() || haystack.len() < needle.len() {
