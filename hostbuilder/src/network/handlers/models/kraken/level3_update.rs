@@ -214,7 +214,7 @@ impl Level3Update {
                             SIDE_BUY,
                             price_level,
                             new_buy_quantity,
-                            Some(price_level),
+                            Some(price_level.clone()),
                             None, // Without Redis, we don't track quantity diff
                             STATUS_PARTIALLY_FILLED,
                             &order_book.exchange,
@@ -475,7 +475,7 @@ impl Level3Update {
                             SIDE_SELL,
                             price_level,
                             new_sell_quantity,
-                            Some(price_level),
+                            Some(price_level.clone()),
                             None, // Without Redis, we don't track quantity diff
                             STATUS_PARTIALLY_FILLED,
                             &order_book.exchange,

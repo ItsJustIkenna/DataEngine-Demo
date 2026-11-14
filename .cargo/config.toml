@@ -1,10 +1,6 @@
 [target.aarch64-pc-windows-msvc]
 rustflags = ["-L", "C:\\Program Files\\PostgreSQL\\17\\lib"]
 
-[env]
-PQ_LIB_DIR = "C:\\Program Files\\PostgreSQL\\17\\lib"
-
-# [build]
-# Commented out to allow builds on x64 runners and cross-platform builds
-# CI/CD will automatically detect and use the appropriate host target
-# target = "aarch64-pc-windows-msvc"
+# PQ_LIB_DIR is intentionally not set here. A Windows-only path in [env]
+# made pq-sys fail on Linux/macOS. On Windows, set PQ_LIB_DIR in the
+# environment if the rustflags link path above is not enough.
