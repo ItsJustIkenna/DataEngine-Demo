@@ -34,7 +34,7 @@ pprof = { version = "0.13", features = ["criterion", "flamegraph"] }
 hostbuilder = { path = "../hostbuilder" }
 config = { path = "../config" }
 performance = { path = "../performance" }
-ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
+ultra-logger = { path = "../local/ultra-logger" }
 
 [features]
 default = ["integration_tests", "benchmarks"]

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["config", "hostbuilder", "program", "performance"]
+members = ["config", "hostbuilder", "program", "performance", "local/ultra-logger", "local/protocol", "local/publisher", "local/databaseschema"]
 
 [profile.release]
 opt-level = 3

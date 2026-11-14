@@ -89,10 +89,10 @@ impl DataEngineLogger {
     /// Log with custom level
     pub async fn log(&self, level: LogLevel, message: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match level {
-            LogLevel::Debug => self.logger.debug(message.to_string()).await,
+            LogLevel::Trace | LogLevel::Debug => self.logger.debug(message.to_string()).await,
             LogLevel::Info => self.logger.info(message.to_string()).await,
             LogLevel::Warn => self.logger.warn(message.to_string()).await,
-            LogLevel::Error => self.logger.error(message.to_string()).await,
+            LogLevel::Error | LogLevel::Critical => self.logger.error(message.to_string()).await,
         }
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }

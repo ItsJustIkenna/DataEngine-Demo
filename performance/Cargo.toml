@@ -20,7 +20,7 @@ anyhow = "1.0"
 crossbeam-utils = "0.8"
 
 # Logging
-ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
+ultra-logger = { path = "../local/ultra-logger" }
 
 # System APIs
 libc = "0.2"
