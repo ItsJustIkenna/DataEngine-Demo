@@ -37,7 +37,7 @@ impl DataPipeline {
         // Initialize kernel bypass for low latency
         let kernel_bypass = match KernelBypassManager::new().await {
             Ok(kb) => {
-                log_info!(MAIN_LOGGER, "Kernel bypass networking initialized for sub-microsecond latency");
+                log_info!(MAIN_LOGGER, "Kernel bypass networking initialized");
                 Some(Arc::new(kb))
             }
             Err(e) => {

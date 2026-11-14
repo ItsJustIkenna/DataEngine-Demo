@@ -27,7 +27,7 @@ debug-assertions = true
 incremental = false
 
 # Aggressive profile for maximum performance
-[profile.ultra]
+[profile.optimized]
 inherits = "release"
 opt-level = 3
 lto = "fat"

@@ -2,7 +2,7 @@
 # Provides comprehensive build management for all environments
 
 # Main Makefile for DataEngine project
-.PHONY: help build release ultra debug clean test lint bench install dev watchelm-dev: ## Deploy DataEngine with Helm (development)
+.PHONY: help build release optimized debug clean test lint bench install dev watchelm-dev: ## Deploy DataEngine with Helm (development)
 	@echo -e "$(CYAN)🚀 Deploying DataEngine with Helm (development)...$(NC)"
 	@echo -e "$(YELLOW)💡 Set environment variables for custom secrets:$(NC)"
 	@echo -e "$(GRAY)   export DB_PASSWORD='your-dev-password'$(NC)"
@@ -49,11 +49,11 @@ help: ## Show this help message
 	@echo -e "$(GREEN)Profile-specific builds:$(NC)"
 	@echo -e "$(WHITE)  debug       $(NC) Debug build (default)"
 	@echo -e "$(WHITE)  release     $(NC) Release build"
-	@echo -e "$(WHITE)  ultra       $(NC) Ultra-high performance build"
+	@echo -e "$(WHITE)  optimized   $(NC) Optimized profile build"
 	@echo ""
 	@echo -e "$(GREEN)Examples:$(NC)"
 	@echo -e "$(GRAY)  make release test    # Release build with tests$(NC)"
-	@echo -e "$(GRAY)  make ultra          # Ultra performance build$(NC)"
+	@echo -e "$(GRAY)  make optimized      # Optimized profile build$(NC)"
 	@echo -e "$(GRAY)  make clean all      # Clean build with all checks$(NC)"
 
 debug: ## Build in debug mode
@@ -66,16 +66,16 @@ release: ## Build in release mode
 	@$(CARGO) build --release
 	@echo -e "$(GREEN)✅ Release build completed$(NC)"
 
-ultra: ## Build with the ultra profile
-	@echo -e "$(CYAN)🔧 Building with ultra-high performance optimizations...$(NC)"
-	@echo -e "$(YELLOW)⚡ Configuring ultra flags...$(NC)"
+optimized: ## Build with the optimized profile
+	@echo -e "$(CYAN)🔧 Building with additional optimizations...$(NC)"
+	@echo -e "$(YELLOW)⚡ Configuring profile flags...$(NC)"
 	@export RUSTFLAGS="-C target-cpu=native -C target-feature=+avx2,+sse4.2 -C lto=fat -C codegen-units=1" && \
 	export CARGO_PROFILE_RELEASE_LTO="fat" && \
 	export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="1" && \
 	export CARGO_PROFILE_RELEASE_PANIC="abort" && \
 	export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS="false" && \
 	$(CARGO) build --release
-	@echo -e "$(GREEN)✅ Ultra-performance build completed$(NC)"
+	@echo -e "$(GREEN)✅ Optimized build completed$(NC)"
 
 build: debug ## Alias for debug build
 
@@ -147,7 +147,7 @@ check: ## Quick check without building
 	@$(CARGO) check
 	@echo -e "$(GREEN)✅ Check completed$(NC)"
 
-all: clean ultra test lint ## Clean build with all checks
+all: clean optimized test lint ## Clean build with all checks
 	@echo -e "$(GREEN)🚀 Complete build pipeline finished!$(NC)"
 
 # Advanced targets
@@ -221,9 +221,9 @@ helm-dev: ## Deploy DataEngine with Helm (development)
 	@echo -e "$(GREEN)✅ Development environment deployed$(NC)"
 
 helm-prod: ## Deploy DataEngine with Helm (production)
-	@echo -e "$(CYAN)� Deploying DataEngine with Helm (production)...$(NC)"
+	@echo -e "$(CYAN)� Deploying DataEngine with Helm (prod)...$(NC)"
 	@./scripts/deploy.ps1 -Environment prod
-	@echo -e "$(GREEN)✅ Production environment deployed$(NC)"
+	@echo -e "$(GREEN)✅ Prod Helm environment deployed$(NC)"
 
 helm-stop: ## Stop/uninstall Helm deployment
 	@echo -e "$(YELLOW)� Stopping Helm deployment...$(NC)"

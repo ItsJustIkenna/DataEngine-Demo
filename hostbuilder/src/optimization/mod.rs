@@ -7,9 +7,9 @@
 
 pub mod kernel_bypass;
 pub mod simd_optimizations;
-pub mod ultra_metrics;
+pub mod precision_metrics;
 
 // Re-export commonly used items
 pub use kernel_bypass::*;
 pub use simd_optimizations::*;
-pub use ultra_metrics::*;
+pub use precision_metrics::*;

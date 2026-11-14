@@ -12,7 +12,7 @@ use std::time::Duration;
 use crate::infrastructure::logging_facade::MAIN_LOGGER; use crate::{log_info, log_warn};
 
 /// Ultra-precision metrics collector
-pub struct UltraPrecisionMetrics {
+pub struct PrecisionMetrics {
     // Hardware timestamp counters for nanosecond precision
     processing_latency_sum_ns: AtomicU64,
     processing_latency_count: AtomicU64,
@@ -54,7 +54,7 @@ struct SymbolMetrics {
     _best_ask_updates: AtomicU64,
 }
 
-impl UltraPrecisionMetrics {
+impl PrecisionMetrics {
     pub fn new() -> Self {
         let rdtsc_freq = Self::calibrate_rdtsc_frequency();
         
@@ -191,13 +191,13 @@ impl UltraPrecisionMetrics {
     }
     
     /// Get performance statistics
-    pub fn get_stats(&self) -> UltraPrecisionStats {
+    pub fn get_stats(&self) -> PrecisionStats {
         let count = self.processing_latency_count.load(Ordering::Relaxed);
         let sum_ns = self.processing_latency_sum_ns.load(Ordering::Relaxed);
         let min_ns = self.processing_latency_min_ns.load(Ordering::Relaxed);
         let max_ns = self.processing_latency_max_ns.load(Ordering::Relaxed);
         
-        UltraPrecisionStats {
+        PrecisionStats {
             avg_latency_ns: if count > 0 { sum_ns / count } else { 0 },
             min_latency_ns: if min_ns == u64::MAX { 0 } else { min_ns },
             max_latency_ns: max_ns,
@@ -229,7 +229,7 @@ impl UltraPrecisionMetrics {
     pub fn print_performance_report(&self) {
         let stats = self.get_stats();
         
-        log_info!(MAIN_LOGGER, "=== Ultra-Precision Performance Report ===");
+        log_info!(MAIN_LOGGER, "=== Precision performance report ===");
         log_info!(MAIN_LOGGER, "Average Latency: {}ns ({:.3}µs)", stats.avg_latency_ns, stats.avg_latency_ns as f64 / 1000.0);
         log_info!(MAIN_LOGGER, "Min Latency: {}ns", stats.min_latency_ns);
         log_info!(MAIN_LOGGER, "Max Latency: {}ns ({:.3}µs)", stats.max_latency_ns, stats.max_latency_ns as f64 / 1000.0);
@@ -243,7 +243,7 @@ impl UltraPrecisionMetrics {
         
         // Performance warnings
         if stats.avg_latency_ns > 1000 {
-            log_warn!(MAIN_LOGGER, "Average latency {}ns exceeds sub-microsecond target", stats.avg_latency_ns);
+            log_warn!(MAIN_LOGGER, "Average latency {}ns is high", stats.avg_latency_ns);
         }
         
         if stats.max_latency_ns > 5000 {
@@ -259,7 +259,7 @@ impl UltraPrecisionMetrics {
 }
 
 #[derive(Debug, Clone)]
-pub struct UltraPrecisionStats {
+pub struct PrecisionStats {
     pub avg_latency_ns: u64,
     pub min_latency_ns: u64,
     pub max_latency_ns: u64,
@@ -275,28 +275,28 @@ pub struct UltraPrecisionStats {
 
 /// Global ultra-precision metrics instance
 use std::sync::Once;
-static mut GLOBAL_ULTRA_METRICS: Option<UltraPrecisionMetrics> = None;
+static mut GLOBAL_PRECISION_METRICS: Option<PrecisionMetrics> = None;
 static INIT_ULTRA_METRICS: Once = Once::new();
 
 /// Initialize global ultra-precision metrics
-pub fn init_global_ultra_metrics() {
+pub fn init_global_precision_metrics() {
     INIT_ULTRA_METRICS.call_once(|| {
         unsafe {
-            GLOBAL_ULTRA_METRICS = Some(UltraPrecisionMetrics::new());
+            GLOBAL_PRECISION_METRICS = Some(PrecisionMetrics::new());
         }
     });
 }
 
 /// Get global ultra-precision metrics
-pub fn get_global_ultra_metrics() -> &'static UltraPrecisionMetrics {
+pub fn get_global_precision_metrics() -> &'static PrecisionMetrics {
     INIT_ULTRA_METRICS.call_once(|| {
         unsafe {
-            GLOBAL_ULTRA_METRICS = Some(UltraPrecisionMetrics::new());
+            GLOBAL_PRECISION_METRICS = Some(PrecisionMetrics::new());
         }
     });
     
     unsafe {
-        let ptr = std::ptr::addr_of!(GLOBAL_ULTRA_METRICS);
+        let ptr = std::ptr::addr_of!(GLOBAL_PRECISION_METRICS);
         (*ptr).as_ref().expect("Ultra-precision metrics not initialized")
     }
 }
