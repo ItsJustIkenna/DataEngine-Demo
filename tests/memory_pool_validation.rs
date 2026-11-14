@@ -129,7 +129,7 @@ fn test_global_pool() {
 
 #[test]
 fn test_high_frequency_allocation() {
-    log_info!(TEST_LOGGER, "⚡ Testing high-frequency buffer allocation...");
+    log_info!(TEST_LOGGER, "Testing rapid buffer allocation...");
     
     let pool = BufferPool::new();
     let iterations = 1000;
@@ -157,7 +157,7 @@ fn test_high_frequency_allocation() {
     assert_eq!(stats.small_allocated, iterations as usize, "Should track all allocations");
     assert_eq!(stats.small_returned, iterations as usize, "Should track all returns");
     
-    log_info!(TEST_LOGGER, "✅ High-frequency allocation test passed");
+    log_info!(TEST_LOGGER, "Rapid allocation test passed");
 }
 
 fn main() {

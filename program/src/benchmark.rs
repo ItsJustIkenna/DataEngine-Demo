@@ -127,7 +127,7 @@ async fn run_platform_test() -> Result<()> {
 
 /// Latency-focused benchmark
 async fn run_latency_benchmark(duration_secs: u64) -> Result<()> {
-    log_info!(PERFORMANCE_LOGGER, "⚡ Ultra-Low Latency Benchmark");
+    log_info!(PERFORMANCE_LOGGER, "Latency benchmark");
     log_info!(PERFORMANCE_LOGGER, "==============================");
 
     let mut latencies = Vec::new();
@@ -231,7 +231,7 @@ async fn run_throughput_benchmark(total_messages: u64, num_clients: u32) -> Resu
 
     // Performance classification
     let performance_class = if throughput > 1_000_000.0 {
-        "🏆 ULTRA-HIGH PERFORMANCE"
+        "Highest"
     } else if throughput > 100_000.0 {
         "🚀 HIGH PERFORMANCE"  
     } else if throughput > 10_000.0 {
@@ -269,7 +269,7 @@ async fn simulate_message_processing() -> String {
 /// Calculate performance score based on average latency
 fn calculate_performance_score(avg_latency_nanos: u128) -> (f64, &'static str) {
     match avg_latency_nanos {
-        0..=1000 => (10.0, "EXCEPTIONAL"),
+        0..=1000 => (10.0, "Highest"),
         1001..=5000 => (9.5, "OUTSTANDING"),
         5001..=10000 => (9.0, "EXCELLENT"),
         10001..=50000 => (8.5, "VERY GOOD"),

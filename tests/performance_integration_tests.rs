@@ -70,7 +70,7 @@ fn test_cpu_affinity_manager() {
 
 #[test]
 fn test_high_frequency_metrics() {
-    log_info!(TEST_LOGGER, "⚡ Testing high-frequency metrics recording...");
+    log_info!(TEST_LOGGER, "Testing rapid metrics recording...");
     
     let metrics = PerformanceMetrics::new();
     let iterations = 10_000;
@@ -100,7 +100,7 @@ fn test_high_frequency_metrics() {
     assert!(stats.avg_latency_ns > 0);
     assert!(duration.as_millis() < 100, "Should complete in under 100ms");
     
-    log_info!(TEST_LOGGER, "✅ High-frequency metrics performance validated");
+    log_info!(TEST_LOGGER, "Rapid metrics recording test passed");
 }
 
 #[test]
