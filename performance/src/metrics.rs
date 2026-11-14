@@ -1,6 +1,6 @@
-//! Ultra-high performance metrics collection for DataEngine
+//! Metrics collection for DataEngine
 //! 
-//! Provides sub-microsecond precision timing and zero-allocation metrics
+//! Provides high-resolution timing and zero-allocation metrics
 //! collection for trading system performance monitoring.
 
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};

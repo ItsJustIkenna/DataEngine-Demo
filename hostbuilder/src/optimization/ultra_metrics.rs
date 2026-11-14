@@ -1,4 +1,4 @@
-//! Ultra-high precision metrics for sub-microsecond trading
+//! High-resolution metrics for trading
 //! 
 //! Provides nanosecond-precision timing and hardware-level performance
 //! monitoring specifically designed for high-frequency trading systems.

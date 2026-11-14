@@ -14,7 +14,7 @@ pub fn set_thread_affinity(cores: Vec<usize>) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-/// Ultra-high performance CPU affinity management for trading systems
+/// CPU affinity management for trading systems
 /// Pins critical threads to specific CPU cores for optimal cache locality
 /// and minimal context switching overhead.
 pub struct CpuAffinityManager {
@@ -34,7 +34,7 @@ impl CpuAffinityManager {
     }
 
     /// Pin the current thread to the next available CPU core
-    /// Critical for ultra-low latency trading applications
+    /// Critical for low-latency trading applications
     pub fn pin_to_next_core(&self) -> Result<usize, Box<dyn std::error::Error>> {
         let core_id = self.core_counter.fetch_add(1, Ordering::Relaxed) % self.total_cores;
         self.pin_to_core(core_id)?;

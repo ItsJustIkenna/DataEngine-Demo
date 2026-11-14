@@ -2,7 +2,7 @@
 name = "performance"
 version = "0.1.0"
 edition = "2021"
-description = "Ultra-high performance optimization modules for DataEngine"
+description = "Performance optimization modules for DataEngine"
 
 [dependencies]
 # Core async runtime
@@ -19,7 +19,7 @@ dashmap = "5.5"
 anyhow = "1.0"
 crossbeam-utils = "0.8"
 
-# Ultra-high performance logging
+# Logging
 ultra-logger = { path = "../../LoggingEngine/ultra-logger" }
 
 # System APIs

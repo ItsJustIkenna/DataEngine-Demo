@@ -9,7 +9,7 @@ use hostbuilder::log_info;
 /// Comprehensive benchmark suite for DataEngine
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize ultra-high performance logging
+    // Initialize logging
     log_info!(PERFORMANCE_LOGGER, "🚀 Starting DataEngine Benchmark Suite");
 
     log_info!(PERFORMANCE_LOGGER, "🚀 DataEngine Performance Benchmark Suite v0.1.0");
@@ -269,13 +269,13 @@ async fn simulate_message_processing() -> String {
 /// Calculate performance score based on average latency
 fn calculate_performance_score(avg_latency_nanos: u128) -> (f64, &'static str) {
     match avg_latency_nanos {
-        0..=1000 => (10.0, "EXCEPTIONAL"),      // <1μs
-        1001..=5000 => (9.5, "OUTSTANDING"),   // 1-5μs  
-        5001..=10000 => (9.0, "EXCELLENT"),    // 5-10μs
-        10001..=50000 => (8.5, "VERY GOOD"),   // 10-50μs
-        50001..=100000 => (8.0, "GOOD"),       // 50-100μs
-        100001..=500000 => (7.0, "ACCEPTABLE"), // 100-500μs
-        500001..=1000000 => (6.0, "FAIR"),     // 0.5-1ms
-        _ => (5.0, "NEEDS IMPROVEMENT"),       // >1ms
+        0..=1000 => (10.0, "EXCEPTIONAL"),
+        1001..=5000 => (9.5, "OUTSTANDING"),
+        5001..=10000 => (9.0, "EXCELLENT"),
+        10001..=50000 => (8.5, "VERY GOOD"),
+        50001..=100000 => (8.0, "GOOD"),
+        100001..=500000 => (7.0, "ACCEPTABLE"),
+        500001..=1000000 => (6.0, "FAIR"),
+        _ => (5.0, "NEEDS IMPROVEMENT"),
     }
 }

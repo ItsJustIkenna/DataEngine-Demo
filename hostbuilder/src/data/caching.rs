@@ -2,7 +2,7 @@
 //! 
 //! Provides multi-level caching with cache-coherent data structures,
 //! memory-mapped configuration, and intelligent prefetching for
-//! ultra-low latency market data access.
+//! low-latency market data access.
 
 use std::hash::Hash;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -325,7 +325,7 @@ pub struct CachedTrade {
 
 /// Multi-level cache system for market data
 pub struct MarketDataCache {
-    // L1: Hot symbol cache (sub-microsecond access)
+    // L1: Hot symbol cache (fast access)
     hot_symbols: OptimizedLRUCache<Symbol, CachedOrderBook>,
     
     // L2: Recent trades cache

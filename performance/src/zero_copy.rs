@@ -7,7 +7,7 @@ use std::{
 use crossbeam::queue::SegQueue;
 use parking_lot::Mutex;
 
-/// Ultra-high performance zero-copy message buffer pool
+/// Zero-copy message buffer pool
 /// Preallocates aligned memory buffers to eliminate allocations 
 /// in critical trading message processing paths.
 pub struct ZeroCopyBufferPool {

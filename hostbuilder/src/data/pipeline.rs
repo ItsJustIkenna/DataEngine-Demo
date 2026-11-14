@@ -34,7 +34,7 @@ impl DataPipeline {
         // Initialize global SIMD parser
         init_global_simd_parser();
         
-        // Initialize kernel bypass for ultra-low latency
+        // Initialize kernel bypass for low latency
         let kernel_bypass = match KernelBypassManager::new().await {
             Ok(kb) => {
                 log_info!(MAIN_LOGGER, "Kernel bypass networking initialized for sub-microsecond latency");
@@ -114,7 +114,7 @@ impl DataPipeline {
         Ok(())
     }
     
-    /// Process Level 3 order book updates with ultra-low latency
+    /// Process Level 3 order book updates with low latency
     async fn process_level3_update(&mut self, data: &[u8]) -> Result<()> {
         // Parse Level 3 message using zero-copy JSON parsing
         let message: Value = simd_json::from_slice(

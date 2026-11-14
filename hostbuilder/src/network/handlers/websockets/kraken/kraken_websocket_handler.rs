@@ -183,7 +183,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
     async fn listen(self: Arc<Self>, mut shutdown_rx: Receiver<()>) -> Result<()> {
         let handler = Arc::clone(&self);
 
-        // Ultra-high performance optimizations
+        // Optimizations
         let cpu_manager = CpuAffinityManager::new();
         
         let handle = tokio::spawn(async move {
@@ -222,7 +222,7 @@ impl EndpointHandler for KrakenWebSocketHandler {
                                     log_info!(KRAKEN_LOGGER, "📨 Received message: {}", text);
                                 }
                                 
-                                // Use ultra-high performance SIMD-accelerated message parsing
+                                // Use SIMD-accelerated message parsing
                                 let message_bytes = text.as_bytes();
                                 
                                 // Fast path: use SIMD to identify message type before expensive parsing

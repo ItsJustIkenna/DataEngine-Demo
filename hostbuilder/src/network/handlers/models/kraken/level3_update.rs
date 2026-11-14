@@ -45,7 +45,7 @@ use std::time::Instant;
 use crate::network::handlers::logging::{KRAKEN_ORDERBOOK_LOGGER, OrderBookUpdateLog};
 use crate::network::handlers::logging::{KRAKEN_HISTORICAL_LOGGER, HistoricalOrderLog};
 
-// Ultra-high performance constants - optimized for cache lines
+// Constants - optimized for cache lines
 const INITIAL_ORDERS_CAPACITY: usize = 512; // Increased for better performance
 const EVENT_ADD: &str = "add";
 const EVENT_MODIFY: &str = "modify";

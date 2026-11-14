@@ -50,7 +50,7 @@ ahash = "0.8"
 smallvec = { version = "1.11", features = ["serde"] }
 dashmap = "5.5"
 socket2 = "0.5"
-# Ultra-high performance allocator
+# Allocator
 mimalloc = { version = "0.1", default-features = false }
 # Lock-free data structures
 crossbeam = "0.8"
