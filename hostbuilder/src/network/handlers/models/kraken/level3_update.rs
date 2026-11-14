@@ -768,3 +768,7 @@ struct UpdateOrder {
    order_qty: BigDecimal,
    timestamp: DateTime<Utc>,
 }
+// Benchmark-only internals (off by default). See hostbuilder/benches/kraken_l3_pipeline.rs.
+#[cfg(feature = "bench-internals")]
+#[path = "level3_bench_internals.rs"]
+pub mod bench_internals;
