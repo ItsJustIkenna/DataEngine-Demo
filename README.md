@@ -4,11 +4,11 @@
 
 ## Overview
 
-Market data processing engine built in Rust, designed for low-latency ingestion and normalization.
+Market data processing engine built in Rust for ingesting and normalizing exchange market data.
 
 ## Performance
 
-Measured on an 8-vCPU VM: Kraken normalization ~3.6 μs median at ~280k frames/s per core.
+No benchmark results are published for this demo, and the benchmark harness is not part of this branch. Treat any performance figure as unmeasured until you run your own.
 
 ## Features
 
