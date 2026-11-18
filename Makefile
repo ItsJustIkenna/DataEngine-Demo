@@ -220,7 +220,7 @@ helm-dev: ## Deploy DataEngine with Helm (development)
 	@./scripts/deploy.ps1 -Environment dev
 	@echo -e "$(GREEN)✅ Development environment deployed$(NC)"
 
-helm-prod: ## Deploy DataEngine with Helm (production)
+helm-prod: ## Deploy DataEngine with Helm
 	@echo -e "$(CYAN)� Deploying DataEngine with Helm (prod)...$(NC)"
 	@./scripts/deploy.ps1 -Environment prod
 	@echo -e "$(GREEN)✅ Prod Helm environment deployed$(NC)"

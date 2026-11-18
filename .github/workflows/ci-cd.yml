@@ -491,7 +491,7 @@ jobs:
           path: sbom.spdx.json
           retention-days: 90
 
-  # ===== DEPLOYMENT (Production) =====  
+  # ===== DEPLOYMENT =====  
   deploy:
     name: Deploy to Kubernetes
     runs-on: [self-hosted, windows, x64]

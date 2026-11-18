@@ -1,5 +1,5 @@
 //! Enterprise security manager with authentication, authorization, and monitoring
-//! Comprehensive security implementation for production trading systems
+//! Comprehensive security implementation for trading systems
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -357,7 +357,7 @@ impl EnterpriseSecurityManager {
     
     /// Enhanced credential verification with security features
     async fn verify_enhanced_credentials(&self, username: &str, password: &str) -> Result<(String, SecurityLevel)> {
-        // In production, this would:
+        // A fuller version would:
         // 1. Use proper password hashing (bcrypt, scrypt, or Argon2)
         // 2. Implement constant-time comparison
         // 3. Check against compromised password databases
@@ -402,7 +402,7 @@ impl EnterpriseSecurityManager {
         let mut sessions = self.active_sessions.write().await;
         sessions.insert(session_id.clone(), session_entry);
         
-        // Clean up expired sessions (in production, this would be a background task)
+        // Clean up expired sessions (a fuller version would run this as a background task)
         let session_timeout = Duration::minutes(self.security_config.session_timeout_minutes);
         sessions.retain(|_, entry| {
             now.signed_duration_since(entry.last_activity) < session_timeout
@@ -438,7 +438,7 @@ impl EnterpriseSecurityManager {
             details.unwrap_or("")
         );
         
-        // In production, send to SIEM system
+        // A fuller version would send this to a SIEM system
         log_warn!(MAIN_LOGGER, "SECURITY_AUDIT: {}", log_entry);
     }
     
@@ -452,7 +452,7 @@ impl EnterpriseSecurityManager {
             Utc::now().to_rfc3339()
         );
         
-        // In production, this would trigger alerts and investigations
+        // A fuller version would trigger alerts and investigations
         log_error!(MAIN_LOGGER, "{}", incident_log);
     }
     
@@ -488,7 +488,7 @@ impl EnterpriseSecurityManager {
     }
     
     async fn verify_mfa(&self, _user_id: &str, _mfa_token: Option<&str>) -> Result<bool> {
-        // Mock MFA verification - in production, use TOTP/HOTP
+        // Mock MFA verification - a fuller version would use TOTP/HOTP
         Ok(_mfa_token.is_some())
     }
     

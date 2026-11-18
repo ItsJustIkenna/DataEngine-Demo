@@ -115,7 +115,7 @@ secrets:
   database:
     enabled: true
     # Password should be set via --set flag, never stored in YAML
-    # Set via: --set secrets.database.password="$DB_PASSWORD" for production
+    # Set via: --set secrets.database.password="$DB_PASSWORD" for a real deployment
   
   # Redis configuration removed - no longer using Redis
   

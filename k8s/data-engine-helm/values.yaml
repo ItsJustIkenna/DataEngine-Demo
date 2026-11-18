@@ -508,7 +508,7 @@ customPostgresql:
     pullSecrets: []
   auth:
     username: "dataengine"
-    password: "CHANGE_ME_IN_PRODUCTION"
+    password: "CHANGE_ME"
     database: "dataengine"
   persistence:
     enabled: true
@@ -589,7 +589,7 @@ autoscaling:
 # =============================================================================
 
 backup:
-  enabled: false  # Enable for production environments
+  enabled: false  # Enable for deployed environments
   schedule: "0 2 * * *"  # Daily at 2 AM UTC
   image:
     repository: postgres

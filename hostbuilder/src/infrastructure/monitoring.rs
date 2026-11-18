@@ -1,7 +1,7 @@
 //! Comprehensive monitoring and health check system for DataEngine
 //! 
 //! Provides real-time health monitoring, performance tracking, and
-//! alerting for production trading system operations.
+//! alerting for trading system operations.
 
 use performance::PerformanceMetrics;
 use serde::{Deserialize, Serialize};

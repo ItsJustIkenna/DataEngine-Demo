@@ -8,7 +8,7 @@ metadata:
     {{- include "data-engine.labels" . | nindent 4 }}
 spec:
   acme:
-    # Production Let's Encrypt server
+    # Let's Encrypt non-staging server
     server: {{ .Values.certManager.acme.server }}
     email: {{ .Values.certManager.acme.email }}
     privateKeySecretRef:

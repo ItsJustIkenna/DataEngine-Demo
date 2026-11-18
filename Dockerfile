@@ -1,4 +1,4 @@
-# Ultra-optimized production Dockerfile for DataEngine
+# Optimized multi-stage Dockerfile for DataEngine
 # ENTERPRISE BUILD STRATEGY: Always build from workspace root containing all dependencies
 # Local:  docker build -f DataEngine/Dockerfile -t dataengine:latest .
 # CI/CD:  docker build -f DataEngine/Dockerfile -t dataengine:latest .

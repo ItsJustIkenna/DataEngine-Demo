@@ -26,10 +26,10 @@ impl DataEngineLogger {
         // Check if we should use Elasticsearch (environment variable or default)
         let use_elasticsearch = std::env::var("USE_ELASTICSEARCH_LOGGING")
             .map(|v| v.to_lowercase() == "true")
-            .unwrap_or(true); // Default to true for production
+            .unwrap_or(true); // Default to true
 
         if use_elasticsearch {
-            // Get credentials from environment variables (required in production)
+            // Get credentials from environment variables (required for a deployment)
             let endpoint = std::env::var("ELASTIC_CLOUD_ENDPOINT").unwrap_or_default();
             let username = std::env::var("ELASTIC_CLOUD_USERNAME")
                 .unwrap_or_else(|_| "elastic".to_string());

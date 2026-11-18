@@ -1,7 +1,7 @@
 # DataEngine Canary Deployment Configuration
 # This is a minimal values override for canary deployments
 
-# Canary replica count (10% of production traffic)
+# Canary replica count (10% of traffic)
 replicaCount: 1
 
 # Canary-specific labels
@@ -20,7 +20,7 @@ service:
     nginx.ingress.kubernetes.io/canary: "true"
     nginx.ingress.kubernetes.io/canary-weight: "10"
 
-# Resource limits (same as production)
+# Resource limits (same as the default values)
 resources:
   limits:
     cpu: 2000m

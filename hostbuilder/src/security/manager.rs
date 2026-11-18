@@ -1,7 +1,7 @@
 //! Security and authentication system for DataEngine
 //! 
 //! Provides secure API key management, rate limiting, request signing,
-//! and security monitoring for production trading systems.
+//! and security monitoring for trading systems.
 
 use std::collections::HashMap;
 use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
